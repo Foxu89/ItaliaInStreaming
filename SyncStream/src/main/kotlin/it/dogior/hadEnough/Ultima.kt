@@ -1,4 +1,4 @@
-package com.phisher98
+package it.dogior.hadEnough
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.lagradost.api.Log
@@ -19,7 +19,7 @@ import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.utils.AppUtils
-import com.phisher98.UltimaUtils.SectionInfo
+import it.dogior.hadEnough.UltimaUtils.SectionInfo
 
 class Ultima(val plugin: UltimaPlugin) : MainAPI() {
     override var name = "Ultima"
