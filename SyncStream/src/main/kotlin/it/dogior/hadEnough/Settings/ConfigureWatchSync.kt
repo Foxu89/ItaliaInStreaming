@@ -1,4 +1,4 @@
-package com.phisher98
+package it.dogior.hadEnough
 
 import android.annotation.SuppressLint
 import android.content.res.Resources
@@ -16,7 +16,7 @@ import androidx.lifecycle.coroutineScope
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.utils.AppContextUtils.setDefaultFocus
-import com.phisher98.WatchSyncUtils.WatchSyncCreds
+import it.dogior.hadEnough.WatchSyncUtils.WatchSyncCreds
 import kotlinx.coroutines.launch
 
 private const val ARG_PARAM1 = "param1"

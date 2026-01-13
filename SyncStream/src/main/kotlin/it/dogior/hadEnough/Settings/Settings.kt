@@ -1,4 +1,4 @@
-package com.phisher98
+package it.dogior.hadEnough
 
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -16,7 +16,7 @@ import androidx.appcompat.app.AlertDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.utils.AppContextUtils.setDefaultFocus
-import com.phisher98.BuildConfig
+import it.dogior.hadEnough.BuildConfig
 import androidx.core.net.toUri
 
 private const val ARG_PARAM1 = "param1"

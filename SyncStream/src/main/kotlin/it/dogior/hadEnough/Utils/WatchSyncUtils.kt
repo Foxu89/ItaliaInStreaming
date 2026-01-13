@@ -1,4 +1,4 @@
-package com.phisher98
+package it.dogior.hadEnough
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.app
@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.mapper
 import com.lagradost.cloudstream3.ui.home.HomeViewModel.Companion.getResumeWatching
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult
-import com.phisher98.UltimaStorageManager as sm
+import it.dogior.hadEnough.UltimaStorageManager as sm
 
 object WatchSyncUtils {
     data class WatchSyncCreds(

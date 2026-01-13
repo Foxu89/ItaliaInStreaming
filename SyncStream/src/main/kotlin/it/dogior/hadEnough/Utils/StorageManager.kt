@@ -1,12 +1,12 @@
-package com.phisher98
+package it.dogior.hadEnough
 
-// import com.phisher98.UltimaUtils.Provider
+// import it.dogior.hadEnough.UltimaUtils.Provider
 
 import com.lagradost.api.Log
-import com.phisher98.UltimaUtils.ExtensionInfo
-import com.phisher98.UltimaUtils.MediaProviderState
-import com.phisher98.UltimaUtils.SectionInfo
-import com.phisher98.WatchSyncUtils.WatchSyncCreds
+import it.dogior.hadEnough.UltimaUtils.ExtensionInfo
+import it.dogior.hadEnough.UltimaUtils.MediaProviderState
+import it.dogior.hadEnough.UltimaUtils.SectionInfo
+import it.dogior.hadEnough.WatchSyncUtils.WatchSyncCreds
 import com.lagradost.cloudstream3.APIHolder.allProviders
 import com.lagradost.cloudstream3.AcraApplication.Companion.getKey
 import com.lagradost.cloudstream3.AcraApplication.Companion.setKey
