@@ -28,20 +28,8 @@ object UltimaUtils {
         NONE
     }
 
-    data class MediaProviderState(
-            @JsonProperty("name") var name: String,
-            @JsonProperty("enabled") var enabled: Boolean = true,
-            @JsonProperty("customDomain") var customDomain: String? = null
-    ) {
-        fun getProvider(): MediaProvider {
-            return UltimaMediaProvidersUtils.mediaProviders.find { it.name.equals(name) }
-                    ?: throw Exception("Unable to find media provider for $name")
-        }
-
-        fun getDomain(): String {
-            return customDomain ?: getProvider().domain
-        }
-    }
+    // RIMOSSO: MediaProviderState e tutte le sue funzioni
+    // Non serve più perché hai eliminato i media provider
 
     data class LinkData(
         @JsonProperty("simklId") val simklId: Int? = null,
@@ -100,8 +88,8 @@ data class DomainsParser(
     val rogmovies: String,
     val luxmovies: String,
     val xprime: String,
-    val extramovies:String,
-    val dramadrip:String
+    val extramovies: String,
+    val dramadrip: String
 )
 
 // ----------- Constants and Cache -----------
