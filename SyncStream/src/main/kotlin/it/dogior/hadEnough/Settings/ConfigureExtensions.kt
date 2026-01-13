@@ -48,29 +48,29 @@ class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFra
     // #region - Utility functions
     @SuppressLint("DiscouragedApi")
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
-        val id = res.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val id = res.getIdentifier(name, "layout", "it.dogior.hadEnough") 
         val layout = res.getLayout(id)
         return inflater.inflate(layout, container, false)
     }
 
     @SuppressLint("UseCompatLoadingForDrawables")
     private fun getDrawable(name: String): Drawable {
-        val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val id = res.getIdentifier(name, "drawable", "it.dogior.hadEnough") 
         return res.getDrawable(id, null) ?: throw Exception("Drawable $name not found")
     }
 
     private fun getString(name: String): String {
-        val id = res.getIdentifier(name, "string", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val id = res.getIdentifier(name, "string", "it.dogior.hadEnough") 
         return res.getString(id)
     }
 
     private fun <T : View> View.findView(name: String): T {
-        val id = res.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val id = res.getIdentifier(name, "id", "it.dogior.hadEnough") 
         return this.findViewById(id)
     }
 
     private fun View.makeTvCompatible() {
-        val outlineId = res.getIdentifier("outline", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val outlineId = res.getIdentifier("outline", "drawable", "it.dogior.hadEnough") 
         this.background = res.getDrawable(outlineId, null)
     }
     // #endregion
