@@ -146,7 +146,7 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
         guideIcon.setImageDrawable(getDrawable("ic_eye"))
         guideIcon.makeTvCompatible()
         guideIcon.setOnClickListener {
-            val url = ""
+            val url = "https://github.com/DieGon7771/ItaliaInStreaming/blob/master/README_SyncStream.md"
             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             activity?.startActivity(intent)
