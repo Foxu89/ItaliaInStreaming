@@ -16,7 +16,6 @@ import androidx.appcompat.app.AlertDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.utils.AppContextUtils.setDefaultFocus
-import it.dogior.hadEnough.BuildConfig
 import androidx.core.net.toUri
 
 private const val ARG_PARAM1 = "param1"
@@ -27,6 +26,7 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
     private var param2: String? = null
     private val sm = UltimaStorageManager
     private val res: Resources = plugin.resources ?: throw Exception("Unable to read resources")
+    private val packageName = "it.dogior.hadEnough"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,28 +38,28 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
 
     // #region - necessary functions
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
-        val id = res.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val id = res.getIdentifier(name, "layout", packageName)
         val layout = res.getLayout(id)
         return inflater.inflate(layout, container, false)
     }
 
     private fun getDrawable(name: String): Drawable {
-        val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val id = res.getIdentifier(name, "drawable", packageName)
         return res.getDrawable(id, null) ?: throw Exception("Unable to find drawable $name")
     }
 
     private fun getString(name: String): String {
-        val id = res.getIdentifier(name, "string", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val id = res.getIdentifier(name, "string", packageName)
         return res.getString(id)
     }
 
     private fun <T : View> View.findView(name: String): T {
-        val id = res.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val id = res.getIdentifier(name, "id", packageName)
         return this.findViewById(id)
     }
 
     private fun View.makeTvCompatible() {
-        val outlineId = res.getIdentifier("outline", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val outlineId = res.getIdentifier("outline", "drawable", packageName)
         this.background = res.getDrawable(outlineId, null)
     }
     // #endregion - necessary functions
@@ -81,35 +81,19 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
                 .setTitle("Restart Required")
                 .setMessage("Changes have been saved. Do you want to restart the app to apply them ?")
                 .setPositiveButton("Yes") { _, _ ->
-                    plugin.reload()
+                    sm.save()
                     showToast("Saved and Restarting...")
                     dismiss()
                     restartApp()
                 }
                 .setNegativeButton("No") { dialog, _ ->
+                    sm.save()
                     showToast("Saved. Restart later to apply changes.")
                     dialog.dismiss()
                     dismiss()
                 }.show()
         }
         // #endregion - building save button and its click listener
-
-        // #region - building meta providers button and its click listener
-        val metaProvidersBtn = settings.findView<ImageView>("meta_providers_img")
-        metaProvidersBtn.setImageDrawable(getDrawable("edit_icon"))
-        metaProvidersBtn.makeTvCompatible()
-        metaProvidersBtn.setOnClickListener {
-            val configure = UltimaMetaProviders(plugin)
-            configure.show(
-                activity?.supportFragmentManager
-                    ?: throw Exception(
-                        "Unable to open meta providers settings"
-                    ),
-                ""
-            )
-            dismiss()
-        }
-        // #endregion - building meta providers button and its click listener
 
         // #region - building config extensions button and its click listener
         val configBtn = settings.findView<ImageView>("config_img")
@@ -143,7 +127,7 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
         }
         // #endregion - building reorder button and its click listener
 
-        // #region - building reorder button and its click listener
+        // #region - building watch sync button and its click listener
         val watchSyncBtn = settings.findView<ImageView>("watch_sync_img")
         watchSyncBtn.setImageDrawable(getDrawable("edit_icon"))
         watchSyncBtn.makeTvCompatible()
@@ -156,7 +140,7 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
             )
             dismiss()
         }
-        // #endregion - building reorder button and its click listener
+        // #endregion - building watch sync button and its click listener
 
         val guideIcon = settings.findView<ImageView>("guide_icon")
         guideIcon.setImageDrawable(getDrawable("ic_eye"))
@@ -182,7 +166,7 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
                 .setMessage("This will delete all selected sections.")
                 .setPositiveButton("Reset") { _, _ ->
                     sm.deleteAllData()
-                    plugin.reload()
+                    sm.save()
                     showToast("Sections cleared")
                     dismiss()
                 }
