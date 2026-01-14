@@ -5,7 +5,7 @@ import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
-import com.lagradost.cloudstream3.LoadResponse.Companion.addRating
+import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
@@ -15,6 +15,7 @@ import com.lagradost.cloudstream3.addPoster
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.mainPageOf
+import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
@@ -24,12 +25,11 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import it.dogior.hadEnough.extractors.MaxStreamExtractor
 import it.dogior.hadEnough.extractors.StreamTapeExtractor
-import kotlinx.coroutines.delay
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class OnlineSerieTV : MainAPI() {
-    override var mainUrl = "https://onlineserietv.online"
+    override var mainUrl = "https://onlineserietv.com"
     override var name = "OnlineSerieTV"
     override val supportedTypes = setOf(
         TvType.Movie, TvType.TvSeries,
@@ -92,8 +92,8 @@ class OnlineSerieTV : MainAPI() {
             if (text.contains("cloudflare") || text.contains("challenge") || 
                 text.contains("security check") || response.code == 403) {
                 Log.d("OnlineSerieTV", "Cloudflare rilevato, ritento...")
-                delay(2000)
-                // Ritenta con più delay
+                // Ritenta con più delay (semplice sleep)
+                kotlinx.coroutines.delay(2000)
                 app.get(url, headers = cloudflareHeaders, timeout = 30000).document
             } else {
                 response.document
@@ -194,7 +194,7 @@ class OnlineSerieTV : MainAPI() {
             
             newMovieLoadResponse(title, url, TvType.Movie, streamUrl) {
                 addPoster(poster)
-                addRating(rating)
+                addScore(rating)
                 this.duration = duration.toIntOrNull()
                 this.year = year.toIntOrNull()
                 this.tags = genres.split(",").map { it.trim() }
@@ -206,7 +206,7 @@ class OnlineSerieTV : MainAPI() {
             
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 addPoster(poster)
-                addRating(rating)
+                addScore(rating)
                 this.year = year.toIntOrNull()
                 this.tags = genres.split(",").map { it.trim() }
                 this.plot = plot
@@ -230,8 +230,8 @@ class OnlineSerieTV : MainAPI() {
                 else -> {
                     val title = it.select("td:nth-child(1)").text()
                     val links = it.select("a").map { a -> "\"${a.attr("href")}\"" }
-                    Episode(links.toString()).apply {
-                        name = title
+                    newEpisode(links.toString()) {
+                        this.name = title
                         this.season = season
                         this.episode = title.substringAfter("x").substringBefore(" ").toIntOrNull()
                     }
