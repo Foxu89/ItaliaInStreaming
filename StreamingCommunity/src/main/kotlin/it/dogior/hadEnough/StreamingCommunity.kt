@@ -342,100 +342,32 @@ class StreamingCommunity : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         Log.d(TAG, "Load Data : $data")
-        if (data.isEmpty()) {
-            Log.e(TAG, "Data vuota!")
-            return false
-        }
-    
+        if (data.isEmpty()) return false
         val loadData = parseJson<LoadData>(data)
-        var foundLinks = false
 
-    // DEBUG: Logga tutti i dati
-        Log.d(TAG, """
-            === LOAD DATA DEBUG ===
-            URL: ${loadData.url}
-            Type: ${loadData.type}
-            TMDB ID: ${loadData.tmdbId} ${if (loadData.tmdbId == null) "(NULL!)" else if (loadData.tmdbId <= 0) "(INVALIDO)" else ""}
-            Season: ${loadData.seasonNumber}
-            Episode: ${loadData.episodeNumber}
-            === END DEBUG ===
-        """.trimIndent())
+        val response = app.get(loadData.url).document
+        val iframeSrc = response.select("iframe").attr("src")
 
-    // 1. VixCloudExtractor (PRIMARIO - funziona quasi sempre)
-        try {
-            Log.d(TAG, "Tentativo VixCloudExtractor con URL: ${loadData.url}")
-            val response = app.get(loadData.url, timeout = 30000)
-        
-            if (response.isSuccessful) {
-                val iframeSrc = response.document.select("iframe").attr("src")
-                Log.d(TAG, "Iframe trovato: $iframeSrc")
-            
-                if (iframeSrc.isNotBlank() && iframeSrc.contains("vixcloud")) {
-                    VixCloudExtractor().getUrl(
-                        url = iframeSrc,
-                        referer = mainUrl,
-                        subtitleCallback = subtitleCallback,
-                        callback = callback
-                    )
-                    foundLinks = true
-                    Log.d(TAG, "VixCloudExtractor ha trovato link")
-                } else {
-                    Log.w(TAG, "Nessun iframe vixcloud trovato nella pagina")
-                }
-            } else {
-                Log.e(TAG, "HTTP error: ${response.code}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "VixCloudExtractor fallito: ${e.message}", e)
-        }
-
-    // 2. VixSrcExtractor (SECONDARIO - solo se tmdbId valido)
-        loadData.tmdbId?.takeIf { it > 0 }?.let { tmdbId ->
-            try {
-                val vixsrcUrl = if (loadData.type == "movie") {
-                "https://vixsrc.to/movie/$tmdbId"
-                } else {
-                // Per serie TV, serve season e episode
-                val season = loadData.seasonNumber ?: run {
-                    Log.w(TAG, "Season number mancante per serie TV")
-                    return@let
-                }
-                val episode = loadData.episodeNumber ?: run {
-                    Log.w(TAG, "Episode number mancante per serie TV")
-                    return@let
-                }
-                "https://vixsrc.to/tv/$tmdbId/$season/$episode"
-            }
-            
-            Log.d(TAG, "Tentativo VixSrcExtractor con URL: $vixsrcUrl")
-            
-            VixSrcExtractor().getUrl(
-                url = vixsrcUrl,
-                referer = "https://vixsrc.to/",
-                subtitleCallback = subtitleCallback,
-                callback = callback
-            )
-            foundLinks = true
-            Log.d(TAG, "VixSrcExtractor ha trovato link")
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "VixSrcExtractor fallito: ${e.message}", e)
-        }
-    } ?: run {
-        Log.w(TAG, "tmdbId null o zero, saltando VixSrcExtractor")
-    }
-
-    if (!foundLinks) {
-        Log.e(TAG, "NESSUN estrattore ha trovato link!")
-        // Mostra notifica all'utente
-        app.postNotification(
-            "StreamingCommunity", 
-            "Nessun link trovato. Prova contenuto diverso o controlla la connessione."
+        VixCloudExtractor().getUrl(
+            url = iframeSrc,
+            referer = mainUrl.substringBeforeLast("it"),
+            subtitleCallback = subtitleCallback,
+            callback = callback
         )
-    } else {
-        Log.d(TAG, "Trovati link con successo!")
-    }
 
-    return foundLinks
+        val vixsrcUrl = if(loadData.type == "movie"){
+            "https://vixsrc.to/movie/${loadData.tmdbId}"
+        } else{
+            "https://vixsrc.to/tv/${loadData.tmdbId}/${loadData.seasonNumber}/${loadData.episodeNumber}"
+        }
+
+        VixSrcExtractor().getUrl(
+            url = vixsrcUrl,
+            referer = "https://vixsrc.to/",
+            subtitleCallback = subtitleCallback,
+            callback = callback
+        )
+
+        return true
     }
 }
