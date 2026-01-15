@@ -42,7 +42,7 @@ class VixCloudExtractor : ExtractorApi() {
                 source = "VixCloud",
                 name = "Streaming Community - VixCloud",
                 url = playlistUrl,
-                type = ExtractorLinkType.M3U8  // ← PRIMA PROVA M3U8
+                type = ExtractorLinkType.VIDEO  // ← PRIMA PROVA M3U8
             ) {
                 this.headers = headers  // ✅ Map<String, String>
                 this.referer = referer ?: ""
