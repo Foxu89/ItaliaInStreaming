@@ -27,18 +27,18 @@ class VixSrcExtractor : ExtractorApi() {
         val playlistUrl = getPlaylistLink(url, referer)
         Log.w(TAG, "FINAL URL: $playlistUrl")
 
-        // ⚡ HEADERS COMPLETI PER IL DOWNLOAD
-        val headers = mutableMapOf(
+        // ✅ HEADERS CORRETTI: Map<String, String>
+        val headers = mapOf(
             "Accept" to "*/*",
             "Alt-Used" to url.toHttpUrl().host,
             "Connection" to "keep-alive",
             "Host" to url.toHttpUrl().host,
-            "Referer" to referer ?: "https://vixsrc.to/",  // ← FIX: non usare !!
+            "Referer" to (referer ?: "https://vixsrc.to/"),
             "Sec-Fetch-Dest" to "iframe",
             "Sec-Fetch-Mode" to "navigate",
             "Sec-Fetch-Site" to "cross-site",
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/133.0",
-            "Origin" to "https://vixsrc.to"  // ← AGGIUNTO!
+            "Origin" to "https://vixsrc.to"
         )
 
         callback.invoke(
@@ -46,11 +46,11 @@ class VixSrcExtractor : ExtractorApi() {
                 source = "VixSrc",
                 name = "Streaming Community - VixSrc",
                 url = playlistUrl,
-                type = ExtractorLinkType.M3U8  // ← PROVA PRIMA M3U8
+                type = ExtractorLinkType.M3U8  // ← PRIMA PROVA M3U8
             ) {
-                this.headers = headers
-                this.referer = referer ?: ""  // ← FIX: non usare !!
-                this.quality = Qualities.P720.value  // ← AGGIUNTO!
+                this.headers = headers  // ✅ Map<String, String>
+                this.referer = referer ?: ""
+                this.quality = Qualities.P720.value
             }
         )
     }
@@ -84,12 +84,14 @@ class VixSrcExtractor : ExtractorApi() {
 
     private suspend fun getScript(url: String, referer: String?): JSONObject {
         Log.d(TAG, "Item url: $url")
-        val headers = mutableMapOf(
+        
+        // ✅ HEADERS CORRETTI: Map<String, String>
+        val headers = mapOf(
             "Accept" to "*/*",
             "Alt-Used" to url.toHttpUrl().host,
             "Connection" to "keep-alive",
             "Host" to url.toHttpUrl().host,
-            "Referer" to referer ?: "https://vixsrc.to/",  // ← FIX: non usare !!
+            "Referer" to (referer ?: "https://vixsrc.to/"),
             "Sec-Fetch-Dest" to "iframe",
             "Sec-Fetch-Mode" to "navigate",
             "Sec-Fetch-Site" to "cross-site",
