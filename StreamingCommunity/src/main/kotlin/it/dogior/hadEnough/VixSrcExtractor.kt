@@ -46,7 +46,7 @@ class VixSrcExtractor : ExtractorApi() {
                 source = "VixSrc",
                 name = "Streaming Community - VixSrc",
                 url = playlistUrl,
-                type = ExtractorLinkType.M3U8  // ← PRIMA PROVA M3U8
+                type = ExtractorLinkType.VIDEO  // ← PRIMA PROVA M3U8
             ) {
                 this.headers = headers  // ✅ Map<String, String>
                 this.referer = referer ?: ""
