@@ -33,6 +33,11 @@ Spiegazione dettagliata di StremioX (addon di streaming) e StremioC (addon catal
 
 [Apri Guida →](https://github.com/DieGon7771/ItaliaInStreaming/blob/master/README_Stremio.md)
 
+**SyncStream – Guida** 
+Spiegazione dettagliata di Cross Device Watch Sync (sincronizzazione dispositivi) e Sezioni Personalizzate (configurazione home).
+
+[Apri Guida →](https://github.com/DieGon7771/ItaliaInStreaming/blob/master/README_SyncStream.md)
+
 ## 🔀 Crediti
 • **La maggior parte dei plugin** sono stati forkati da: [doGiorsHadEnough](https://github.com/doGior/doGiorsHadEnough) 
 
