@@ -20,14 +20,15 @@ class VixCloudExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val playlistUrl = getPlaylistLink(url, referer)
+        val safeReferer = referer ?: "https://vixcloud.co/"
+        val playlistUrl = getPlaylistLink(url, safeReferer)
         
         val headers = mapOf(
             "Accept" to "*/*",
             "Connection" to "keep-alive",
             "Cache-Control" to "no-cache",
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
-            "Referer" to referer ?: "https://vixcloud.co/",
+            "Referer" to safeReferer,
             "Origin" to "https://vixcloud.co"
         )
 
@@ -39,12 +40,12 @@ class VixCloudExtractor : ExtractorApi() {
                 type = ExtractorLinkType.M3U8,
                 quality = Qualities.P720.value,
                 headers = headers,
-                referer = referer ?: ""
+                referer = safeReferer
             )
         )
     }
 
-    private suspend fun getPlaylistLink(url: String, referer: String?): String {
+    private suspend fun getPlaylistLink(url: String, referer: String): String {
         val script = getScript(url, referer)
         val masterPlaylist = script.getJSONObject("masterPlaylist")
         val masterPlaylistParams = masterPlaylist.getJSONObject("params")
@@ -68,9 +69,13 @@ class VixCloudExtractor : ExtractorApi() {
         return masterPlaylistUrl
     }
 
-    private suspend fun getScript(url: String, referer: String?): JSONObject {
+    private suspend fun getScript(url: String, referer: String): JSONObject {
         val headers = mapOf(
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0"
+            "Accept" to "*/*",
+            "Connection" to "keep-alive",
+            "Cache-Control" to "no-cache",
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
+            "Referer" to referer
         )
         
         val iframe = app.get(url, headers = headers, interceptor = CloudflareKiller()).document
