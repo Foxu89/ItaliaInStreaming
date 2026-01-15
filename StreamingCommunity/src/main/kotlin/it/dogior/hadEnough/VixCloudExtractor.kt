@@ -1,5 +1,6 @@
 package it.dogior.hadEnough
 
+import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.network.CloudflareKiller
@@ -14,6 +15,7 @@ class VixCloudExtractor : ExtractorApi() {
     override val mainUrl = "vixcloud.co"
     override val name = "VixCloud"
     override val requiresReferer = false
+    val TAG = "VixCloudExtractor"
 
     override suspend fun getUrl(
         url: String,
@@ -21,84 +23,37 @@ class VixCloudExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val safeReferer = referer ?: "https://vixcloud.co/"
-        val playlistUrl = getPlaylistLink(url, safeReferer)
-        
-        val headers = mapOf(
+        Log.d(TAG, "REFERER: $referer  URL: $url")
+        val playlistUrl = getPlaylistLink(url, referer)
+        Log.w(TAG, "FINAL URL: $playlistUrl")
+
+        // ⚡ HEADERS COMPLETI PER IL DOWNLOAD
+        val headers = mutableMapOf(
             "Accept" to "*/*",
             "Connection" to "keep-alive",
             "Cache-Control" to "no-cache",
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
-            "Referer" to safeReferer,
-            "Origin" to "https://vixcloud.co"
+            "Referer" to referer ?: "https://vixcloud.co/",  // ← IMPORTANTE!
+            "Origin" to "https://vixcloud.co"                 // ← IMPORTANTE!
         )
 
-        // ⚡ FUNZIONE CHE FUNZIONA PER TUTTE LE VERSIONI
-        val link = createCompatibleExtractorLink(
-            name = "VixCloud",
-            source = "VixCloud",
-            url = playlistUrl,
-            headers = headers,
-            referer = safeReferer
+        callback.invoke(
+            newExtractorLink(
+                source = "VixCloud",
+                name = "Streaming Community - VixCloud",
+                url = playlistUrl,
+                type = ExtractorLinkType.M3U8  // ← PROVA PRIMA M3U8
+            ) {
+                this.headers = headers
+                this.referer = referer ?: ""  // ← AGGIUNGI REFERER
+                this.quality = Qualities.P720.value  // ← AGGIUNGI QUALITY!
+            }
         )
-        
-        callback.invoke(link)
     }
 
-    // ⭐ NUOVA FUNZIONE: Compatibile con tutte le versioni
-    private fun createCompatibleExtractorLink(
-        name: String,
-        source: String,
-        url: String,
-        headers: Map<String, String>,
-        referer: String
-    ): ExtractorLink {
-        return try {
-            // 1. Prima prova: Nuovo costruttore (Prerelease/4.X)
-            // Se questa riga fallisce, va al catch
-            ExtractorLink(
-                name = name,
-                source = source,
-                url = url,
-                type = ExtractorLinkType.M3U8,
-                quality = Qualities.P720.value,
-                headers = headers,
-                referer = referer
-            )
-        } catch (e: NoSuchMethodError) {
-            // 2. Fallback: API vecchia (Stable/3.X)
-            newExtractorLink(
-                source = source,
-                name = name,
-                url = url,
-                type = ExtractorLinkType.VIDEO,  // Stable non ha M3U8
-                quality = Qualities.P720.value
-            ) {
-                this.headers = headers
-                this.referer = referer
-            }
-        } catch (e: IllegalArgumentException) {
-            // 3. Fallback se M3U8 non esiste
-            val linkType = if (ExtractorLinkType.values().any { it.name == "M3U8" }) {
-                ExtractorLinkType.M3U8
-            } else {
-                ExtractorLinkType.VIDEO
-            }
-            
-            newExtractorLink(
-                source = source,
-                name = name,
-                url = url,
-                type = linkType,
-                quality = Qualities.P720.value
-            ) {
-                this.headers = headers
-                this.referer = referer
-            }
-        }
-    }
+    private suspend fun getPlaylistLink(url: String, referer: String?): String {
+        Log.d(TAG, "Item url: $url")
 
-    private suspend fun getPlaylistLink(url: String, referer: String): String {
         val script = getScript(url, referer)
         val masterPlaylist = script.getJSONObject("masterPlaylist")
         val masterPlaylistParams = masterPlaylist.getJSONObject("params")
@@ -108,34 +63,42 @@ class VixCloudExtractor : ExtractorApi() {
 
         var masterPlaylistUrl: String
         val params = "token=${token}&expires=${expires}"
-        
         masterPlaylistUrl = if ("?b" in playlistUrl) {
             "${playlistUrl.replace("?b:1", "?b=1")}&$params"
         } else {
             "${playlistUrl}?$params"
         }
+        Log.d(TAG, "masterPlaylistUrl: $masterPlaylistUrl")
 
         if (script.getBoolean("canPlayFHD")) {
             masterPlaylistUrl += "&h=1"
         }
 
+        Log.d(TAG, "Master Playlist URL: $masterPlaylistUrl")
         return masterPlaylistUrl
     }
 
-    private suspend fun getScript(url: String, referer: String): JSONObject {
-        val headers = mapOf(
+    private suspend fun getScript(url: String, referer: String?): JSONObject {
+        Log.d(TAG, "Item url: $url")
+
+        val headers = mutableMapOf(
             "Accept" to "*/*",
             "Connection" to "keep-alive",
             "Cache-Control" to "no-cache",
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0",
-            "Referer" to referer
+            "Referer" to referer ?: "https://vixcloud.co/"
         )
         
         val iframe = app.get(url, headers = headers, interceptor = CloudflareKiller()).document
-        val scripts = iframe.select("script")
-        val script = scripts.find { it.data().contains("masterPlaylist") }!!.data().replace("\n", "\t")
+        Log.d(TAG, iframe.toString())
 
-        return JSONObject(getSanitisedScript(script))
+        val scripts = iframe.select("script")
+        val script =
+            scripts.find { it.data().contains("masterPlaylist") }!!.data().replace("\n", "\t")
+
+        val scriptJson = getSanitisedScript(script)
+        Log.d(TAG, "Script Json: $scriptJson")
+        return JSONObject(scriptJson)
     }
 
     private fun getSanitisedScript(script: String): String {
@@ -157,7 +120,10 @@ class VixCloudExtractor : ExtractorApi() {
 
             "\"$key\": $cleaned"
         }
-        
-        return "{\n${jsonObjects.joinToString(",\n")}\n}".replace("'", "\"")
+        val finalObject =
+            "{\n${jsonObjects.joinToString(",\n")}\n}"
+                .replace("'", "\"")
+
+        return finalObject
     }
 }
