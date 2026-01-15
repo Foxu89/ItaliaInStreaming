@@ -6,7 +6,6 @@ import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
@@ -16,6 +15,7 @@ class VixSrcExtractor : ExtractorApi() {
     override val name = "VixCloud"
     override val requiresReferer = false
     val TAG = "VixSrcExtractor"
+    private var referer: String? = null
 
     override suspend fun getUrl(
         url: String,
@@ -23,42 +23,29 @@ class VixSrcExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
+        this.referer = referer
         Log.d(TAG, "REFERER: $referer  URL: $url")
-        val playlistUrl = getPlaylistLink(url, referer)
+        val playlistUrl = getPlaylistLink(url)
         Log.w(TAG, "FINAL URL: $playlistUrl")
-
-        // ✅ HEADERS CORRETTI: Map<String, String>
-        val headers = mapOf(
-            "Accept" to "*/*",
-            "Alt-Used" to url.toHttpUrl().host,
-            "Connection" to "keep-alive",
-            "Host" to url.toHttpUrl().host,
-            "Referer" to (referer ?: "https://vixsrc.to/"),
-            "Sec-Fetch-Dest" to "iframe",
-            "Sec-Fetch-Mode" to "navigate",
-            "Sec-Fetch-Site" to "cross-site",
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/133.0",
-            "Origin" to "https://vixsrc.to"
-        )
 
         callback.invoke(
             newExtractorLink(
                 source = "VixSrc",
                 name = "Streaming Community - VixSrc",
                 url = playlistUrl,
-                type = ExtractorLinkType.VIDEO  // ← PRIMA PROVA M3U8
+                type = ExtractorLinkType.M3U8
             ) {
-                this.headers = headers  // ✅ Map<String, String>
-                this.referer = referer ?: ""
-                this.quality = Qualities.P720.value
+                this.referer = referer!!
             }
         )
+
+
     }
 
-    private suspend fun getPlaylistLink(url: String, referer: String?): String {
+    private suspend fun getPlaylistLink(url: String): String {
         Log.d(TAG, "Item url: $url")
 
-        val script = getScript(url, referer)
+        val script = getScript(url)
         val masterPlaylist = script.getJSONObject("masterPlaylist")
         val masterPlaylistParams = masterPlaylist.getJSONObject("params")
         val token = masterPlaylistParams.getString("token")
@@ -82,16 +69,14 @@ class VixSrcExtractor : ExtractorApi() {
         return masterPlaylistUrl
     }
 
-    private suspend fun getScript(url: String, referer: String?): JSONObject {
+    private suspend fun getScript(url: String): JSONObject {
         Log.d(TAG, "Item url: $url")
-        
-        // ✅ HEADERS CORRETTI: Map<String, String>
-        val headers = mapOf(
+        val headers = mutableMapOf(
             "Accept" to "*/*",
             "Alt-Used" to url.toHttpUrl().host,
             "Connection" to "keep-alive",
             "Host" to url.toHttpUrl().host,
-            "Referer" to (referer ?: "https://vixsrc.to/"),
+            "Referer" to referer!!,
             "Sec-Fetch-Dest" to "iframe",
             "Sec-Fetch-Mode" to "navigate",
             "Sec-Fetch-Site" to "cross-site",
@@ -99,6 +84,9 @@ class VixSrcExtractor : ExtractorApi() {
         )
 
         val resp = app.get(url, headers = headers).document
+//        Log.d(TAG, resp.toString())
+
+//        Log.d(TAG, iframe.document.toString())
         val scripts = resp.select("script")
         val script =
             scripts.find { it.data().contains("masterPlaylist") }!!.data().replace("\n", "\t")
@@ -109,9 +97,10 @@ class VixSrcExtractor : ExtractorApi() {
     }
 
     private fun getSanitisedScript(script: String): String {
+        // Split by top-level assignments like window.xxx =
         val parts = Regex("""window\.(\w+)\s*=""")
             .split(script)
-            .drop(1)
+            .drop(1) // first split part is empty before first assignment
 
         val keys = Regex("""window\.(\w+)\s*=""")
             .findAll(script)
@@ -119,9 +108,12 @@ class VixSrcExtractor : ExtractorApi() {
             .toList()
 
         val jsonObjects = keys.zip(parts).map { (key, value) ->
+            // Clean up the value
             val cleaned = value
                 .replace(";", "")
+                // Quote keys only inside objects
                 .replace(Regex("""(\{|\[|,)\s*(\w+)\s*:"""), "$1 \"$2\":")
+                // Remove trailing commas before } or ]
                 .replace(Regex(""",(\s*[}\]])"""), "$1")
                 .trim()
 
