@@ -188,7 +188,7 @@ object WatchSyncUtils {
             val query =
                 """ mutation DeleteIssue { deleteProjectV2Item( input: { projectId: "$projectId" itemId: "$itemId" } ) { deletedItemId } } """
             val res = apiCall(query.toStringData()) ?: return failure
-            if (res.data.delItem?.deletedItemId.equals(itemId)) {
+            if (res.data.delItem?.deletedItemId == itemId) {
                 itemId = null
                 deviceId = null
                 isThisDeviceSync = false
