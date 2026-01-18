@@ -16,37 +16,39 @@ status_names = {
 # Costruisci il messaggio
 lines = []
 
-# Header
+# Header - FORMATO PULITO
 lines.append("🏆 REPORT STATO REPOSITORY")
 lines.append(f"📅 Generato il: {data['date']}")
-lines.append("━" * 40)
+lines.append("")  # Linea vuota
 
 # Per ogni status
 for status_code in [1, 3, 2, 0]:
     emoji, name = status_names[status_code]
-    plugins = data['groups'][str(status_code)]
+    plugins = data['groups'].get(str(status_code), [])
     
     if plugins:
-        lines.append(f"\n{emoji} {name}: {len(plugins)}")
+        lines.append(f"{emoji} {name}: {len(plugins)}")
         for plugin in plugins:
             lines.append(f"   • {plugin.get('name', 'Sconosciuto')}")
-    else:
-        lines.append(f"\n{emoji} {name}: 0")
+        lines.append("")  # Spazio tra sezioni
+    # else: RIMUOVI - Non mostrare sezione vuota
 
-# Footer
-lines.append("\n━" * 40)
+# Statistiche - FORMATO PULITO
+# Calcola salute corretta: (Attivi + Beta) / Totale * 100
+attivi = len(data['groups'].get('1', []))
+beta = len(data['groups'].get('3', []))
+total = data['total']
+funzionanti = attivi + beta
+salute_percent = int((funzionanti / total) * 100) if total > 0 else 0
 
-# Salute repository
-salute_emoji = "🟢" if data['salute'] >= 70 else "🟡" if data['salute'] >= 40 else "🔴"
-lines.append(f"• Salute repository: {salute_emoji}{data['salute']}%")
-lines.append(f"• Plugin funzionanti: {data['funzionanti']}/{data['total']}")
+salute_emoji = "🟢" if salute_percent >= 70 else "🟡" if salute_percent >= 40 else "🔴"
+lines.append(f"Salute repository: {salute_emoji}{salute_percent}%")
+lines.append(f"Plugin funzionanti: {funzionanti}/{total}")
+lines.append("")  # Spazio
 
 # LINK INSTALLAZIONE
-#username = "TUO_USERNAME_GITHUB"  
-#repo = "TUO_REPOSITORY"          
-
 install_url = f"https://t.me/c/1978830401/1000"
-lines.append(f"\n📦 INSTALLA: [CLICCA QUI]({install_url})")
+lines.append(f"📦 INSTALLA: [CLICCA QUI]({install_url})")
 
 # Unisci tutto
 message = "\n".join(lines)
