@@ -91,7 +91,6 @@ class CB01 : MainAPI() {
 
         val searchResponses = posts.map {
             if (request.data.contains("serietv")) {
-//                Log.d("CB01", it.title)
                 val title = fixTitle(it.title, false)
                 newTvSeriesSearchResponse(title, it.permalink, TvType.TvSeries) {
                     addPoster(it.poster)
@@ -112,7 +111,6 @@ class CB01 : MainAPI() {
         return newHomePageResponse(section, hasNext)
     }
 
-    // this function gets called when you search for something
     override suspend fun search(query: String): List<SearchResponse> {
         val searchLinks =
             listOf("$mainUrl/?s=$query", "$mainUrl/serietv/?s=$query")
@@ -170,7 +168,6 @@ class CB01 : MainAPI() {
             mainContainer.selectFirst("img.responsive-locandina")?.attr("src")
         val banner = mainContainer.selectFirst("#sequex-page-title-img")?.attr("data-img")
         val title = mainContainer.selectFirst("h1")?.text()!!
-//        val actionTable = mainContainer.selectFirst("table.cbtable:nth-child(5)")
         val isMovie = !actualUrl.contains("serietv")
         val type = if (isMovie) TvType.Movie else TvType.TvSeries
         return if (isMovie) {
@@ -184,19 +181,30 @@ class CB01 : MainAPI() {
                 ?.removePrefix("DURATA")
                 ?.removeSuffix("′")?.trim()?.toInt()
 
-            val table =
-                mainContainer.selectFirst("table.cbtable > tbody:nth-child(1) > tr:nth-child(1) > td:nth-child(1)")
-            val links = table?.select("a")?.mapNotNull {
-                if (it.text() == "Maxstream" || it.text() == "Mixdrop") {
-                    it.attr("href")
-                } else {
-                    null
-                }
+            val pageText = document.text()
+            val allLinks = mutableListOf<String>()
+            val uprotMatches = Regex("""https?://uprot\.net/msf/[^\s)\]]+""").findAll(pageText)
+            allLinks.addAll(uprotMatches.map { it.value })
+            val stayonlineMatches = Regex("""https?://stayonline\.pro/l/[^\s)\]]+""").findAll(pageText)
+            allLinks.addAll(stayonlineMatches.map { it.value })
+            val uniqueLinks = allLinks.distinct().takeLast(4)
+            
+            val finalLinks = if (uniqueLinks.isNotEmpty()) {
+                uniqueLinks
+            } else {
+                val table = mainContainer.selectFirst("table.cbtable > tbody:nth-child(1) > tr:nth-child(1) > td:nth-child(1)")
+                table?.select("a")?.mapNotNull {
+                    if (it.text() == "Maxstream" || it.text() == "Mixdrop") {
+                        it.attr("href")
+                    } else { null }
+                } ?: emptyList()
             }
-//            Log.d("CB01", "Links: $links")
-            val data = links?.let {
-                it.subList(links.size - 2, it.size)
-            }?.toJson() ?: "null"
+
+            val data = if (finalLinks.isNotEmpty()) {
+                finalLinks.toJson()
+            } else {
+                "null"
+            }
 
             newMovieLoadResponse(fixTitle(title, true), actualUrl, type, data) {
                 addPoster(poster)
@@ -231,19 +239,15 @@ class CB01 : MainAPI() {
         val seasonDropdowns = page.select(".sp-wrap ")
 
         val episodes = seasonDropdowns.mapIndexedNotNull { index, dropdown ->
-            // Every Season
             val seasonName = dropdown.select("div.sp-head").text()
             val regex = "\\d+".toRegex()
             val seasonNumber = regex.find(seasonName)?.value?.toIntOrNull() ?: index
 
-
             val episodesData = dropdown.select("div.sp-body").select("strong").select("p")
             episodesData.amap {
-                // Every episode
                 val epName = it.text().substringBefore('–').trim()
                 val epNumber = regex.find(epName.substringAfter('×'))?.value?.toIntOrNull()
                 val links = it.select("a").map { a -> a.attr("href") }
-//                Log.d("Links", seasonName + " " + links.toJson())
                 if (links.any { l -> l.contains("uprot") || l.contains("stayonline") }) {
                     seasonsData.add(
                         SeasonData(
@@ -257,7 +261,6 @@ class CB01 : MainAPI() {
                     } catch (e: NoSuchElementException) {
                         null
                     }
-                    // Try getting episodes from maxstream
                     val eps = if (uprotLink != null) {
                         getNestedEpisodes(uprotLink, seasonNumber)
                     } else {
@@ -265,8 +268,6 @@ class CB01 : MainAPI() {
                     }
 
                     if (eps.isNullOrEmpty()) {
-                        // If I can't find episodes on maxstream it's very likely
-                        // that I found the video source
                         newEpisode(links.toJson()) {
                             name = epName
                             season = seasonNumber
@@ -288,7 +289,6 @@ class CB01 : MainAPI() {
             return eps to seasonsData
         }
 
-//        Log.d("CB01", "Episodes: ${episodes.toString()}")
         return (episodes ?: emptyList()) to seasonsData
     }
 
@@ -297,7 +297,6 @@ class CB01 : MainAPI() {
         season: Int?,
     ): List<Episode> {
         val link = ShortLink.unshortenUprot(uprotLink)
-//        Log.d("Link", "Bypassed Link: $link")
         if (link.toHttpUrlOrNull() != null) {
             val response = app.get(link)
             val trs = response.document.select("tr")
@@ -314,7 +313,6 @@ class CB01 : MainAPI() {
                 }
             }
             return episodes
-//            Log.d("Link", "Response: $trs")
         }
         return emptyList()
     }
@@ -325,17 +323,14 @@ class CB01 : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-//        Log.d("CB01", "Data: " + data)
         if (data == "null") return false
         var links = parseJson<List<String>>(data)
         links = links.filter { it.contains("uprot.net") || it.contains("stayonline") }
         if (links.size > 2) {
             links = links.subList(2, 4)
         }
-//        Log.d("CB01", "Scraped Link: $links")
 
         links.mapNotNull {
-//            Log.d("CB01", "Base Link: $it")
             var link = if (it.contains("uprot")) {
                 ShortLink.unshortenUprot(it)
             } else if (it.contains("stayonline")) {
@@ -355,17 +350,10 @@ class CB01 : MainAPI() {
                         link = bypassStayOnline(link!!)
                     }
                 }
-//                Log.d("CB01", "Final bypass: $link")
                 finalBypass = link
             }
 
             finalBypass?.let { l ->
-                if (l.contains("uprot")) {
-                    val x = bypassUprot(l)
-                    val y = ShortLink.unshortenUprot(l)
-                    Log.d("CB01", "x=$x \t y=$y")
-                }
-//                loadExtractor(l, "", subtitleCallback, callback)
                 if (link!!.contains("maxstream")) {
                     MaxStreamExtractor().getUrl(l, null, subtitleCallback, callback)
                 } else if (link!!.contains("mixdrop")) {
@@ -388,7 +376,6 @@ class CB01 : MainAPI() {
             "user-agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
             "x-requested-with" to "XMLHttpRequest"
         )
-//        Log.d("CB01:StayOnline", link)
         val data = "id=${link.split("/").dropLast(1).last()}&ref="
 
         val response = app.post(
@@ -397,12 +384,10 @@ class CB01 : MainAPI() {
             requestBody = data.toRequestBody("application/x-www-form-urlencoded; charset=UTF-8".toMediaTypeOrNull())
         )
 
-        val jsonResponse = response.body.string() // Use a JSON parser if needed
-//        Log.d("CB01:StayOnline", jsonResponse)
+        val jsonResponse = response.body.string()
         try {
             val realUrl = JSONObject(jsonResponse).getJSONObject("data").getString("value")
             return realUrl
-
         } catch (e: JSONException) {
             return null
         }
@@ -410,25 +395,14 @@ class CB01 : MainAPI() {
 
     private suspend fun bypassUprot(link: String): String? {
         val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
-
-
-        // Generate headers (replace with your own method to generate fake headers)
         val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
         )
 
-//        Log.d("CB01:Uprot", updatedLink)
-
-        // Make the HTTP request
         val response = app.get(updatedLink, headers = headers, timeout = 10_000)
-
         val responseBody = response.body.string()
-
-        // Parse the HTML using Jsoup
         val document = Jsoup.parse(responseBody)
-        Log.d("CB01:Uprot", document.select("a").toString())
         val maxstreamUrl = document.selectFirst("a")?.attr("href")
-
         return maxstreamUrl
     }
 
