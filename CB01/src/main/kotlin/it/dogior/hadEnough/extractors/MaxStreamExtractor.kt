@@ -12,7 +12,7 @@ import com.lagradost.cloudstream3.utils.getAndUnpack
 
 class MaxStreamExtractor : ExtractorApi() {
     override var name = "MaxStream"
-    override var mainUrl = "https://maxstream.video/"
+    override var mainUrl = "https://maxsun435.online/"
     override val requiresReferer = false
 
     override suspend fun getUrl(
