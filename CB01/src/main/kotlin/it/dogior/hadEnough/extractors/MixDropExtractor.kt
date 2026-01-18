@@ -11,7 +11,7 @@ import com.lagradost.cloudstream3.utils.Qualities
 
 class MixDropExtractor : ExtractorApi() {
     override var name = "MixDrop"
-    override var mainUrl = "https://mixdrop.co"  
+    override var mainUrl = "https://mixdrop.ps"  
     override val requiresReferer = false
 
     override suspend fun getUrl(
