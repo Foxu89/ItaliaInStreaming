@@ -1,10 +1,34 @@
 import json
+import os
 from datetime import datetime
+import requests  # ← AGGIUNGI QUESTA
 
-# Legge il file plugins.json
-with open('plugins.json', 'r', encoding='utf-8') as f:
-    data = json.load(f)
+# PROVA 1: Legge il file plugins.json scaricato dal workflow
+try:
+    with open('plugins.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    print("✅ plugins.json trovato localmente")
+    
+except FileNotFoundError:
+    # PROVA 2: Scaricalo direttamente da GitHub builds
+    print("📥 plugins.json non trovato, scarico da GitHub...")
+    try:
+        url = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/builds/plugins.json"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Controlla errori HTTP
+        data = response.json()
+        
+        # Salva per debug
+        with open('plugins_downloaded.json', 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        print("✅ plugins.json scaricato da GitHub builds")
+        
+    except Exception as e:
+        print(f"❌ ERRORE: Impossibile ottenere plugins.json: {e}")
+        # Crea dati vuoti per non bloccare tutto
+        data = {"plugins": []}
 
+# Il resto del tuo codice RIMANE UGUALEEE
 plugins = data.get('plugins', [])
 
 # Categorizza i plugin per status
@@ -40,3 +64,5 @@ with open('plugin_data.json', 'w', encoding='utf-8') as f:
     json.dump(output, f, indent=2)
 
 print(f"✅ Plugin analizzati: {total}")
+print(f"🟢 Attivi: {attivi} | 🔵 Beta: {len(status_groups[3])}")
+print(f"🟡 Lenti: {len(status_groups[2])} | 🔴 Disattivati: {len(status_groups[0])}")
