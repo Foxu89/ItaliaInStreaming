@@ -91,6 +91,7 @@ class CB01 : MainAPI() {
 
         val searchResponses = posts.map {
             if (request.data.contains("serietv")) {
+//                Log.d("CB01", it.title)
                 val title = fixTitle(it.title, false)
                 newTvSeriesSearchResponse(title, it.permalink, TvType.TvSeries) {
                     addPoster(it.poster)
@@ -111,6 +112,7 @@ class CB01 : MainAPI() {
         return newHomePageResponse(section, hasNext)
     }
 
+    // this function gets called when you search for something
     override suspend fun search(query: String): List<SearchResponse> {
         val searchLinks =
             listOf("$mainUrl/?s=$query", "$mainUrl/serietv/?s=$query")
@@ -168,6 +170,7 @@ class CB01 : MainAPI() {
             mainContainer.selectFirst("img.responsive-locandina")?.attr("src")
         val banner = mainContainer.selectFirst("#sequex-page-title-img")?.attr("data-img")
         val title = mainContainer.selectFirst("h1")?.text()!!
+//        val actionTable = mainContainer.selectFirst("table.cbtable:nth-child(5)")
         val isMovie = !actualUrl.contains("serietv")
         val type = if (isMovie) TvType.Movie else TvType.TvSeries
         return if (isMovie) {
@@ -190,6 +193,7 @@ class CB01 : MainAPI() {
                     null
                 }
             }
+//            Log.d("CB01", "Links: $links")
             val data = links?.let {
                 it.subList(links.size - 2, it.size)
             }?.toJson() ?: "null"
@@ -232,12 +236,14 @@ class CB01 : MainAPI() {
             val regex = "\\d+".toRegex()
             val seasonNumber = regex.find(seasonName)?.value?.toIntOrNull() ?: index
 
+
             val episodesData = dropdown.select("div.sp-body").select("strong").select("p")
             episodesData.amap {
                 // Every episode
                 val epName = it.text().substringBefore('–').trim()
                 val epNumber = regex.find(epName.substringAfter('×'))?.value?.toIntOrNull()
                 val links = it.select("a").map { a -> a.attr("href") }
+//                Log.d("Links", seasonName + " " + links.toJson())
                 if (links.any { l -> l.contains("uprot") || l.contains("stayonline") }) {
                     seasonsData.add(
                         SeasonData(
@@ -282,6 +288,7 @@ class CB01 : MainAPI() {
             return eps to seasonsData
         }
 
+//        Log.d("CB01", "Episodes: ${episodes.toString()}")
         return (episodes ?: emptyList()) to seasonsData
     }
 
@@ -290,6 +297,7 @@ class CB01 : MainAPI() {
         season: Int?,
     ): List<Episode> {
         val link = ShortLink.unshortenUprot(uprotLink)
+//        Log.d("Link", "Bypassed Link: $link")
         if (link.toHttpUrlOrNull() != null) {
             val response = app.get(link)
             val trs = response.document.select("tr")
@@ -306,6 +314,7 @@ class CB01 : MainAPI() {
                 }
             }
             return episodes
+//            Log.d("Link", "Response: $trs")
         }
         return emptyList()
     }
@@ -316,316 +325,111 @@ class CB01 : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        Log.d("CB01:loadLinks", "=== INIZIO loadLinks ===")
-        Log.d("CB01:loadLinks", "Data ricevuta: $data")
-        
-        if (data == "null") {
-            Log.d("CB01:loadLinks", "Data è null, esco")
-            return false
+//        Log.d("CB01", "Data: " + data)
+        if (data == "null") return false
+        var links = parseJson<List<String>>(data)
+        links = links.filter { it.contains("uprot.net") || it.contains("stayonline") }
+        if (links.size > 2) {
+            links = links.subList(2, 4)
         }
-        
-        try {
-            // Parsa i link dal JSON
-            val links = parseJson<List<String>>(data)
-            Log.d("CB01:loadLinks", "Links parsati: $links")
-            
-            // Filtra solo uprot (Maxstream) e stayonline (Mixdrop)
-            val filteredLinks = links.filter { 
-                it.contains("uprot.net") || it.contains("stayonline") 
-            }
-            
-            Log.d("CB01:loadLinks", "Links filtrati: $filteredLinks")
-            
-            if (filteredLinks.isEmpty()) {
-                Log.d("CB01:loadLinks", "Nessun link valido trovato")
-                return false
-            }
-            
-            // Se ci sono più di 2 link, prendi gli ultimi 2 (sono quelli giusti)
-            val finalLinks = if (filteredLinks.size > 2) {
-                filteredLinks.subList(filteredLinks.size - 2, filteredLinks.size)
+//        Log.d("CB01", "Scraped Link: $links")
+
+        links.mapNotNull {
+//            Log.d("CB01", "Base Link: $it")
+            var link = if (it.contains("uprot")) {
+                ShortLink.unshortenUprot(it)
+            } else if (it.contains("stayonline")) {
+                bypassStayOnline(it)
             } else {
-                filteredLinks
+                null
             }
-            
-            Log.d("CB01:loadLinks", "Links finali da processare: $finalLinks")
-            
-            // Processa ogni link
-            finalLinks.forEachIndexed { index, originalLink ->
-                Log.d("CB01:loadLinks", "\n--- Processando link ${index + 1}: $originalLink")
-                
-                // 1. Bypassa lo shortlink
-                val bypassedLink = bypassShortLink(originalLink)
-                
-                if (bypassedLink != null) {
-                    Log.d("CB01:loadLinks", "✅ Bypass riuscito: $bypassedLink")
-                    
-                    // 2. Processa il link con l'estrattore appropriato
-                    processLinkWithExtractor(bypassedLink, originalLink, subtitleCallback, callback)
-                } else {
-                    Log.d("CB01:loadLinks", "❌ Bypass fallito per: $originalLink")
+
+            var finalBypass: String? = ""
+            ioSafe {
+                if (link!!.contains("uprot.net")) {
+                    while (link?.contains("uprot.net") == true) {
+                        link = ShortLink.unshortenUprot(link!!)
+                    }
+                } else if (link!!.contains("stayonline")) {
+                    while (link?.contains("stayonline") == true) {
+                        link = bypassStayOnline(link!!)
+                    }
+                }
+//                Log.d("CB01", "Final bypass: $link")
+                finalBypass = link
+            }
+
+            finalBypass?.let { l ->
+                if (l.contains("uprot")) {
+                    val x = bypassUprot(l)
+                    val y = ShortLink.unshortenUprot(l)
+                    Log.d("CB01", "x=$x \t y=$y")
+                }
+//                loadExtractor(l, "", subtitleCallback, callback)
+                if (link!!.contains("maxstream")) {
+                    MaxStreamExtractor().getUrl(l, null, subtitleCallback, callback)
+                } else if (link!!.contains("mixdrop")) {
+                    val finalUrl = link!!.replace(".club", ".ps")
+                        .substringBeforeLast("/")
+                        .substringBeforeLast("/")
+                    MixDropExtractor().getUrl(finalUrl, "", subtitleCallback, callback)
                 }
             }
-            
-            Log.d("CB01:loadLinks", "=== FINE loadLinks ===")
-            return true
-            
-        } catch (e: Exception) {
-            Log.e("CB01:loadLinks", "💥 Errore in loadLinks: ${e.message}", e)
-            return false
         }
-    }
-    
-    // NUOVA FUNZIONE: Bypassa tutti gli shortlink
-    private suspend fun bypassShortLink(link: String): String? {
-        return try {
-            when {
-                link.contains("stayonline.pro") -> {
-                    Log.d("CB01:bypassShortLink", "Bypassando stayonline: $link")
-                    bypassStayOnline(link)
-                }
-                
-                link.contains("uprot.net") -> {
-                    Log.d("CB01:bypassShortLink", "Bypassando uprot: $link")
-                    // Prova prima il metodo standard
-                    val result = ShortLink.unshortenUprot(link)
-                    if (result == null || result.contains("uprot.net")) {
-                        // Fallback al nostro metodo
-                        bypassUprot(link)
-                    } else {
-                        result
-                    }
-                }
-                
-                else -> {
-                    Log.d("CB01:bypassShortLink", "Link non shortlink: $link")
-                    link
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("CB01:bypassShortLink", "Errore bypass: ${e.message}")
-            null
-        }
-    }
-    
-    // NUOVA FUNZIONE: Processa link con estrattore appropriato
-    private suspend fun processLinkWithExtractor(
-        finalUrl: String,
-        originalUrl: String,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        Log.d("CB01:processLink", "URL finale: $finalUrl")
-        Log.d("CB01:processLink", "URL originale: $originalUrl")
-        
-        try {
-            // Determina quale estrattore usare in base all'URL FINALE
-            when {
-                // M1XDROP (nuovo MixDrop) - m1xdrop.net
-                finalUrl.contains("m1xdrop.net") -> {
-                    Log.d("CB01:processLink", "✅ Rilevato M1xDrop (nuovo MixDrop)")
-                    
-                    // Pulisci l'URL per MixDrop
-                    val cleanUrl = finalUrl.substringBefore("?")
-                    Log.d("CB01:processLink", "URL pulito per MixDrop: $cleanUrl")
-                    
-                    // Usa MixDropExtractor (che ora punta a m1xdrop.net)
-                    ioSafe {
-                        MixDropExtractor().getUrl(cleanUrl, "", subtitleCallback, callback)
-                    }
-                }
-                
-                // MAXSUN (nuovo MaxStream) - maxsun435.online
-                finalUrl.contains("maxsun435.online") -> {
-                    Log.d("CB01:processLink", "✅ Rilevato MaxSun (nuovo MaxStream)")
-                    
-                    // Usa MaxStreamExtractor (che ora punta a maxsun435.online)
-                    ioSafe {
-                        MaxStreamExtractor().getUrl(finalUrl, null, subtitleCallback, callback)
-                    }
-                }
-                
-                // VECCHI DOMINI PER COMPATIBILITÀ
-                finalUrl.contains("mixdrop.") -> {
-                    Log.d("CB01:processLink", "⚠️ Rilevato vecchio dominio MixDrop")
-                    Log.d("CB01:processLink", "   Provo comunque MixDropExtractor...")
-                    
-                    ioSafe {
-                        MixDropExtractor().getUrl(finalUrl, "", subtitleCallback, callback)
-                    }
-                }
-                
-                finalUrl.contains("maxstream.") -> {
-                    Log.d("CB01:processLink", "⚠️ Rilevato vecchio dominio MaxStream")
-                    Log.d("CB01:processLink", "   Provo comunque MaxStreamExtractor...")
-                    
-                    ioSafe {
-                        MaxStreamExtractor().getUrl(finalUrl, null, subtitleCallback, callback)
-                    }
-                }
-                
-                // DOMINIO SCONOSCIUTO - Prova a indovinare
-                else -> {
-                    Log.d("CB01:processLink", "❓ Dominio non riconosciuto: $finalUrl")
-                    Log.d("CB01:processLink", "   Provo a indovinare l'estrattore...")
-                    
-                    // Prova MixDrop se sembra mixdrop
-                    if (finalUrl.contains("mixdrop") || finalUrl.contains("m1xdrop") || 
-                        originalUrl.contains("stayonline")) {
-                        Log.d("CB01:processLink", "   Sembra MixDrop, provo MixDropExtractor")
-                        ioSafe {
-                            MixDropExtractor().getUrl(finalUrl(finalUrl, "", subtitleCallback, callback)
-                        }
-                    }
-                    // Prova MaxStream se sembra maxstream
-                    else if (finalUrl.contains("maxstream") || finalUrl.contains("maxsun") || 
-                             originalUrl.contains("uprot")) {
-                        Log.d("CB01:processLink", "   Sembra MaxStream, provo MaxStreamExtractor")
-                        ioSafe {
-                            MaxStreamExtractor().getUrl(finalUrl, null, subtitleCallback, callback)
-                        }
-                    } else {
-                        Log.d("CB01:processLink", "   ❌ Impossibile determinare l'estrattore")
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("CB01:processLink", "💥 Errore processLink: ${e.message}", e)
-        }
+
+        return false
     }
 
     private suspend fun bypassStayOnline(link: String): String? {
-        Log.d("CB01:bypassStayOnline", "Original: $link")
-        
+        val headers = mapOf(
+            "origin" to "https://stayonline.pro",
+            "referer" to link,
+            "host" to link.toHttpUrl().host,
+            "user-agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+            "x-requested-with" to "XMLHttpRequest"
+        )
+//        Log.d("CB01:StayOnline", link)
+        val data = "id=${link.split("/").dropLast(1).last()}&ref="
+
+        val response = app.post(
+            "https://stayonline.pro/ajax/linkEmbedView.php",
+            headers = headers,
+            requestBody = data.toRequestBody("application/x-www-form-urlencoded; charset=UTF-8".toMediaTypeOrNull())
+        )
+
+        val jsonResponse = response.body.string() // Use a JSON parser if needed
+//        Log.d("CB01:StayOnline", jsonResponse)
         try {
-            val headers = mapOf(
-                "origin" to "https://stayonline.pro",
-                "referer" to link,
-                "host" to "stayonline.pro",
-                "user-agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-                "x-requested-with" to "XMLHttpRequest",
-                "accept" to "application/json, text/javascript, */*; q=0.01",
-                "accept-language" to "it-IT,it;q=0.9,en;q=0.8",
-                "content-type" to "application/x-www-form-urlencoded; charset=UTF-8"
-            )
-            
-            // Estrai l'ID dal link
-            val id = link.split("/").dropLast(1).lastOrNull() ?: link.substringAfterLast("/")
-            val data = "id=$id&ref="
-            
-            Log.d("CB01:bypassStayOnline", "ID: $id, Data: $data")
-            
-            val response = app.post(
-                "https://stayonline.pro/ajax/linkEmbedView.php",
-                headers = headers,
-                requestBody = data.toRequestBody("application/x-www-form-urlencoded; charset=UTF-8".toMediaTypeOrNull()),
-                timeout = 30000
-            )
-            
-            val jsonResponse = response.body.string()
-            Log.d("CB01:bypassStayOnline", "Risposta JSON: $jsonResponse")
-            
-            try {
-                val json = JSONObject(jsonResponse)
-                val success = json.optBoolean("success", false)
-                
-                if (success) {
-                    val realUrl = json.getJSONObject("data").getString("value")
-                    Log.d("CB01:bypassStayOnline", "✅ URL reale: $realUrl")
-                    return realUrl
-                } else {
-                    Log.e("CB01:bypassStayOnline", "❌ API ha restituito success=false")
-                    return null
-                }
-            } catch (e: JSONException) {
-                Log.e("CB01:bypassStayOnline", "Errore parsing JSON: ${e.message}")
-                
-                // Fallback: cerca URL nel testo
-                val urlPattern = Regex("""https?://[^\s"']+""")
-                val foundUrls = urlPattern.findAll(jsonResponse).map { it.value }.toList()
-                
-                if (foundUrls.isNotEmpty()) {
-                    val fallbackUrl = foundUrls.first()
-                    Log.d("CB01:bypassStayOnline", "🔄 Fallback URL: $fallbackUrl")
-                    return fallbackUrl
-                }
-                
-                return null
-            }
-        } catch (e: Exception) {
-            Log.e("CB01:bypassStayOnline", "💥 Errore generico: ${e.message}", e)
+            val realUrl = JSONObject(jsonResponse).getJSONObject("data").getString("value")
+            return realUrl
+
+        } catch (e: JSONException) {
             return null
         }
     }
 
     private suspend fun bypassUprot(link: String): String? {
-        Log.d("CB01:bypassUprot", "Original: $link")
-        
-        try {
-            val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
+        val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
 
-            val headers = mapOf(
-                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language" to "it-IT,it;q=0.9,en;q=0.8",
-                "Accept-Encoding" to "gzip, deflate, br",
-                "DNT" to "1",
-                "Connection" to "keep-alive",
-                "Upgrade-Insecure-Requests" to "1",
-                "Sec-Fetch-Dest" to "document",
-                "Sec-Fetch-Mode" to "navigate",
-                "Sec-Fetch-Site" to "none",
-                "Sec-Fetch-User" to "?1"
-            )
-            
-            Log.d("CB01:bypassUprot", "Aggiornato: $updatedLink")
-            
-            val response = app.get(updatedLink, headers = headers, timeout = 15000)
-            
-            Log.d("CB01:bypassUprot", "Status: ${response.code}")
-            
-            // Controlla redirect
-            val finalUrl = response.url
-            if (finalUrl != updatedLink && !finalUrl.contains("uprot.net")) {
-                Log.d("CB01:bypassUprot", "✅ Redirect a: $finalUrl")
-                return finalUrl
-            }
-            
-            val document = response.document
-            val links = document.select("a")
-            
-            // Cerca link che contengono maxstream o maxsun
-            val maxLink = links.firstOrNull { 
-                it.attr("href").contains("maxstream") || 
-                it.attr("href").contains("maxsun") ||
-                it.attr("href").contains("watchfree")
-            }
-            
-            if (maxLink != null) {
-                val href = maxLink.attr("href")
-                Log.d("CB01:bypassUprot", "✅ Trovato link: $href")
-                return href
-            }
-            
-            // Cerca meta refresh
-            val metaRefresh = document.select("meta[http-equiv='refresh']").firstOrNull()
-            metaRefresh?.let {
-                val content = it.attr("content")
-                val urlMatch = Regex("""url=(.+)""", RegexOption.IGNORE_CASE).find(content)
-                urlMatch?.let { match ->
-                    val refreshUrl = match.groupValues[1]
-                    Log.d("CB01:bypassUprot", "✅ Meta refresh a: $refreshUrl")
-                    return refreshUrl
-                }
-            }
-            
-            Log.e("CB01:bypassUprot", "❌ Nessun link trovato nella pagina")
-            return null
-            
-        } catch (e: Exception) {
-            Log.e("CB01:bypassUprot", "💥 Errore: ${e.message}", e)
-            return null
-        }
+
+        // Generate headers (replace with your own method to generate fake headers)
+        val headers = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        )
+
+//        Log.d("CB01:Uprot", updatedLink)
+
+        // Make the HTTP request
+        val response = app.get(updatedLink, headers = headers, timeout = 10_000)
+
+        val responseBody = response.body.string()
+
+        // Parse the HTML using Jsoup
+        val document = Jsoup.parse(responseBody)
+        Log.d("CB01:Uprot", document.select("a").toString())
+        val maxstreamUrl = document.selectFirst("a")?.attr("href")
+
+        return maxstreamUrl
     }
 
     data class Post(
