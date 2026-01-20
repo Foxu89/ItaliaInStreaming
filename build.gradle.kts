@@ -1,5 +1,8 @@
-import com.lagradost.cloudstream3.gradle.CloudstreamExtension
 import com.android.build.gradle.BaseExtension
+import com.lagradost.cloudstream3.gradle.CloudstreamExtension
+import org.gradle.kotlin.dsl.register
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 buildscript {
     repositories {
@@ -43,7 +46,7 @@ subprojects {
         namespace = "it.dogior.hadEnough"
         defaultConfig {
             minSdk = 21
-            compileSdk = 35 
+            compileSdkVersion(35)
             targetSdk = 35
         }
 
@@ -52,18 +55,12 @@ subprojects {
             targetCompatibility = JavaVersion.VERSION_1_8
         }
 
-        // KOTLIN 2.3.0
-        compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_1_8
-            targetCompatibility = JavaVersion.VERSION_1_8
-        }
-        
-        kotlin {
+        tasks.withType<KotlinJvmCompile> {
             compilerOptions {
-                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+                jvmTarget.set(JvmTarget.JVM_1_8)
                 freeCompilerArgs.addAll(
                     "-Xno-call-assertions",
-                    "-Xno-param-assertions", 
+                    "-Xno-param-assertions",
                     "-Xno-receiver-assertions"
                 )
             }
@@ -71,11 +68,11 @@ subprojects {
     }
 
     dependencies {
-        val apk by configurations
         val implementation by configurations
-
+        val cloudstream by configurations
+        
         // Stubs for all Cloudstream classes
-        apk("com.lagradost:cloudstream3:pre-release")
+        cloudstream("com.lagradost:cloudstream3:pre-release")
 
         // these dependencies can include any of those which are added by the app,
         // but you dont need to include any of them if you dont need them
@@ -89,6 +86,6 @@ subprojects {
     }
 }
 
-tasks.register("clean", Delete::class) {
+tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
