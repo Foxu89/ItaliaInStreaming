@@ -1,0 +1,24 @@
+[
+    {
+        "iconUrl": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/AnimeUnity/animesaturn_icon.png",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "fileSize": 26855,
+        "status": 3,
+        "language": "it",
+        "authors": [
+            "doGior",
+            "DieGon"
+        ],
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "version": 20,
+        "internalName": "AnimeUnity",
+        "description": "Anime da AnimeSaturn",
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/AnimeUnity.cs3",
+        "name": "AnimeUnity"
+    }
+]
