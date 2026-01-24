@@ -20,7 +20,7 @@ import com.lagradost.cloudstream3.CommonActivity.showToast
 import androidx.core.content.edit
 
 class AltaDefinizioneSettings(
-    private val plugin: AltaDefinizionePlugin,  // <-- USA AltaDefinizionePlugin
+    private val plugin: AltaDefinizionePlugin,  
     private val sharedPref: SharedPreferences?,
 ) : BottomSheetDialogFragment() {
     private var currentVersion: String = sharedPref?.getString("site_version", "v1") ?: "v1"
@@ -122,10 +122,10 @@ class AltaDefinizioneSettings(
         saveBtn?.setOnClickListener {
             sharedPref?.edit {
                 this.clear()
-                this.putInt("versionPosition", currentVersionPosition)  // <-- CAMBIA
-                this.putString("site_version", currentVersion)  // <-- CAMBIA
+                this.putInt("versionPosition", currentVersionPosition) 
+                this.putString("site_version", currentVersion)  
             }
-            showToast("Salvato. Riavvia l'app per applicare le impostazioni")
+            showToast("Saved. Restart the app to apply the settings")
             dismiss()
         }
     }
