@@ -109,8 +109,10 @@ class AltaDefinizioneV2 : MainAPI() {
         val genres = genreElements.select("a").map { it.text() }
         val yearElements = details.toList().first { it.text().contains("Anno: ") }
         val year = yearElements.select("div").last()?.text()
+        
         return if (url.contains("/serie-tv/")) {
-            val episodes = getEpisodes(doc, poster)
+            // MODIFICA 1: Cambia questa chiamata
+            val episodes = getEpisodes(doc)  // <-- RIMUOVI "poster" dal parametro
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 this.posterUrl = poster
                 this.plot = plot
@@ -140,15 +142,18 @@ class AltaDefinizioneV2 : MainAPI() {
         }
     }
 
-    private fun getEpisodes(doc: Document, poster: String?): List<Episode> {
-        val seasons =
-            doc.selectFirst("div.tab-content")?.select("div.tab-pane") ?: return emptyList()
+    // MODIFICA 2: Cambia questa funzione
+    private fun getEpisodes(doc: Document): List<Episode> {  // <-- RIMUOVI "poster: String?"
+        val seasons = doc.selectFirst("div.tab-content")?.select("div.tab-pane") ?: return emptyList()
+        // Ottieni il poster dalla pagina invece di riceverlo come parametro
+        val seriesPoster = doc.selectFirst("img.wp-post-image")?.attr("src")
 
         return seasons.map {
             val seasonNumber = it.attr("id").substringAfter("season-").toIntOrNull()
             val episodes = it.select("li").map { ep ->
-                val mirrors =
-                    ep.select("div.mirrors > a.mr").map { mirror -> mirror.attr("data-link") }
+                val mirrors = ep.select("div.mirrors > a.mr").map { mirror -> 
+                    mirror.attr("data-link") 
+                }
                 val epData = ep.select("a")
                 val epNumber = epData.attr("data-num").substringAfter("x").toIntOrNull()
                 val epTitle = epData.attr("data-title").substringBefore(":")
@@ -158,7 +163,7 @@ class AltaDefinizioneV2 : MainAPI() {
                     this.episode = epNumber
                     this.name = epTitle
                     this.description = epPlot
-                    this.posterUrl = poster
+                    this.posterUrl = fixUrlNull(seriesPoster)  // <-- USA seriesPoster invece di poster
                 }
             }
             episodes
@@ -178,7 +183,6 @@ class AltaDefinizioneV2 : MainAPI() {
                 DroploadExtractor().getUrl(it, null, subtitleCallback, callback)
             } else {
                 MySupervideoExtractor().getUrl(it, null, subtitleCallback, callback)
-//                loadExtractor(it, null, subtitleCallback, callback)
             }
         }
         return false
