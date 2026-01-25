@@ -1,5 +1,5 @@
 // use an integer for version numbers
-version = 16
+version = 17
 
 
 cloudstream {
@@ -25,7 +25,7 @@ cloudstream {
         "OVA",
     )
 
-    iconUrl = "https://static.animeworld.ac/assets/images/favicon/android-icon-192x192.png?s"
+    iconUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AnimeWorld/animeworld_icon.png"
 }
 
 android {
