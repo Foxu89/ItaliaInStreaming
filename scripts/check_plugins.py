@@ -1,9 +1,9 @@
 import json
 from datetime import datetime
 
-# Legge il file plugins.json (che è una LISTA diretta)
+# Legge il file plugins.json
 with open('plugins.json', 'r', encoding='utf-8') as f:
-    plugins = json.load(f)  # ← Carica direttamente la lista!
+    plugins = json.load(f)
 
 print(f"📊 Trovati {len(plugins)} plugin")
 
@@ -26,15 +26,13 @@ attivi = len(status_groups[1])
 beta = len(status_groups[3])
 lenti = len(status_groups[2])
 disattivati = len(status_groups[0])
-funzionanti = attivi + beta  # Attivi + Beta
-salute = int((funzionanti / total) * 100) if total > 0 else 0
+funzionanti = attivi + beta + lenti  # MODIFICATO: aggiungi lenti
 
-# DEBUG: Mostra cosa ha trovato
+# DEBUG
 print(f"🟢 Attivi: {attivi}")
 print(f"🔵 Beta: {beta}")
 print(f"🟡 Lenti: {lenti}")
 print(f"🔴 Disattivati: {disattivati}")
-print(f"📈 Salute: {salute}%")
 
 # Salva dati per telegram_message.py
 output = {
@@ -45,8 +43,7 @@ output = {
     'lenti': lenti,
     'disattivati': disattivati,
     'funzionanti': funzionanti,
-    'salute': salute,
-    'groups': status_groups
+    'groups': {str(k): v for k, v in status_groups.items()}  # Converti chiavi in string
 }
 
 with open('plugin_data.json', 'w', encoding='utf-8') as f:
