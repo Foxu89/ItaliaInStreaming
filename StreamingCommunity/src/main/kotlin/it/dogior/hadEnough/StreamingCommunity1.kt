@@ -36,7 +36,7 @@ class StreamingCommunityEN : MainAPI() {
     override var name = Companion.name
     override var supportedTypes =
         setOf(TvType.Movie, TvType.TvSeries, TvType.Cartoon, TvType.Documentary)
-    override var lang = "en"  // Lingua fissa inglese
+    override var lang = "en"
     override val hasMainPage = true
 
     companion object {
@@ -47,16 +47,16 @@ class StreamingCommunityEN : MainAPI() {
             "X-Inertia-Version" to inertiaVersion,
             "X-Requested-With" to "XMLHttpRequest",
         ).toMutableMap()
-        val mainUrl = "https://streamingunity.tv/en"  // URL fisso inglese
-        var name = "StreamingCommunity"  // Nome specifico
-        val TAG = "SCommunityENG"
+        val mainUrl = "https://streamingunity.tv/en"
+        var name = "StreamingCommunity"
+        val TAG = "SCommunityEN"
     }
 
-    // Solo sezioni in inglese
     private val sectionNamesList = mainPageOf(
         "$mainUrl/browse/top10" to "Top 10 of Today",
         "$mainUrl/browse/trending" to "Trending Titles",
         "$mainUrl/browse/latest" to "Recently Added",
+        "$mainUrl/browse/upcoming" to "Upcoming...",
         "$mainUrl/browse/genre?g=Animation" to "Animation",
         "$mainUrl/browse/genre?g=Adventure" to "Adventure",
         "$mainUrl/browse/genre?g=Action" to "Action",
@@ -109,13 +109,11 @@ class StreamingCommunityEN : MainAPI() {
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         var url = mainUrl.substringBeforeLast("/") + "/api" +
                 request.data.substringAfter(mainUrl)
-        val params = mutableMapOf("lang" to "en")  // Lingua fissa inglese
+        val params = mutableMapOf("lang" to "en")
 
         val section = request.data.substringAfterLast("/")
         when (section) {
-            "trending", "latest", "top10" -> {
-                // Nessuna azione speciale
-            }
+            "trending", "latest", "top10" -> {}
             else -> {
                 val genere = url.substringAfterLast('=')
                 url = url.substringBeforeLast('?')
@@ -161,7 +159,7 @@ class StreamingCommunityEN : MainAPI() {
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
         val searchUrl = "${mainUrl.replace("/en", "")}/api/search"
-        val params = mutableMapOf("q" to query, "lang" to "en")  // Lingua fissa inglese
+        val params = mutableMapOf("q" to query, "lang" to "en")
         if (page > 0) {
             params["offset"] = ((page - 1) * 60).toString()
         }
@@ -321,13 +319,20 @@ class StreamingCommunityEN : MainAPI() {
         if (data.isEmpty()) return false
         
         val loadData = parseJson<LoadData>(data)
+        
+        val allSubtitles = mutableListOf<SubtitleFile>()
+        
+        val collectCallback = { subtitle: SubtitleFile ->
+            allSubtitles.add(subtitle)
+        }
+        
         val response = app.get(loadData.url).document
         val iframeSrc = response.select("iframe").attr("src")
 
         VixCloudExtractor().getUrl(
             url = iframeSrc,
             referer = mainUrl.substringBeforeLast("en"),
-            subtitleCallback = subtitleCallback,
+            subtitleCallback = collectCallback,
             callback = callback
         )
 
@@ -340,10 +345,21 @@ class StreamingCommunityEN : MainAPI() {
         VixSrcExtractor().getUrl(
             url = vixsrcUrl,
             referer = "https://vixsrc.to/",
-            subtitleCallback = subtitleCallback,
+            subtitleCallback = collectCallback,
             callback = callback
         )
-
+        
+        val englishSubs = allSubtitles.filter { sub ->
+            val name = sub.name.toLowerCase()
+            val lang = sub.lang?.toLowerCase() ?: ""
+            name.contains("en") || name.contains("eng") || name.contains("english") ||
+            lang.contains("en") || lang.contains("eng") || lang.contains("english")
+        }
+        
+        englishSubs.forEach { sub ->
+            subtitleCallback(sub)
+        }
+        
         return true
     }
 }
