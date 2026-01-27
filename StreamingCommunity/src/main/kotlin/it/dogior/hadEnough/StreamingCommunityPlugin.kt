@@ -1,25 +1,28 @@
 package it.dogior.hadEnough
 
-import android.content.Context
-import androidx.appcompat.app.AppCompatActivity
-import com.lagradost.cloudstream3.CommonActivity.activity
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.appcompat.app.AppCompatActivity
 
 @CloudstreamPlugin
 class StreamingCommunityPlugin : Plugin() {
-    private val sharedPref = activity?.getSharedPreferences("StreamingCommunity", Context.MODE_PRIVATE)
     override fun load(context: Context) {
-        val lang = sharedPref?.getString("lang", "it") ?: "it"
-        registerMainAPI(StreamingCommunity(lang))
-        registerExtractorAPI(VixCloudExtractor())
-        registerExtractorAPI(VixSrcExtractor())
+        val sharedPref = context.getSharedPreferences("streamingcommunity_prefs", Context.MODE_PRIVATE)
+        val language = sharedPref.getString("language", "it") ?: "it"
+        
+        // Registra il plugin corretto in base alla lingua
+        when (language) {
+            "en" -> registerMainAPI(StreamingCommunityEN())
+            else -> registerMainAPI(StreamingCommunityIT())  // Default italiano
+        }
 
-
+        // Abilita le impostazioni (ICONA INGRANAGGIO)
         openSettings = { ctx ->
             val activity = ctx as AppCompatActivity
-            val frag = Settings(this, sharedPref)
-            frag.show(activity.supportFragmentManager, "Frag")
+            val frag = StreamingCommunitySettings(this, sharedPref)
+            frag.show(activity.supportFragmentManager, "Settings")
         }
     }
 }
