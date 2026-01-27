@@ -31,7 +31,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
-class StreamingCommunity : MainAPI() {
+class StreamingCommunityIT : MainAPI() {
     override var mainUrl = Companion.mainUrl
     override var name = Companion.name
     override var supportedTypes =
@@ -48,7 +48,7 @@ class StreamingCommunity : MainAPI() {
             "X-Requested-With" to "XMLHttpRequest",
         ).toMutableMap()
         val mainUrl = "https://streamingunity.tv/it"  // URL fisso italiano
-        var name = "StreamingCommunity ITA"  // Nome specifico
+        var name = "StreamingCommunity"  // Nome specifico
         val TAG = "SCommunity"
     }
 
