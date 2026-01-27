@@ -92,8 +92,8 @@ class StreamingCommunitySettings(
         val langDropdown: Spinner? = view.findViewByName("lang_spinner")
         val languages = arrayOf("it", "en")
         val languageNames = arrayOf(
-            getString("italian") ?: "Italiano",
-            getString("english") ?: "English"
+            getString("it") ?: "Italiano",
+            getString("en") ?: "English"
         )
         
         langDropdown?.adapter = ArrayAdapter(
