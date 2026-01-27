@@ -320,10 +320,20 @@ class StreamingCommunityEN : MainAPI() {
         
         val loadData = parseJson<LoadData>(data)
         
-        val allSubtitles = mutableListOf<SubtitleFile>()
+        val englishTracks = mutableListOf<ExtractorLink>()
+        val otherTracks = mutableListOf<ExtractorLink>()
         
-        val collectCallback = { subtitle: SubtitleFile ->
-            allSubtitles.add(subtitle)
+        val trackCallback = { link: ExtractorLink ->
+            val linkName = link.name?.toLowerCase() ?: ""
+            val isEnglish = linkName.contains("en") || 
+                           linkName.contains("eng") || 
+                           linkName.contains("english")
+            
+            if (isEnglish) {
+                englishTracks.add(link)
+            } else {
+                otherTracks.add(link)
+            }
         }
         
         val response = app.get(loadData.url).document
@@ -332,8 +342,8 @@ class StreamingCommunityEN : MainAPI() {
         VixCloudExtractor().getUrl(
             url = iframeSrc,
             referer = mainUrl.substringBeforeLast("en"),
-            subtitleCallback = collectCallback,
-            callback = callback
+            subtitleCallback = subtitleCallback,
+            callback = trackCallback
         )
 
         val vixsrcUrl = if (loadData.type == "movie") {
@@ -345,20 +355,12 @@ class StreamingCommunityEN : MainAPI() {
         VixSrcExtractor().getUrl(
             url = vixsrcUrl,
             referer = "https://vixsrc.to/",
-            subtitleCallback = collectCallback,
-            callback = callback
+            subtitleCallback = subtitleCallback,
+            callback = trackCallback
         )
         
-        val englishSubs = allSubtitles.filter { sub ->
-            val name = sub.name.toLowerCase()
-            val lang = sub.lang?.toLowerCase() ?: ""
-            name.contains("en") || name.contains("eng") || name.contains("english") ||
-            lang.contains("en") || lang.contains("eng") || lang.contains("english")
-        }
-        
-        englishSubs.forEach { sub ->
-            subtitleCallback(sub)
-        }
+        englishTracks.forEach { callback(it) }
+        otherTracks.forEach { callback(it) }
         
         return true
     }
