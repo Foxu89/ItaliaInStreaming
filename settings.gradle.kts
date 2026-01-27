@@ -13,14 +13,14 @@ include(
     "CB01",
     "CorsaroNero", **/
 //    "DaddyLive",
-    "Huhu",
+//    "Huhu",
 //    "OnlineSerieTV",
     "StreamingCommunity",
-    "Stremio",
+//    "Stremio",
 //    "SyncStream.Beta",
-    "SyncStream",
-    "TV",
+//    "SyncStream"
+//    "TV",
 //    "ToonItalia",
-    "Torrentio"
+//    "Torrentio"
 //    "YouTube"
 )
