@@ -22,7 +22,7 @@ class StreamingCommunityPlugin : Plugin() {
         openSettings = { ctx ->
             val activity = ctx as AppCompatActivity
             val frag = StreamingCommunitySettings(this, sharedPref)
-            frag.show(activity.supportFragmentManager, "Settings")
+            frag.show(activity.supportFragmentManager, "StreamingCommunitySettings")
         }
     }
 }
