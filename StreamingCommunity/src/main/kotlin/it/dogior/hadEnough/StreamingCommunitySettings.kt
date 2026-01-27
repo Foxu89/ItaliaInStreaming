@@ -22,7 +22,7 @@ import com.lagradost.cloudstream3.CommonActivity.showToast
 import androidx.core.content.edit
 
 class StreamingCommunitySettings(
-    private val plugin: StreamingCommunityPlugin,  // Cambiato da AltaDefinizionePlugin
+    private val plugin: StreamingCommunityPlugin,
     private val sharedPref: SharedPreferences?,
 ) : BottomSheetDialogFragment() {
     private var currentLang: String = sharedPref?.getString("language", "it") ?: "it"
@@ -81,18 +81,16 @@ class StreamingCommunitySettings(
     ) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Initialize views
         val headerTw: TextView? = view.findViewByName("header_tw")
-        headerTw?.text = getString("header_tw") ?: "StreamingCommunity"
+        headerTw?.text = getString("header_tw") ?: "Streaming Community"
         
         val labelTw: TextView? = view.findViewByName("label")
-        labelTw?.text = getString("label") ?: "Select Language / Seleziona Lingua"
+        labelTw?.text = getString("label") ?: "Language"
 
-        // CAMBIA: da versioni a lingue
         val langDropdown: Spinner? = view.findViewByName("lang_spinner")
         val languages = arrayOf("it", "en")
         val languageNames = arrayOf(
-            getString("it") ?: "Italiano",
+            getString("it") ?: "Italian",
             getString("en") ?: "English"
         )
         
@@ -125,38 +123,20 @@ class StreamingCommunitySettings(
         saveBtn?.setOnClickListener {
             sharedPref?.edit {
                 this.clear()
-                this.putInt("language_position", currentLangPosition)  // Cambiato
-                this.putString("language", currentLang)  // Cambiato
+                this.putInt("language_position", currentLangPosition)
+                this.putString("language", currentLang)
             }
             
-            // Messaggio in entrambe le lingue
-            val languageName = if (currentLang == "it") "Italiano" else "English"
-            val title = if (currentLang == "it") 
-                "Salva e Riavvia" 
-            else 
-                "Save & Restart"
-            
-            val message = if (currentLang == "it")
-                "Lingua impostata su: $languageName\n\nL'app deve riavviarsi per caricare i contenuti nella nuova lingua."
-            else
-                "Language set to: $languageName\n\nApp needs to restart to load content in the new language."
-            
-            val yesText = if (currentLang == "it") "Sì" else "Yes"
-            val noText = if (currentLang == "it") "No" else "No"
-            
+            // MESSAGGIO STANDARD
             AlertDialog.Builder(requireContext())
-                .setTitle(title)
-                .setMessage(message)
-                .setPositiveButton(yesText) { _, _ ->
+                .setTitle("Save & Reload")
+                .setMessage("Changes have been saved. Do you want to restart the app to apply them?")
+                .setPositiveButton("Yes") { _, _ ->
                     dismiss()
                     restartApp()
                 }
-                .setNegativeButton(noText) { _, _ ->
-                    showToast(if (currentLang == "it") 
-                        "Impostazioni salvate. Riavvia manualmente per applicare." 
-                    else 
-                        "Settings saved. Restart manually to apply."
-                    )
+                .setNegativeButton("No") { _, _ ->
+                    showToast("Settings saved. Restart manually to apply.")
                     dismiss()
                 }
                 .show()
