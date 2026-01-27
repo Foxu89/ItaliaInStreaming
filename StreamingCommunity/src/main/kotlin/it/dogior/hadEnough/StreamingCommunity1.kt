@@ -324,7 +324,7 @@ class StreamingCommunityEN : MainAPI() {
         val otherTracks = mutableListOf<ExtractorLink>()
         
         val trackCallback = { link: ExtractorLink ->
-            val linkName = link.name?.toLowerCase() ?: ""
+            val linkName = link.name?.lowercase() ?: ""
             val isEnglish = linkName.contains("en") || 
                            linkName.contains("eng") || 
                            linkName.contains("english")
