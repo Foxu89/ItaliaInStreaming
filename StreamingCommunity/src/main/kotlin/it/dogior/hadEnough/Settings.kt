@@ -1,6 +1,7 @@
 package it.dogior.hadEnough
 
 import android.annotation.SuppressLint
+import android.content.SharedPreferences
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
@@ -23,19 +24,41 @@ import androidx.core.content.edit
 
 class Settings(
     private val plugin: StreamingCommunityPlugin,
+    private val sharedPref: SharedPreferences?,
 ) : BottomSheetDialogFragment() {
-    private val sharedPref = plugin.sharedPref
+    private var currentLang: String = sharedPref?.getString("lang", "it") ?: "it"
+    private var currentLangPosition: Int = sharedPref?.getInt("langPosition", 0) ?: 0
     
-    private var currentLang: String = sharedPref.getString("language", "it") ?: "it"
-    private var currentLangPosition: Int = sharedPref.getInt("language_position", 0)
-    private var currentShowLogo: Boolean = sharedPref.getBoolean("show_logo", false)
+    // 🔧 AGGIUNGI QUESTA VARIABILE
+    private var currentShowLogo: Boolean = sharedPref?.getBoolean("show_logo", false) ?: false
 
+    private fun View.makeTvCompatible() {
+        this.setPadding(
+            this.paddingLeft + 10,
+            this.paddingTop + 10,
+            this.paddingRight + 10,
+            this.paddingBottom + 10
+        )
+        this.background = getDrawable("outline")
+    }
+
+    // Helper function to get a drawable resource by name
     @SuppressLint("DiscouragedApi")
+    @Suppress("SameParameterValue")
+    private fun getDrawable(name: String): Drawable? {
+        val id = plugin.resources?.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        return id?.let { ResourcesCompat.getDrawable(plugin.resources ?: return null, it, null) }
+    }
+
+    // Helper function to get a string resource by name
+    @SuppressLint("DiscouragedApi")
+    @Suppress("SameParameterValue")
     private fun getString(name: String): String? {
         val id = plugin.resources?.getIdentifier(name, "string", BuildConfig.LIBRARY_PACKAGE_NAME)
         return id?.let { plugin.resources?.getString(it) }
     }
 
+    // Generic findView function to find views by name
     @SuppressLint("DiscouragedApi")
     private fun <T : View> View.findViewByName(name: String): T? {
         val id = plugin.resources?.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
@@ -48,6 +71,7 @@ class Settings(
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
+        // Inflate the layout for this fragment
         val layoutId =
             plugin.resources?.getIdentifier("settings", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
         return layoutId?.let {
@@ -63,15 +87,12 @@ class Settings(
     ) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Header
+        // Initialize views
         val headerTw: TextView? = view.findViewByName("header_tw")
         headerTw?.text = getString("header_tw")
-        
-        // Label lingua
         val labelTw: TextView? = view.findViewByName("label")
         labelTw?.text = getString("label")
 
-        // Spinner lingua
         val langsDropdown: Spinner? = view.findViewByName("lang_spinner")
         val langs = arrayOf("it", "en")
         val langsMap = langs.map { it to getString(it) }
@@ -81,27 +102,37 @@ class Settings(
         langsDropdown?.setSelection(currentLangPosition)
 
         langsDropdown?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
                 currentLang = langs[position]
-                currentLangPosition = position
             }
-            override fun onNothingSelected(p0: AdapterView<*>?) {}
+
+            override fun onNothingSelected(p0: AdapterView<*>?) {
+            }
         }
 
-        // Switch logo
+        // 🔧 AGGIUNGI QUESTE 3 RIGHE PER LO SWITCH LOGO
         val logoSwitch: Switch? = view.findViewByName("logo_switch")
         logoSwitch?.isChecked = currentShowLogo
         logoSwitch?.setOnCheckedChangeListener { _, isChecked ->
             currentShowLogo = isChecked
         }
 
-        // Bottone salva
         val saveBtn: ImageButton? = view.findViewByName("save_btn")
+        saveBtn?.makeTvCompatible()
+        saveBtn?.setImageDrawable(getDrawable("save_icon"))
+
         saveBtn?.setOnClickListener {
-            sharedPref.edit {
-                putInt("language_position", currentLangPosition)
-                putString("language", currentLang)
-                putBoolean("show_logo", currentShowLogo)
+            sharedPref?.edit {
+                this.clear()
+                this.putInt("language_position", currentLangPosition)
+                this.putString("language", currentLang)
+                // 🔧 AGGIUNGI QUESTA RIGA PER SALVARE LO SWITCH LOGO
+                this.putBoolean("show_logo", currentShowLogo)
             }
             
             AlertDialog.Builder(requireContext())
