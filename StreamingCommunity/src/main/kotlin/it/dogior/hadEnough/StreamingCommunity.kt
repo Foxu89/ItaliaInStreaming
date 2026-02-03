@@ -31,7 +31,6 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
-import android.content.Context
 
 class StreamingCommunity(override var lang: String = "it") : MainAPI() {
     override var mainUrl = Companion.mainUrl + lang
@@ -51,11 +50,12 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val mainUrl = "https://streamingunity.tv/"
         var name = "StreamingCommunity"
         val TAG = "SCommunity"
-        
-        // Chiave per le preferenze
-        private const val PREFS_NAME = "streamingcommunity_prefs"
-        private const val KEY_SHOW_LOGO = "show_logo"
     }
+
+    // 🔧 Aggiungi questa variabile per le SharedPreferences
+    val sharedPref = android.preference.PreferenceManager.getDefaultSharedPreferences(
+        android.app.AppGlobals.getInitialApplication()
+    )
 
     // Costanti TMDB
     private val tmdbAPI = "https://api.themoviedb.org/3"
@@ -211,17 +211,9 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         }
     }
 
-    // Funzione per leggere le preferenze - APPROCCIO SICURO
-    private fun getShowLogoPreference(context: Context? = null): Boolean {
-        return try {
-            // Prova prima con il context se disponibile
-            val actualContext = context ?: app.getDefaultContext()
-            val prefs = actualContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.getBoolean(KEY_SHOW_LOGO, false) // Default: false = disattivato
-        } catch (e: Exception) {
-            Log.e(TAG, "Error reading logo preference: ${e.message}")
-            false  // Fallback: disattivato
-        }
+    // 🔧 Funzione SEMPLICE per leggere le preferenze (come in AnimeWorld)
+    private fun getShowLogoPreference(): Boolean {
+        return sharedPref.getBoolean("show_logo", false)
     }
 
     override suspend fun load(url: String): LoadResponse {
@@ -241,7 +233,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
         val poster = getPoster(title)
 
-        // Leggi l'impostazione
+        // 🔧 Leggi l'impostazione (come in AnimeWorld)
         val showLogo = getShowLogoPreference()
         val logoUrl = if (showLogo && title.tmdbId != null) {
             val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
