@@ -209,7 +209,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
     // 🔧 AGGIUNGI QUESTA FUNZIONE PER LEGGERE LE IMPOSTAZIONI
     private fun getShowLogoPreference(): Boolean {
         return try {
-            val prefs = app.activity?.getSharedPreferences("streamingcommunity_prefs", 0)
+            val prefs = app.context?.getSharedPreferences("streamingcommunity_prefs", 0)
             prefs?.getBoolean("show_logo", false) ?: false
         } catch (e: Exception) {
             false  // Default: disattivato
