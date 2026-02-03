@@ -31,6 +31,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
+import android.content.Context
 
 class StreamingCommunity(override var lang: String = "it") : MainAPI() {
     override var mainUrl = Companion.mainUrl + lang
@@ -50,9 +51,13 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val mainUrl = "https://streamingunity.tv/"
         var name = "StreamingCommunity"
         val TAG = "SCommunity"
+        
+        // Chiave per le preferenze
+        private const val PREFS_NAME = "streamingcommunity_prefs"
+        private const val KEY_SHOW_LOGO = "show_logo"
     }
 
-    // 🔧 AGGIUNGI QUESTE COSTANTI TMDB
+    // Costanti TMDB
     private val tmdbAPI = "https://api.themoviedb.org/3"
     private val tmdbApiKey = "1865f43a0549ca50d341dd9ab8b29f49"
 
@@ -87,7 +92,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         "$mainUrl/browse/genre?g=Comedy" to "Comedy",
         "$mainUrl/browse/genre?g=Crime" to "Crime",
         "$mainUrl/browse/genre?g=Documentary" to "Documentary",
-        "$mainUrl/browse/genre?g=Drama" to "Drama",
+        "$mainUrl/browse/genre?g=Drama" to "Dramma",
         "$mainUrl/browse/genre?g=Family" to "Family",
         "$mainUrl/browse/genre?g=Science Fiction" to "Science Fiction",
         "$mainUrl/browse/genre?g=Fantasy" to "Fantasy",
@@ -206,13 +211,16 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         }
     }
 
-    // 🔧 AGGIUNGI QUESTA FUNZIONE PER LEGGERE LE IMPOSTAZIONI
-    private fun getShowLogoPreference(): Boolean {
+    // Funzione per leggere le preferenze - APPROCCIO SICURO
+    private fun getShowLogoPreference(context: Context? = null): Boolean {
         return try {
-            val prefs = app.context?.getSharedPreferences("streamingcommunity_prefs", 0)
-            prefs?.getBoolean("show_logo", false) ?: false
+            // Prova prima con il context se disponibile
+            val actualContext = context ?: app.getDefaultContext()
+            val prefs = actualContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.getBoolean(KEY_SHOW_LOGO, false) // Default: false = disattivato
         } catch (e: Exception) {
-            false  // Default: disattivato
+            Log.e(TAG, "Error reading logo preference: ${e.message}")
+            false  // Fallback: disattivato
         }
     }
 
@@ -233,7 +241,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
         val poster = getPoster(title)
 
-        // 🔧 MODIFICA QUESTA PARTE: CONTROLLA LE IMPOSTAZIONI
+        // Leggi l'impostazione
         val showLogo = getShowLogoPreference()
         val logoUrl = if (showLogo && title.tmdbId != null) {
             val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
@@ -256,7 +264,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                // 🔧 AGGIUNGI IL LOGO SOLO SE L'UTENTE LO VUOLE
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
                 }
@@ -292,7 +299,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                // 🔧 AGGIUNGI IL LOGO SOLO SE L'UTENTE LO VUOLE
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
                 }
@@ -318,7 +324,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         }
     }
 
-    // 🔧 AGGIUNGI QUESTA FUNZIONE PER OTTENERE I LOGO DA TMDB
     private suspend fun fetchTmdbLogoUrl(
         type: TvType,
         tmdbId: Int?,
@@ -390,6 +395,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
             
             if (logos.length() > 0) logoUrlAt(0) else null
         } catch (e: Exception) {
+            Log.e(TAG, "Error fetching TMDB logo: ${e.message}")
             null
         }
     }
