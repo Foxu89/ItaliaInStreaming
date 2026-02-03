@@ -52,12 +52,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val TAG = "SCommunity"
     }
 
-    // 🔧 Aggiungi questa variabile per le SharedPreferences
-    val sharedPref = android.preference.PreferenceManager.getDefaultSharedPreferences(
-        android.app.AppGlobals.getInitialApplication()
-    )
-
-    // Costanti TMDB
+    // 🔧 AGGIUNGI QUESTE COSTANTI TMDB
     private val tmdbAPI = "https://api.themoviedb.org/3"
     private val tmdbApiKey = "1865f43a0549ca50d341dd9ab8b29f49"
 
@@ -108,7 +103,9 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val response = app.get("$mainUrl/archive")
         val cookies = response.cookies
         headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
+//        Log.d("Inertia", response.headers.toString())
         val page = response.document
+//        Log.d("Inertia", page.toString())
         val inertiaPageObject = page.select("#app").attr("data-page")
         inertiaVersion = inertiaPageObject
             .substringAfter("\"version\":\"")
@@ -135,6 +132,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         return list
     }
 
+    //Get the Homepage
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         var url = mainUrl.substringBeforeLast("/") + "/api" +
                 request.data.substringAfter(mainUrl)
@@ -142,9 +140,18 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
 
         val section = request.data.substringAfterLast("/")
         when (section) {
-            "trending" -> {}
-            "latest" -> {}
-            "top10" -> {}
+            "trending" -> {
+//                Log.d(TAG, "TRENDING")
+            }
+
+            "latest" -> {
+//                Log.d(TAG, "LATEST")
+            }
+
+            "top10" -> {
+//                Log.d(TAG, "TOP10")
+            }
+
             else -> {
                 val genere = url.substringAfterLast('=')
                 url = url.substringBeforeLast('?')
@@ -174,6 +181,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         )
     }
 
+
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/search"
         val params = mapOf("q" to query)
@@ -186,6 +194,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
 
         return searchResponseBuilder(result.props.titles!!)
     }
+
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
         val searchUrl = "${mainUrl.replace("/it", "")}/api/search"
@@ -211,111 +220,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         }
     }
 
-    // 🔧 Funzione SEMPLICE per leggere le preferenze (come in AnimeWorld)
-    private fun getShowLogoPreference(): Boolean {
-        return sharedPref.getBoolean("show_logo", false)
-    }
-
-    override suspend fun load(url: String): LoadResponse {
-        val actualUrl = getActualUrl(url)
-        if (headers["Cookie"].isNullOrEmpty()) {
-            setupHeaders()
-        }
-        val response = app.get(actualUrl, headers = headers)
-        val responseBody = response.body.string()
-
-        val domain = mainUrl.substringAfter("://").substringBeforeLast("/")
-        val props = parseJson<InertiaResponse>(responseBody).props
-        val title = props.title!!
-        val genres = title.genres.map { it.name.capitalize() }
-        val year = title.releaseDate?.substringBefore('-')?.toIntOrNull()
-        val related = props.sliders?.getOrNull(0)
-        val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
-        val poster = getPoster(title)
-
-        // 🔧 Leggi l'impostazione (come in AnimeWorld)
-        val showLogo = getShowLogoPreference()
-        val logoUrl = if (showLogo && title.tmdbId != null) {
-            val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
-            fetchTmdbLogoUrl(
-                type = type,
-                tmdbId = title.tmdbId,
-                appLangCode = lang
-            )
-        } else null
-
-        if (title.type == "tv") {
-            val episodes: List<Episode> = getEpisodes(props)
-
-            val tvShow = newTvSeriesLoadResponse(
-                title.name,
-                actualUrl,
-                TvType.TvSeries,
-                episodes
-            ) {
-                this.posterUrl = poster
-                title.getBackgroundImageId()
-                    .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                if (logoUrl != null) {
-                    this.logoUrl = logoUrl
-                }
-                this.tags = genres
-                this.episodes = episodes
-                this.year = year
-                this.plot = title.plot
-                title.age?.let { this.contentRating = "$it+" }
-                this.recommendations = related?.titles?.let { searchResponseBuilder(it) }
-                title.imdbId?.let { this.addImdbId(it) }
-                title.tmdbId?.let { this.addTMDbId(it.toString()) }
-                this.addActors(title.mainActors?.map { it.name })
-                this.addScore(title.score)
-                if (trailers != null) {
-                    if (trailers.isNotEmpty()) {
-                        addTrailer(trailers)
-                    }
-                }
-            }
-            return tvShow
-        } else {
-            val data = LoadData(
-                "$mainUrl/iframe/${title.id}&canPlayFHD=1",
-                "movie",
-                title.tmdbId
-            )
-            val movie = newMovieLoadResponse(
-                title.name,
-                actualUrl,
-                TvType.Movie,
-                dataUrl = data.toJson()
-            ) {
-                this.posterUrl = poster
-                title.getBackgroundImageId()
-                    .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                if (logoUrl != null) {
-                    this.logoUrl = logoUrl
-                }
-                this.tags = genres
-                this.year = year
-                this.plot = title.plot
-                title.age?.let { this.contentRating = "$it+" }
-                this.recommendations = related?.titles?.let { searchResponseBuilder(it) }
-                this.addActors(title.mainActors?.map { it.name })
-                this.addScore(title.score)
-
-                title.imdbId?.let { this.addImdbId(it) }
-                title.tmdbId?.let { this.addTMDbId(it.toString()) }
-
-                title.runtime?.let { this.duration = it }
-                if (trailers != null) {
-                    if (trailers.isNotEmpty()) {
-                        addTrailer(trailers)
-                    }
-                }
-            }
-            return movie
-        }
-    }
-
+    // 🔧 AGGIUNGI QUESTA FUNZIONE PER OTTENERE I LOGO DA TMDB
     private suspend fun fetchTmdbLogoUrl(
         type: TvType,
         tmdbId: Int?,
@@ -387,8 +292,110 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
             
             if (logos.length() > 0) logoUrlAt(0) else null
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching TMDB logo: ${e.message}")
             null
+        }
+    }
+
+    // This function gets called when you enter the page/show
+    override suspend fun load(url: String): LoadResponse {
+        val actualUrl = getActualUrl(url)
+        if (headers["Cookie"].isNullOrEmpty()) {
+            setupHeaders()
+        }
+        val response = app.get(actualUrl, headers = headers)
+        val responseBody = response.body.string()
+
+        val domain = mainUrl.substringAfter("://").substringBeforeLast("/")
+        val props = parseJson<InertiaResponse>(responseBody).props
+        val title = props.title!!
+        val genres = title.genres.map { it.name.capitalize() }
+        val year = title.releaseDate?.substringBefore('-')?.toIntOrNull()
+        val related = props.sliders?.getOrNull(0)
+        val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
+        val poster = getPoster(title)
+
+        // 🔧 MODIFICA QUESTA PARTE (AGGIUNGI IL LOGO)
+        val logoUrl = if (title.tmdbId != null) {
+            val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
+            fetchTmdbLogoUrl(
+                type = type,
+                tmdbId = title.tmdbId,
+                appLangCode = lang
+            )
+        } else null
+
+        if (title.type == "tv") {
+            val episodes: List<Episode> = getEpisodes(props)
+
+            val tvShow = newTvSeriesLoadResponse(
+                title.name,
+                actualUrl,
+                TvType.TvSeries,
+                episodes
+            ) {
+                this.posterUrl = poster
+                title.getBackgroundImageId()
+                    .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
+                // 🔧 AGGIUNGI QUESTA RIGA PER IL LOGO
+                if (logoUrl != null) {
+                    this.logoUrl = logoUrl
+                }
+                this.tags = genres
+                this.episodes = episodes
+                this.year = year
+                this.plot = title.plot
+                title.age?.let { this.contentRating = "$it+" }
+                this.recommendations = related?.titles?.let { searchResponseBuilder(it) }
+                title.imdbId?.let { this.addImdbId(it) }
+                title.tmdbId?.let { this.addTMDbId(it.toString()) }
+                this.addActors(title.mainActors?.map { it.name })
+                this.addScore(title.score)
+                if (trailers != null) {
+                    if (trailers.isNotEmpty()) {
+                        addTrailer(trailers)
+                    }
+                }
+
+            }
+            return tvShow
+        } else {
+            val data = LoadData(
+                "$mainUrl/iframe/${title.id}&canPlayFHD=1",
+                "movie",
+                title.tmdbId
+            )
+            val movie = newMovieLoadResponse(
+                title.name,
+                actualUrl,
+                TvType.Movie,
+                dataUrl = data.toJson()
+            ) {
+                this.posterUrl = poster
+                title.getBackgroundImageId()
+                    .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
+                // 🔧 AGGIUNGI QUESTA RIGA PER IL LOGO
+                if (logoUrl != null) {
+                    this.logoUrl = logoUrl
+                }
+                this.tags = genres
+                this.year = year
+                this.plot = title.plot
+                title.age?.let { this.contentRating = "$it+" }
+                this.recommendations = related?.titles?.let { searchResponseBuilder(it) }
+                this.addActors(title.mainActors?.map { it.name })
+                this.addScore(title.score)
+
+                title.imdbId?.let { this.addImdbId(it) }
+                title.tmdbId?.let { this.addTMDbId(it.toString()) }
+
+                title.runtime?.let { this.duration = it }
+                if (trailers != null) {
+                    if (trailers.isNotEmpty()) {
+                        addTrailer(trailers)
+                    }
+                }
+            }
+            return movie
         }
     }
 
@@ -422,6 +429,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 responseEpisodes.addAll(obj.props.loadedSeason?.episodes!!)
             }
             responseEpisodes.forEach { ep ->
+
                 val loadData = LoadData(
                     "$mainUrl/iframe/${title.id}?episode_id=${ep.id}&canPlayFHD=1",
                     type = "tv",
