@@ -12,8 +12,11 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AlertDialog
+import android.content.Intent
 import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
@@ -26,6 +29,9 @@ class Settings(
 ) : BottomSheetDialogFragment() {
     private var currentLang: String = sharedPref?.getString("lang", "it") ?: "it"
     private var currentLangPosition: Int = sharedPref?.getInt("langPosition", 0) ?: 0
+    
+    // AGGIUNGI QUESTA VARIABILE
+    private var currentShowLogo: Boolean = sharedPref?.getBoolean("show_logo", false) ?: false
 
     private fun View.makeTvCompatible() {
         this.setPadding(
@@ -110,6 +116,16 @@ class Settings(
             }
         }
 
+        // AGGIUNGI QUESTO CODICE PER LO SWITCH (SOLO 3 RIGHE)
+        val logoSwitch: Switch? = view.findViewByName("logo_switch")
+        
+        // 1. Carica lo stato salvato (default: false = disattivato)
+        logoSwitch?.isChecked = currentShowLogo
+        
+        // 2. Aggiorna la variabile quando l'utente cambia lo switch
+        logoSwitch?.setOnCheckedChangeListener { _, isChecked ->
+            currentShowLogo = isChecked
+        }
 
         val saveBtn: ImageButton? = view.findViewByName("save_btn")
         saveBtn?.makeTvCompatible()
@@ -120,8 +136,9 @@ class Settings(
                 this.clear()
                 this.putInt("language_position", currentLangPosition)
                 this.putString("language", currentLang)
+                // AGGIUNGI QUESTA RIGA PER SALVARE LO SWITCH
+                this.putBoolean("show_logo", currentShowLogo)
             }
-            
             
             AlertDialog.Builder(requireContext())
                 .setTitle("Save & Reload")
