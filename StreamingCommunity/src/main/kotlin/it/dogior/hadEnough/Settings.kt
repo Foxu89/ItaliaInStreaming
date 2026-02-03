@@ -1,7 +1,6 @@
 package it.dogior.hadEnough
 
 import android.annotation.SuppressLint
-import android.content.SharedPreferences
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
@@ -24,32 +23,14 @@ import androidx.core.content.edit
 
 class Settings(
     private val plugin: StreamingCommunityPlugin,
-    private val sharedPref: SharedPreferences?,
 ) : BottomSheetDialogFragment() {
-    private var currentLang: String = sharedPref?.getString("language", "it") ?: "it"
-    private var currentLangPosition: Int = sharedPref?.getInt("language_position", 0) ?: 0
+    private val sharedPref = plugin.sharedPref
     
-    private var currentShowLogo: Boolean = sharedPref?.getBoolean("show_logo", false) ?: false
-
-    private fun View.makeTvCompatible() {
-        this.setPadding(
-            this.paddingLeft + 10,
-            this.paddingTop + 10,
-            this.paddingRight + 10,
-            this.paddingBottom + 10
-        )
-        this.background = getDrawable("outline")
-    }
+    private var currentLang: String = sharedPref.getString("language", "it") ?: "it"
+    private var currentLangPosition: Int = sharedPref.getInt("language_position", 0)
+    private var currentShowLogo: Boolean = sharedPref.getBoolean("show_logo", false)
 
     @SuppressLint("DiscouragedApi")
-    @Suppress("SameParameterValue")
-    private fun getDrawable(name: String): Drawable? {
-        val id = plugin.resources?.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
-        return id?.let { ResourcesCompat.getDrawable(plugin.resources ?: return null, it, null) }
-    }
-
-    @SuppressLint("DiscouragedApi")
-    @Suppress("SameParameterValue")
     private fun getString(name: String): String? {
         val id = plugin.resources?.getIdentifier(name, "string", BuildConfig.LIBRARY_PACKAGE_NAME)
         return id?.let { plugin.resources?.getString(it) }
@@ -82,11 +63,15 @@ class Settings(
     ) {
         super.onViewCreated(view, savedInstanceState)
 
+        // Header
         val headerTw: TextView? = view.findViewByName("header_tw")
         headerTw?.text = getString("header_tw")
+        
+        // Label lingua
         val labelTw: TextView? = view.findViewByName("label")
         labelTw?.text = getString("label")
 
+        // Spinner lingua
         val langsDropdown: Spinner? = view.findViewByName("lang_spinner")
         val langs = arrayOf("it", "en")
         val langsMap = langs.map { it to getString(it) }
@@ -96,33 +81,24 @@ class Settings(
         langsDropdown?.setSelection(currentLangPosition)
 
         langsDropdown?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: AdapterView<*>?,
-                view: View?,
-                position: Int,
-                id: Long
-            ) {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 currentLang = langs[position]
                 currentLangPosition = position
             }
-
-            override fun onNothingSelected(p0: AdapterView<*>?) {
-            }
+            override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
-        // Switch per i logo
+        // Switch logo
         val logoSwitch: Switch? = view.findViewByName("logo_switch")
         logoSwitch?.isChecked = currentShowLogo
         logoSwitch?.setOnCheckedChangeListener { _, isChecked ->
             currentShowLogo = isChecked
         }
 
+        // Bottone salva
         val saveBtn: ImageButton? = view.findViewByName("save_btn")
-        saveBtn?.makeTvCompatible()
-        saveBtn?.setImageDrawable(getDrawable("save_icon"))
-
         saveBtn?.setOnClickListener {
-            sharedPref?.edit {
+            sharedPref.edit {
                 putInt("language_position", currentLangPosition)
                 putString("language", currentLang)
                 putBoolean("show_logo", currentShowLogo)
