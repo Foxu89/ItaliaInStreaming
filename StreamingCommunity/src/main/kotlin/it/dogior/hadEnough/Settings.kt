@@ -31,7 +31,7 @@ class Settings(
     private var currentLangPosition: Int = sharedPref?.getInt("langPosition", 0) ?: 0
     
     // ✅ AGGIUNGI LO SWITCH LOGO
-    private var currentShowLogo: Boolean = sharedPref?.getBoolean("show_logo", true) ?: true // Default: TRUE (attivo)
+    private var currentShowLogo: Boolean = sharedPref?.getBoolean("show_logo", false) ?: false // Default: TRUE (attivo)
 
     private fun View.makeTvCompatible() {
         this.setPadding(
