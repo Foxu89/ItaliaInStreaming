@@ -32,10 +32,9 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
 
-// 🔧 MODIFICA 1: Aggiungi showLogo al costruttore
 class StreamingCommunity(
     override var lang: String = "it",
-    private val showLogo: Boolean = true  // Default: logo attivi
+    private val showLogo: Boolean = true  // logo attivi
 ) : MainAPI() {
     override var mainUrl = Companion.mainUrl + lang
     override var name = Companion.name
@@ -56,9 +55,8 @@ class StreamingCommunity(
         val TAG = "SCommunity"
     }
 
-    // 🔧 COSTANTI TMDB
     private val tmdbAPI = "https://api.themoviedb.org/3"
-    private val tmdbApiKey = "1865f43a0549ca50d341dd9ab8b29f49"
+    private val tmdbApiKey = "1865f43a0549ca50d341dd9ab8b29f49" //temporanea
 
     private val sectionNamesListIT = mainPageOf(
         "$mainUrl/browse/top10" to "Top 10 di oggi",
@@ -132,7 +130,6 @@ class StreamingCommunity(
         return list
     }
 
-    //Get the Homepage
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         var url = mainUrl.substringBeforeLast("/") + "/api" +
                 request.data.substringAfter(mainUrl)
@@ -209,7 +206,6 @@ class StreamingCommunity(
         }
     }
 
-    // 🔧 FUNZIONE PER OTTENERE LOGO DA TMDB
     private suspend fun fetchTmdbLogoUrl(
         type: TvType,
         tmdbId: Int?,
@@ -285,7 +281,6 @@ class StreamingCommunity(
         }
     }
 
-    // This function gets called when you enter the page/show
     override suspend fun load(url: String): LoadResponse {
         val actualUrl = getActualUrl(url)
         if (headers["Cookie"].isNullOrEmpty()) {
@@ -303,7 +298,6 @@ class StreamingCommunity(
         val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
         val poster = getPoster(title)
 
-        // 🔧 MODIFICA 2: Usa showLogo dal costruttore invece di leggere le preferenze
         val logoUrl = if (showLogo && title.tmdbId != null) {
             val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
             fetchTmdbLogoUrl(
@@ -325,7 +319,7 @@ class StreamingCommunity(
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                // 🔧 AGGIUNGI IL LOGO SE DISPONIBILE
+
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
                 }
@@ -362,7 +356,7 @@ class StreamingCommunity(
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                // 🔧 AGGIUNGI IL LOGO SE DISPONIBILE
+
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
                 }
