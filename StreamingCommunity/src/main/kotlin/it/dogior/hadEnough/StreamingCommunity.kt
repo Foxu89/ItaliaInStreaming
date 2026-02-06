@@ -52,7 +52,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val TAG = "SCommunity"
     }
 
-    // 🔧 AGGIUNGI QUESTE COSTANTI TMDB
+    // 🔧 COSTANTI TMDB (COPIATE DA MOVIEBOX)
     private val tmdbAPI = "https://api.themoviedb.org/3"
     private val tmdbApiKey = "1865f43a0549ca50d341dd9ab8b29f49"
 
@@ -60,7 +60,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         "$mainUrl/browse/top10" to "Top 10 di oggi",
         "$mainUrl/browse/trending" to "I Titoli Del Momento",
         "$mainUrl/browse/latest" to "Aggiunti di Recente",
-        "$mainUrl/browse/upcoming" to "In arrivo...",
         "$mainUrl/browse/genre?g=Animation" to "Animazione",
         "$mainUrl/browse/genre?g=Adventure" to "Avventura",
         "$mainUrl/browse/genre?g=Action" to "Azione",
@@ -80,14 +79,13 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         "$mainUrl/browse/top10" to "Top 10 of Today",
         "$mainUrl/browse/trending" to "Trending Titles",
         "$mainUrl/browse/latest" to "Recently Added",
-        "$mainUrl/browse/upcoming" to "Upcoming...",
         "$mainUrl/browse/genre?g=Animation" to "Animation",
         "$mainUrl/browse/genre?g=Adventure" to "Adventure",
         "$mainUrl/browse/genre?g=Action" to "Action",
         "$mainUrl/browse/genre?g=Comedy" to "Comedy",
         "$mainUrl/browse/genre?g=Crime" to "Crime",
         "$mainUrl/browse/genre?g=Documentary" to "Documentary",
-        "$mainUrl/browse/genre?g=Drama" to "Dramma",
+        "$mainUrl/browse/genre?g=Drama" to "Drama",
         "$mainUrl/browse/genre?g=Family" to "Family",
         "$mainUrl/browse/genre?g=Science Fiction" to "Science Fiction",
         "$mainUrl/browse/genre?g=Fantasy" to "Fantasy",
@@ -103,9 +101,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val response = app.get("$mainUrl/archive")
         val cookies = response.cookies
         headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
-//        Log.d("Inertia", response.headers.toString())
         val page = response.document
-//        Log.d("Inertia", page.toString())
         val inertiaPageObject = page.select("#app").attr("data-page")
         inertiaVersion = inertiaPageObject
             .substringAfter("\"version\":\"")
@@ -140,18 +136,9 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
 
         val section = request.data.substringAfterLast("/")
         when (section) {
-            "trending" -> {
-//                Log.d(TAG, "TRENDING")
-            }
-
-            "latest" -> {
-//                Log.d(TAG, "LATEST")
-            }
-
-            "top10" -> {
-//                Log.d(TAG, "TOP10")
-            }
-
+            "trending" -> {}
+            "latest" -> {}
+            "top10" -> {}
             else -> {
                 val genere = url.substringAfterLast('=')
                 url = url.substringBeforeLast('?')
@@ -181,7 +168,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         )
     }
 
-
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/search"
         val params = mapOf("q" to query)
@@ -194,7 +180,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
 
         return searchResponseBuilder(result.props.titles!!)
     }
-
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
         val searchUrl = "${mainUrl.replace("/it", "")}/api/search"
@@ -220,7 +205,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         }
     }
 
-    // 🔧 AGGIUNGI QUESTA FUNZIONE PER OTTENERE I LOGO DA TMDB
+    // 🔧 FUNZIONE PER OTTENERE LOGO DA TMDB (COPIATA E ADATTATA DA MOVIEBOX)
     private suspend fun fetchTmdbLogoUrl(
         type: TvType,
         tmdbId: Int?,
@@ -314,8 +299,11 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
         val poster = getPoster(title)
 
-        // 🔧 MODIFICA QUESTA PARTE (AGGIUNGI IL LOGO)
-        val logoUrl = if (title.tmdbId != null) {
+        // 🔧 QUI AGGIUNGIAMO IL LOGO (CON CONTROLLO DELLA PREFERENZA)
+        val showTmdbLogos = androidx.preference.PreferenceManager.getDefaultSharedPreferences(appContext)
+            .getBoolean("show_tmdb_logos_key", true)  // Default: true (attivo)
+        
+        val logoUrl = if (showTmdbLogos && title.tmdbId != null) {
             val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
             fetchTmdbLogoUrl(
                 type = type,
@@ -336,7 +324,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                // 🔧 AGGIUNGI QUESTA RIGA PER IL LOGO
+                // 🔧 AGGIUNGIAMO IL LOGO SOLO SE ESISTE E SE LA PREFERENZA È ATTIVA
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
                 }
@@ -373,7 +361,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                // 🔧 AGGIUNGI QUESTA RIGA PER IL LOGO
+                // 🔧 AGGIUNGIAMO IL LOGO SOLO SE ESISTE E SE LA PREFERENZA È ATTIVA
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
                 }
