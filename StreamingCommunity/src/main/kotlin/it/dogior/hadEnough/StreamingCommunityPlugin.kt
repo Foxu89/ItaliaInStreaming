@@ -11,12 +11,10 @@ class StreamingCommunityPlugin : Plugin() {
     private val sharedPref = activity?.getSharedPreferences("StreamingCommunity", Context.MODE_PRIVATE)
     
     override fun load(context: Context) {
-        // ✅ LEGGI ENTRAMBE LE PREFERENZE
         val lang = sharedPref?.getString("lang", "it") ?: "it"
-        val showLogo = sharedPref?.getBoolean("show_logo", false) ?: false  // 🔧 Default: true
+        val showLogo = sharedPref?.getBoolean("show_logo", false) ?: false  
         
-        // ✅ PASSA ENTRAMBE AL COSTRUTTORE
-        registerMainAPI(StreamingCommunity(lang, showLogo))  // 🔧 AGGIUNGI showLogo
+        registerMainAPI(StreamingCommunity(lang, showLogo)) 
         registerExtractorAPI(VixCloudExtractor())
         registerExtractorAPI(VixSrcExtractor())
 
