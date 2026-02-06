@@ -13,7 +13,7 @@ class StreamingCommunityPlugin : Plugin() {
     override fun load(context: Context) {
         // ✅ LEGGI ENTRAMBE LE PREFERENZE
         val lang = sharedPref?.getString("lang", "it") ?: "it"
-        val showLogo = sharedPref?.getBoolean("show_logo", true) ?: true  // 🔧 Default: true
+        val showLogo = sharedPref?.getBoolean("show_logo", false) ?: false  // 🔧 Default: true
         
         // ✅ PASSA ENTRAMBE AL COSTRUTTORE
         registerMainAPI(StreamingCommunity(lang, showLogo))  // 🔧 AGGIUNGI showLogo
