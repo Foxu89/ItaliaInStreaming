@@ -31,10 +31,12 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
-import androidx.preference.PreferenceManager
-import android.content.Context
 
-class StreamingCommunity(override var lang: String = "it") : MainAPI() {
+// 🔧 MODIFICA 1: Aggiungi showLogo al costruttore
+class StreamingCommunity(
+    override var lang: String = "it",
+    private val showLogo: Boolean = true  // Default: logo attivi
+) : MainAPI() {
     override var mainUrl = Companion.mainUrl + lang
     override var name = Companion.name
     override var supportedTypes =
@@ -53,18 +55,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         var name = "StreamingCommunity"
         val TAG = "SCommunity"
     }
-
-    // 🔧 AGGIUNGI QUESTA FUNZIONE PER OTTENERE IL CONTESTO
-    private val context: android.content.Context?
-        get() = try {
-            // Prova a ottenere il contesto dall'app Cloudstream
-            val activityThread = Class.forName("android.app.ActivityThread")
-            val currentActivityThread = activityThread.getMethod("currentActivityThread").invoke(null)
-            val app = activityThread.getMethod("getApplication").invoke(currentActivityThread)
-            app as android.content.Context
-        } catch (e: Exception) {
-            null
-        }
 
     // 🔧 COSTANTI TMDB
     private val tmdbAPI = "https://api.themoviedb.org/3"
@@ -313,19 +303,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
         val poster = getPoster(title)
 
-        // 🔧🔧🔧 LEGGI LA PREFERENZA DALLE IMPOSTAZIONI (COME NELL'ESEMPIO CHE MI HAI DATO)
-        val showLogo = try {
-            val ctx = context
-            if (ctx != null) {
-                val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
-                prefs.getBoolean("show_logo", true) // true = default attivo
-            } else {
-                true // Se non trova contesto, mostra i logo
-            }
-        } catch (e: Exception) {
-            true // In caso di errore, mostra i logo
-        }
-
+        // 🔧 MODIFICA 2: Usa showLogo dal costruttore invece di leggere le preferenze
         val logoUrl = if (showLogo && title.tmdbId != null) {
             val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
             fetchTmdbLogoUrl(
