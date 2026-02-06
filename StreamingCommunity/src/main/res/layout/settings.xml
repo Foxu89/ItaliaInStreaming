@@ -69,7 +69,6 @@
         android:layout_height="8dp"
         android:background="@android:color/transparent" />
 
-    <!-- NUOVA OPZIONE: Titoli belli -->
     <LinearLayout
         android:id="@+id/logo_option_layout"
         android:layout_width="match_parent"
@@ -83,7 +82,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Mostra titoli belli (logo)"
+            android:text="Mostra titoli Ufficiali"
             android:textSize="16sp" />
 
         <Switch
@@ -93,12 +92,11 @@
             android:checked="false" />
     </LinearLayout>
 
-    <!-- Descrizione opzione -->
     <TextView
         android:id="@+id/logo_description"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Mostra il logo grafico ufficiale dei film/serie invece del testo semplice"
+        android:text="Mostra il titolo logo ufficiale dei film/serie invece del titolo semplice"
         android:textSize="12sp"
         android:textColor="?android:attr/textColorSecondary"
         android:paddingStart="16dp"
