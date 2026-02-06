@@ -26,11 +26,12 @@ class Settings(
     private val plugin: StreamingCommunityPlugin,
     private val sharedPref: SharedPreferences?,
 ) : BottomSheetDialogFragment() {
+    // ✅ USA LE CHIAVI ORIGINALI PER LA LINGUA (come nel vecchio Settings)
     private var currentLang: String = sharedPref?.getString("lang", "it") ?: "it"
     private var currentLangPosition: Int = sharedPref?.getInt("langPosition", 0) ?: 0
     
-    // 🔧 AGGIUNGI QUESTA VARIABILE
-    private var currentShowLogo: Boolean = sharedPref?.getBoolean("show_logo", false) ?: false
+    // ✅ AGGIUNGI LO SWITCH LOGO
+    private var currentShowLogo: Boolean = sharedPref?.getBoolean("show_logo", true) ?: true // Default: TRUE (attivo)
 
     private fun View.makeTvCompatible() {
         this.setPadding(
@@ -42,7 +43,6 @@ class Settings(
         this.background = getDrawable("outline")
     }
 
-    // Helper function to get a drawable resource by name
     @SuppressLint("DiscouragedApi")
     @Suppress("SameParameterValue")
     private fun getDrawable(name: String): Drawable? {
@@ -50,7 +50,6 @@ class Settings(
         return id?.let { ResourcesCompat.getDrawable(plugin.resources ?: return null, it, null) }
     }
 
-    // Helper function to get a string resource by name
     @SuppressLint("DiscouragedApi")
     @Suppress("SameParameterValue")
     private fun getString(name: String): String? {
@@ -58,7 +57,6 @@ class Settings(
         return id?.let { plugin.resources?.getString(it) }
     }
 
-    // Generic findView function to find views by name
     @SuppressLint("DiscouragedApi")
     private fun <T : View> View.findViewByName(name: String): T? {
         val id = plugin.resources?.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
@@ -71,7 +69,6 @@ class Settings(
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Inflate the layout for this fragment
         val layoutId =
             plugin.resources?.getIdentifier("settings", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
         return layoutId?.let {
@@ -93,6 +90,7 @@ class Settings(
         val labelTw: TextView? = view.findViewByName("label")
         labelTw?.text = getString("label")
 
+        // ✅ MANTIENI IL CAMBIO LINGUA COME NEL VECCHIO SETTINGS
         val langsDropdown: Spinner? = view.findViewByName("lang_spinner")
         val langs = arrayOf("it", "en")
         val langsMap = langs.map { it to getString(it) }
@@ -109,13 +107,13 @@ class Settings(
                 id: Long
             ) {
                 currentLang = langs[position]
+                currentLangPosition = position
             }
 
-            override fun onNothingSelected(p0: AdapterView<*>?) {
-            }
+            override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
-        // 🔧 AGGIUNGI QUESTE 3 RIGHE PER LO SWITCH LOGO
+        // ✅ AGGIUNGI LO SWITCH LOGO
         val logoSwitch: Switch? = view.findViewByName("logo_switch")
         logoSwitch?.isChecked = currentShowLogo
         logoSwitch?.setOnCheckedChangeListener { _, isChecked ->
@@ -129,9 +127,10 @@ class Settings(
         saveBtn?.setOnClickListener {
             sharedPref?.edit {
                 this.clear()
-                this.putInt("language_position", currentLangPosition)
-                this.putString("language", currentLang)
-                // 🔧 AGGIUNGI QUESTA RIGA PER SALVARE LO SWITCH LOGO
+                // ✅ USA LE CHIAVI ORIGINALI PER LA LINGUA
+                this.putInt("langPosition", currentLangPosition)
+                this.putString("lang", currentLang)
+                // ✅ AGGIUNGI LA PREFERENZA DEL LOGO
                 this.putBoolean("show_logo", currentShowLogo)
             }
             
