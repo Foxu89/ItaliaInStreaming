@@ -31,6 +31,8 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
+import androidx.preference.PreferenceManager
+import android.content.Context
 
 class StreamingCommunity(override var lang: String = "it") : MainAPI() {
     override var mainUrl = Companion.mainUrl + lang
