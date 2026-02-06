@@ -42,7 +42,7 @@
         android:layout_height="16dp"
         android:background="@android:color/transparent" />
 
-    <!-- Lingua - ESISTENTE -->
+    <!-- Lingua  -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
