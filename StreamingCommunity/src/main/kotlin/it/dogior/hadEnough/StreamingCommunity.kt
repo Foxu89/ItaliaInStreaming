@@ -52,7 +52,19 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val TAG = "SCommunity"
     }
 
-    // 🔧 COSTANTI TMDB (COPIATE DA MOVIEBOX)
+    // 🔧 AGGIUNGI QUESTA FUNZIONE PER OTTENERE IL CONTESTO
+    private val context: android.content.Context?
+        get() = try {
+            // Prova a ottenere il contesto dall'app Cloudstream
+            val activityThread = Class.forName("android.app.ActivityThread")
+            val currentActivityThread = activityThread.getMethod("currentActivityThread").invoke(null)
+            val app = activityThread.getMethod("getApplication").invoke(currentActivityThread)
+            app as android.content.Context
+        } catch (e: Exception) {
+            null
+        }
+
+    // 🔧 COSTANTI TMDB
     private val tmdbAPI = "https://api.themoviedb.org/3"
     private val tmdbApiKey = "1865f43a0549ca50d341dd9ab8b29f49"
 
@@ -205,7 +217,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         }
     }
 
-    // 🔧 FUNZIONE PER OTTENERE LOGO DA TMDB (COPIATA E ADATTATA DA MOVIEBOX)
+    // 🔧 FUNZIONE PER OTTENERE LOGO DA TMDB
     private suspend fun fetchTmdbLogoUrl(
         type: TvType,
         tmdbId: Int?,
@@ -299,11 +311,20 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
         val poster = getPoster(title)
 
-        // 🔧 QUI AGGIUNGIAMO IL LOGO (CON CONTROLLO DELLA PREFERENZA)
-        val showTmdbLogos = androidx.preference.PreferenceManager.getDefaultSharedPreferences(appContext)
-            .getBoolean("show_tmdb_logos_key", true)  // Default: true (attivo)
-        
-        val logoUrl = if (showTmdbLogos && title.tmdbId != null) {
+        // 🔧🔧🔧 LEGGI LA PREFERENZA DALLE IMPOSTAZIONI (COME NELL'ESEMPIO CHE MI HAI DATO)
+        val showLogo = try {
+            val ctx = context
+            if (ctx != null) {
+                val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(ctx)
+                prefs.getBoolean("show_logo", true) // true = default attivo
+            } else {
+                true // Se non trova contesto, mostra i logo
+            }
+        } catch (e: Exception) {
+            true // In caso di errore, mostra i logo
+        }
+
+        val logoUrl = if (showLogo && title.tmdbId != null) {
             val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
             fetchTmdbLogoUrl(
                 type = type,
@@ -324,7 +345,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                // 🔧 AGGIUNGIAMO IL LOGO SOLO SE ESISTE E SE LA PREFERENZA È ATTIVA
+                // 🔧 AGGIUNGI IL LOGO SE DISPONIBILE
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
                 }
@@ -361,7 +382,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
-                // 🔧 AGGIUNGIAMO IL LOGO SOLO SE ESISTE E SE LA PREFERENZA È ATTIVA
+                // 🔧 AGGIUNGI IL LOGO SE DISPONIBILE
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
                 }
