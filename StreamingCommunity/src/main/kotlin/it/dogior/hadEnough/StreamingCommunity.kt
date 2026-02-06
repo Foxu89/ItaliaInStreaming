@@ -19,7 +19,6 @@ import com.lagradost.cloudstream3.newSearchResponseList
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
-
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
@@ -31,9 +30,12 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import org.json.JSONObject
 
-
-class StreamingCommunity(override var lang: String = "it") : MainAPI() {
+class StreamingCommunity(
+    override var lang: String = "it",
+    private val showLogo: Boolean = true  // logo attivi
+) : MainAPI() {
     override var mainUrl = Companion.mainUrl + lang
     override var name = Companion.name
     override var supportedTypes =
@@ -52,6 +54,9 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         var name = "StreamingCommunity"
         val TAG = "SCommunity"
     }
+
+    private val tmdbAPI = "https://api.themoviedb.org/3"
+    private val tmdbApiKey = "1865f43a0549ca50d341dd9ab8b29f49" //temporanea
 
     private val sectionNamesListIT = mainPageOf(
         "$mainUrl/browse/top10" to "Top 10 di oggi",
@@ -98,9 +103,7 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val response = app.get("$mainUrl/archive")
         val cookies = response.cookies
         headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
-//        Log.d("Inertia", response.headers.toString())
         val page = response.document
-//        Log.d("Inertia", page.toString())
         val inertiaPageObject = page.select("#app").attr("data-page")
         inertiaVersion = inertiaPageObject
             .substringAfter("\"version\":\"")
@@ -127,7 +130,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         return list
     }
 
-    //Get the Homepage
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         var url = mainUrl.substringBeforeLast("/") + "/api" +
                 request.data.substringAfter(mainUrl)
@@ -135,18 +137,9 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
 
         val section = request.data.substringAfterLast("/")
         when (section) {
-            "trending" -> {
-//                Log.d(TAG, "TRENDING")
-            }
-
-            "latest" -> {
-//                Log.d(TAG, "LATEST")
-            }
-
-            "top10" -> {
-//                Log.d(TAG, "TOP10")
-            }
-
+            "trending" -> {}
+            "latest" -> {}
+            "top10" -> {}
             else -> {
                 val genere = url.substringAfterLast('=')
                 url = url.substringBeforeLast('?')
@@ -176,7 +169,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         )
     }
 
-
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/search"
         val params = mapOf("q" to query)
@@ -189,7 +181,6 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
 
         return searchResponseBuilder(result.props.titles!!)
     }
-
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
         val searchUrl = "${mainUrl.replace("/it", "")}/api/search"
@@ -215,7 +206,81 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         }
     }
 
-    // This function gets called when you enter the page/show
+    private suspend fun fetchTmdbLogoUrl(
+        type: TvType,
+        tmdbId: Int?,
+        appLangCode: String?
+    ): String? {
+        if (tmdbId == null) return null
+        
+        return try {
+            val appLang = appLangCode?.substringBefore("-")?.lowercase()
+            val url = if (type == TvType.Movie) {
+                "$tmdbAPI/movie/$tmdbId/images?api_key=$tmdbApiKey"
+            } else {
+                "$tmdbAPI/tv/$tmdbId/images?api_key=$tmdbApiKey"
+            }
+            
+            val response = app.get(url)
+            if (!response.isSuccessful) return null
+            
+            val jsonText = response.body?.string() ?: return null
+            val json = JSONObject(jsonText)
+            val logos = json.optJSONArray("logos") ?: return null
+            if (logos.length() == 0) return null
+            
+            fun logoUrlAt(i: Int): String {
+                val logo = logos.getJSONObject(i)
+                val filePath = logo.optString("file_path", "")
+                return "https://image.tmdb.org/t/p/w500$filePath"
+            }
+            
+            fun isSvg(i: Int): Boolean {
+                val logo = logos.getJSONObject(i)
+                val filePath = logo.optString("file_path", "")
+                return filePath.endsWith(".svg", ignoreCase = true)
+            }
+            
+            if (!appLang.isNullOrBlank()) {
+                var svgFallback: String? = null
+                for (i in 0 until logos.length()) {
+                    val logo = logos.getJSONObject(i)
+                    if (logo.optString("iso_639_1") == appLang) {
+                        if (isSvg(i)) {
+                            if (svgFallback == null) svgFallback = logoUrlAt(i)
+                        } else {
+                            return logoUrlAt(i)
+                        }
+                    }
+                }
+                if (svgFallback != null) return svgFallback
+            }
+            
+            var enSvgFallback: String? = null
+            for (i in 0 until logos.length()) {
+                val logo = logos.getJSONObject(i)
+                if (logo.optString("iso_639_1") == "en") {
+                    if (isSvg(i)) {
+                        if (enSvgFallback == null) enSvgFallback = logoUrlAt(i)
+                    } else {
+                        return logoUrlAt(i)
+                    }
+                }
+            }
+            if (enSvgFallback != null) return enSvgFallback
+            
+            for (i in 0 until logos.length()) {
+                if (!isSvg(i)) {
+                    return logoUrlAt(i)
+                }
+            }
+            
+            if (logos.length() > 0) logoUrlAt(0) else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     override suspend fun load(url: String): LoadResponse {
         val actualUrl = getActualUrl(url)
         if (headers["Cookie"].isNullOrEmpty()) {
@@ -233,6 +298,15 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
         val trailers = title.trailers?.mapNotNull { it.getYoutubeUrl() }
         val poster = getPoster(title)
 
+        val logoUrl = if (showLogo && title.tmdbId != null) {
+            val type = if (title.type == "tv") TvType.TvSeries else TvType.Movie
+            fetchTmdbLogoUrl(
+                type = type,
+                tmdbId = title.tmdbId,
+                appLangCode = lang
+            )
+        } else null
+
         if (title.type == "tv") {
             val episodes: List<Episode> = getEpisodes(props)
 
@@ -245,6 +319,10 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
+
+                if (logoUrl != null) {
+                    this.logoUrl = logoUrl
+                }
                 this.tags = genres
                 this.episodes = episodes
                 this.year = year
@@ -278,6 +356,10 @@ class StreamingCommunity(override var lang: String = "it") : MainAPI() {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
                     .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
+
+                if (logoUrl != null) {
+                    this.logoUrl = logoUrl
+                }
                 this.tags = genres
                 this.year = year
                 this.plot = title.plot
