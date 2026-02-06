@@ -9,12 +9,16 @@ import com.lagradost.cloudstream3.plugins.Plugin
 @CloudstreamPlugin
 class StreamingCommunityPlugin : Plugin() {
     private val sharedPref = activity?.getSharedPreferences("StreamingCommunity", Context.MODE_PRIVATE)
+    
     override fun load(context: Context) {
+        // ✅ LEGGI ENTRAMBE LE PREFERENZE
         val lang = sharedPref?.getString("lang", "it") ?: "it"
-        registerMainAPI(StreamingCommunity(lang))
+        val showLogo = sharedPref?.getBoolean("show_logo", true) ?: true  // 🔧 Default: true
+        
+        // ✅ PASSA ENTRAMBE AL COSTRUTTORE
+        registerMainAPI(StreamingCommunity(lang, showLogo))  // 🔧 AGGIUNGI showLogo
         registerExtractorAPI(VixCloudExtractor())
         registerExtractorAPI(VixSrcExtractor())
-
 
         openSettings = { ctx ->
             val activity = ctx as AppCompatActivity
