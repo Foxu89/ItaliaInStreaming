@@ -6,7 +6,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
+import android.widget.ImageButton  // CAMBIA DA Button
 import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -35,7 +35,8 @@ class AnimeUnitySettings(
         savedInstanceState: Bundle?
     ): View? {
         val layoutId = plugin.resources?.getIdentifier("settings", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-        return layoutId?.let { inflater.inflate(it, container, false) }
+        // MODIFICA QUI - usa getLayout() come nell'esempio
+        return layoutId?.let { inflater.inflate(plugin.resources?.getLayout(it), container, false) }
     }
 
     @SuppressLint("UseSwitchCompatOrMaterialCode")
@@ -46,8 +47,9 @@ class AnimeUnitySettings(
         val headerTw: TextView? = view.findViewByName("header_tw")
         headerTw?.text = "Impostazioni AnimeUnity"
         
-        val labelTw: TextView? = view.findViewByName("label")
-        labelTw?.text = "Personalizza il plugin AnimeUnity"
+        // Rimuovi queste righe - non esiste un TextView con id "label" nel tuo XML
+        // val labelTw: TextView? = view.findViewByName("label")
+        // labelTw?.text = "Personalizza il plugin AnimeUnity"
 
         // Switch logo
         val logoSwitch: Switch? = view.findViewByName("logo_switch")
@@ -56,8 +58,11 @@ class AnimeUnitySettings(
             currentShowLogo = isChecked
         }
 
-        // Save button
-        val saveBtn: Button? = view.findViewByName("save_btn") as? Button
+        // Save button - CAMBIA DA Button A ImageButton
+        val saveBtn: ImageButton? = view.findViewByName("save_btn") as? ImageButton
+        
+        // Aggiungi un'icona al pulsante
+        saveBtn?.setImageResource(android.R.drawable.ic_menu_save)
 
         saveBtn?.setOnClickListener {
             sharedPref?.edit {
