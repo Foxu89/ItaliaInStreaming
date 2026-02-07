@@ -23,7 +23,6 @@ sealed class BooleanOrString {
     }
 }
 
-
 data class RequestData(
     val title: String = "",
     val type: BooleanOrString = BooleanOrString.AsBoolean(false),
@@ -62,7 +61,6 @@ data class RequestData(
     }
 }
 
-
 data class ApiResponse(
     @JsonProperty("records") val titles: List<Anime>?,
     @JsonProperty("tot") val total: Int
@@ -70,7 +68,6 @@ data class ApiResponse(
 
 data class Anime(
     @JsonProperty("id") val id: Int,
-//    @JsonProperty("user_id") val userId: Int,
     @JsonProperty("title") val title: String?,
     @JsonProperty("imageurl") val imageUrl: String,
     @JsonProperty("plot") val plot: String,
@@ -78,18 +75,13 @@ data class Anime(
     @JsonProperty("episodes_count") val episodesCount: Int,
     @JsonProperty("episodes_length") val episodesLength: Int,
     @JsonProperty("status") val status: String,
-//    @JsonProperty("imageurl_cover") val imageUrlCover: String?,
     @JsonProperty("type") val type: String,
     @JsonProperty("slug") val slug: String,
     @JsonProperty("title_eng") val titleEng: String?,
-//    @JsonProperty("day") val day: String?,
     @JsonProperty("score") val score: String?,
-//    @JsonProperty("studio") val studio: String,
     @JsonProperty("dub") val dub: Int,
-//    @JsonProperty("always_home") val alwaysHome: Int,
     @JsonProperty("cover") val cover: String?,
     @JsonProperty("anilist_id") val anilistId: Int?,
-//    @JsonProperty("season") val season: String,
     @JsonProperty("title_it") val titleIt: String?,
     @JsonProperty("mal_id") val malId: Int?,
     @JsonProperty("episodes") val episodes: List<Episode>?,
@@ -112,7 +104,6 @@ data class Episode(
 data class AnimeInfo(
     @JsonProperty("id") val id: Int,
     @JsonProperty("name") val name: String?,
-//    @JsonProperty("slug") val slug: String,
     @JsonProperty("episodes_count") val episodesCount: Int,
     @JsonProperty("current_episode") val currentEpisode: Int,
     @JsonProperty("episodes") val episodes: List<Episode>
@@ -133,12 +124,19 @@ data class AnilistData(
 
 data class AnilistMedia(
     @JsonProperty("id") val id: Int,
-    @JsonProperty("coverImage") val coverImage: AnilistCoverImage?,
-    @JsonProperty("duration") val duration: Int?
+    @JsonProperty("idMal") val idMal: Int?,
+    @JsonProperty("title") val title: AnilistTitle?,
+    @JsonProperty("coverImage") val coverImage: AnilistCoverImage?
 )
 
 data class AnilistCoverImage(
     @JsonProperty("medium") val medium: String?,
     @JsonProperty("large") val large: String?,
     @JsonProperty("extraLarge") val extraLarge: String?
+)
+
+// 🔧 AGGIUNTA: Classe per il titolo AniList (mancava!)
+data class AnilistTitle(
+    @JsonProperty("romaji") val romaji: String? = null,
+    @JsonProperty("english") val english: String? = null
 )
