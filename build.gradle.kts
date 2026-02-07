@@ -9,7 +9,7 @@ buildscript {
         google()
         mavenCentral()
         maven("https://jitpack.io") {
-            // 🔧 AGGIUNGI AUTENTICAZIONE PER JITPACK
+            // 🔧 AGGIUNGI AUTENTICAZIONE
             credentials {
                 username = project.findProperty("gpr.user") as? String ?: System.getenv("GITHUB_ACTOR")
                 password = project.findProperty("gpr.key") as? String ?: System.getenv("GITHUB_TOKEN")
@@ -19,8 +19,7 @@ buildscript {
 
     dependencies {
         classpath("com.android.tools.build:gradle:8.13.2")
-        // 🔧 USA UNA VERSIONE SPECIFICA DEL PLUGIN
-        classpath("com.github.recloudstream:gradle:60a0b578a6")  // Commit hash stabile
+        classpath("com.github.recloudstream:gradle:master-SNAPSHOT") // ✅ TORNA A SNAPSHOT
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
     }
 }
@@ -95,8 +94,6 @@ subprojects {
         implementation("me.xdrop:fuzzywuzzy:1.4.0")
         implementation("com.google.code.gson:gson:2.13.2")
         implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
-        // 🔧 AGGIUNGI JADB CON VERSIONE STABILE
-        implementation("com.github.vidstige:jadb:v1.3.1")
     }
 }
 
