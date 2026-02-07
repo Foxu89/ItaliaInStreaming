@@ -147,7 +147,7 @@ class AnimeUnity(
         val response = app.post("https://graphql.anilist.co", data = body)
         val anilistObj = parseJson<AnilistResponse>(response.text)
 
-        return anilistObj.data.media.coverImage?.let { coverImage ->
+        return anilistObj.data.Media.coverImage?.let { coverImage ->
             coverImage.large ?: coverImage.medium!!
         } ?: throw IllegalStateException("No valid image found")
     }
@@ -246,11 +246,27 @@ class AnimeUnity(
     // 🔧 FUNZIONE PER OTTENERE TMDB ID DA ANILIST ID
     private suspend fun getTmdbIdFromAnilist(anilistId: Int): Int? {
         return try {
+            // Prima otteniamo il titolo e MAL ID da AniList
+            val anilistTitle = getAnimeTitleFromAnilist(anilistId)
+            val malId = getMalIdFromAnilist(anilistId)
+            
+            // Cerca su TMDB usando il titolo inglese
+            if (anilistTitle != null) {
+                searchTmdbAnime(anilistTitle, malId)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // 🔧 FUNZIONE HELPER: Ottieni titolo da AniList
+    private suspend fun getAnimeTitleFromAnilist(anilistId: Int): String? {
+        return try {
             val query = """
             query (${'$'}id: Int) {
                 Media(id: ${'$'}id, type: ANIME) {
-                    id
-                    idMal
                     title {
                         romaji
                         english
@@ -266,13 +282,32 @@ class AnimeUnity(
             val response = app.post("https://graphql.anilist.co", data = body)
             val anilistObj = parseJson<AnilistResponse>(response.text)
             
-            // Prova a cercare su TMDB usando il titolo
-            val title = anilistObj.data.media.title.english ?: anilistObj.data.media.title.romaji
-            if (title != null) {
-                searchTmdbAnime(title, anilistObj.data.media.idMal)
-            } else {
-                null
+            // Preferisci titolo inglese, poi romaji
+            anilistObj.data.Media.title?.english ?: anilistObj.data.Media.title?.romaji
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // 🔧 FUNZIONE HELPER: Ottieni MAL ID da AniList
+    private suspend fun getMalIdFromAnilist(anilistId: Int): Int? {
+        return try {
+            val query = """
+            query (${'$'}id: Int) {
+                Media(id: ${'$'}id, type: ANIME) {
+                    idMal
+                }
             }
+            """.trimIndent()
+
+            val body = mapOf(
+                "query" to query,
+                "variables" to """{"id":$anilistId}"""
+            )
+            val response = app.post("https://graphql.anilist.co", data = body)
+            val anilistObj = parseJson<AnilistResponse>(response.text)
+            
+            anilistObj.data.Media.idMal
         } catch (e: Exception) {
             null
         }
@@ -280,8 +315,17 @@ class AnimeUnity(
 
     private suspend fun searchTmdbAnime(title: String, malId: Int?): Int? {
         return try {
-            val searchTitle = title.replace(":", "").replace("'", "")
-            val url = "$tmdbAPI/search/tv?query=${java.net.URLEncoder.encode(searchTitle, "UTF-8")}&language=en-US"
+            // Pulisci il titolo per la ricerca
+            val searchTitle = title
+                .replace(":", "")
+                .replace("'", "")
+                .replace("\"", "")
+                .trim()
+            
+            if (searchTitle.isBlank()) return null
+            
+            val encodedTitle = java.net.URLEncoder.encode(searchTitle, "UTF-8")
+            val url = "$tmdbAPI/search/tv?query=$encodedTitle&language=en-US&page=1"
             
             val response = app.get(url, headers = tmdbHeaders)
             if (!response.isSuccessful) return null
