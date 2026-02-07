@@ -50,12 +50,15 @@
     </LinearLayout>
 
     <!-- Save Button -->
-    <ImageButton
+    <Button
         android:id="@+id/save_btn"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:src="@drawable/save_icon"
-        android:background="?android:attr/selectableItemBackgroundBorderless" />
+        android:text="SALVA"
+        android:textColor="#FFFFFF"
+        android:background="#2196F3"
+        android:paddingHorizontal="32dp"
+        android:paddingVertical="12dp" />
 
 </LinearLayout>
