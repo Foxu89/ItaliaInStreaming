@@ -2,17 +2,15 @@ package it.dogior.hadEnough
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
-import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageButton
+import android.widget.Button
 import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import android.content.Intent
-import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import androidx.core.content.edit
@@ -23,12 +21,6 @@ class AnimeUnitySettings(
 ) : BottomSheetDialogFragment() {
     
     private var currentShowLogo: Boolean = sharedPref?.getBoolean("show_logo", false) ?: false
-
-    @SuppressLint("DiscouragedApi")
-    private fun getDrawable(name: String): Drawable? {
-        val id = plugin.resources?.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
-        return id?.let { ResourcesCompat.getDrawable(plugin.resources ?: return null, it, null) }
-    }
 
     @SuppressLint("DiscouragedApi")
     private fun <T : View> View.findViewByName(name: String): T? {
@@ -65,8 +57,7 @@ class AnimeUnitySettings(
         }
 
         // Save button
-        val saveBtn: ImageButton? = view.findViewByName("save_btn")
-        saveBtn?.setImageDrawable(getDrawable("save_icon"))
+        val saveBtn: Button? = view.findViewByName("save_btn") as? Button
 
         saveBtn?.setOnClickListener {
             sharedPref?.edit {
