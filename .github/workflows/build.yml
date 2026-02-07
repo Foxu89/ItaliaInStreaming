@@ -10,25 +10,29 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # 🔧 DICHIARA LE PERMISSION PER IL TOKEN
+    permissions:
+      contents: write
+      packages: read
+      
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # 🔧 AGGIORNA A v4
+        uses: actions/checkout@v4
         with:
           path: "src"
-          token: ${{ secrets.GITHUB_TOKEN }}  # 🔧 AGGIUNGI TOKEN
 
       - name: Checkout builds
-        uses: actions/checkout@v4  # 🔧 AGGIORNA A v4
+        uses: actions/checkout@v4
         with:
           ref: "builds"
           path: "builds"
-          token: ${{ secrets.GITHUB_TOKEN }}  # 🔧 AGGIUNGI TOKEN
       
       - name: Clean old builds
         run: rm $GITHUB_WORKSPACE/builds/*.cs3 || true
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4  # 🔧 AGGIORNA A v4
+        uses: actions/setup-java@v4
         with:
           distribution: adopt
           java-version: 17
@@ -39,25 +43,24 @@ jobs:
       - name: Access Secrets
         env:
           TMDB_API: ${{ secrets.TMDB_API }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
         run: |
           cd $GITHUB_WORKSPACE/src
           echo TMDB_API=$TMDB_API >> secrets.properties
-          echo GITHUB_TOKEN=$GITHUB_TOKEN >> secrets.properties
-          echo GITHUB_ACTOR=$GITHUB_ACTOR >> secrets.properties
 
       - name: Build Plugins
+        # 🔧 IL SEGRETO: PASSARE LE CREDENZIALI
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Token AUTOMATICO di GitHub Actions
+          GITHUB_ACTOR: ${{ github.actor }}          # Il tuo username GitHub
         run: |
           cd $GITHUB_WORKSPACE/src
           chmod +x gradlew
-          # 🔧 PASSA LE CREDENZIALI A GRADLE
+          
+          # 🔧 PASSA LE CREDENZIALI COME PROPRIETÀ DI GRADLE
           ./gradlew make makePluginsJson \
             -Pgpr.user="$GITHUB_ACTOR" \
             -Pgpr.key="$GITHUB_TOKEN"
+            
           cp **/build/*.cs3 $GITHUB_WORKSPACE/builds
           cp build/plugins.json $GITHUB_WORKSPACE/builds
 
