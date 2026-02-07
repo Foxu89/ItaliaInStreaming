@@ -147,7 +147,7 @@ class AnimeUnity(
         val response = app.post("https://graphql.anilist.co", data = body)
         val anilistObj = parseJson<AnilistResponse>(response.text)
 
-        return anilistObj.data.Media.coverImage?.let { coverImage ->
+        return anilistObj.data.media.coverImage?.let { coverImage ->
             coverImage.large ?: coverImage.medium!!
         } ?: throw IllegalStateException("No valid image found")
     }
@@ -283,7 +283,7 @@ class AnimeUnity(
             val anilistObj = parseJson<AnilistResponse>(response.text)
             
             // Preferisci titolo inglese, poi romaji
-            anilistObj.data.Media.title?.english ?: anilistObj.data.Media.title?.romaji
+            anilistObj.data.media.title?.english ?: anilistObj.data.media.title?.romaji
         } catch (e: Exception) {
             null
         }
@@ -307,7 +307,7 @@ class AnimeUnity(
             val response = app.post("https://graphql.anilist.co", data = body)
             val anilistObj = parseJson<AnilistResponse>(response.text)
             
-            anilistObj.data.Media.idMal
+            anilistObj.data.media.idMal
         } catch (e: Exception) {
             null
         }
