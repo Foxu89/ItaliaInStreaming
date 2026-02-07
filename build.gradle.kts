@@ -13,7 +13,8 @@ buildscript {
 
     dependencies {
         classpath("com.android.tools.build:gradle:8.13.2")
-        classpath("com.github.recloudstream:gradle:master-SNAPSHOT")
+        // 🔧 CAMBIA QUESTA RIGA:
+        classpath("com.github.recloudstream:gradle:cce1b8d84d")  // COMMIT HASH SPECIFICO
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.0")
     }
 }
@@ -82,6 +83,8 @@ subprojects {
         implementation("me.xdrop:fuzzywuzzy:1.4.0")
         implementation("com.google.code.gson:gson:2.13.2")
         implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+        // 🔧 AGGIUNGI QUESTA (come lui):
+        implementation("com.github.vidstige:jadb:v1.2.1")
     }
 }
 
