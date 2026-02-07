@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AnimeUnity</string>
+    <string name="header_tw">Impostazioni AnimeUnity</string>
+    <string name="label">Personalizza il plugin AnimeUnity</string>
+    <string name="logo_switch">Mostra logo TMDB</string>
+</resources>
