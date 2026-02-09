@@ -17,25 +17,51 @@ class AltaDefinizioneV1 : MainAPI() {
     override val hasMainPage = true
 
     override val mainPage = mainPageOf(
-        "$mainUrl/ultimi-film/" to "Ultimi Film",
-        "$mainUrl/cinema/" to "Al Cinema",
-        "$mainUrl/piu-visti/" to "Più Visti",
+        "$mainUrl/" to "Home",
+        "$mainUrl/cinema/" to "Cinema",
+    
         "$mainUrl/serie-tv/" to "Serie TV",
-        "$mainUrl/animazione/" to "Animazione",
-        "$mainUrl/avventura/" to "Avventura",
+        "$mainUrl/miniserie-tv/" to "Miniserie TV", 
+        "$mainUrl/tv-show/" to "Programmi TV",
+        "$mainUrl/sitcom/" to "Serie Comiche",
+        "$mainUrl/soap-opera/" to "Telenovelas",
+    
         "$mainUrl/azione/" to "Azione",
-        "$mainUrl/biografico/" to "Biografico",
+        "$mainUrl/avventura/" to "Avventura",
+        "$mainUrl/animazione/" to "Animazione",
         "$mainUrl/commedia/" to "Commedia",
-        "$mainUrl/crime/" to "Crime",
-        "$mainUrl/documentario/" to "Documentario",
         "$mainUrl/drammatico/" to "Drammatico",
+        "$mainUrl/thriller/" to "Thriller",
+        "$mainUrl/horror/" to "Horror",
         "$mainUrl/fantascienza/" to "Fantascienza",
         "$mainUrl/fantasy/" to "Fantasy",
-        "$mainUrl/horror/" to "Horror",
+    
+        "$mainUrl/crime/" to "Crime",
+        "$mainUrl/giallo/" to "Giallo",
+        "$mainUrl/poliziesco/" to "Poliziesco",
+        "$mainUrl/spionaggio/" to "Spionaggio",
+    
         "$mainUrl/guerra/" to "Guerra",
+        "$mainUrl/western/" to "Western",
+    
         "$mainUrl/romantico/" to "Romantico",
-        "$mainUrl/thriller/" to "Thriller",
-        "$mainUrl/western/" to "Western"
+        "$mainUrl/sentimentale/" to "Sentimentale",
+        "$mainUrl/famiglia/" to "Famiglia",
+        "$mainUrl/musical/" to "Musical",
+        "$mainUrl/musicale/" to "Musicale",
+    
+        "$mainUrl/storico-streaming/" to "Storico",
+        "$mainUrl/biografico/" to "Biografico",
+        "$mainUrl/fantastico/" to "Fantastico",
+    
+        "$mainUrl/documentario/" to "Documentario",
+    
+        "$mainUrl/reality/" to "Reality Show",
+        "$mainUrl/talk-show/" to "Talk Show",
+        "$mainUrl/talent-show/" to "Talent Show",
+        "$mainUrl/intrattenimento/" to "Intrattenimento",
+    
+        "$mainUrl/sportivo/" to "Sportivo"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
