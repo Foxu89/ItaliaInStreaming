@@ -21,10 +21,10 @@ object CloudflareBypasser {
     // 🌐 Proxy pubblici che bypassano Cloudflare
     private val cfProxyServices = listOf(
         "https://api.allorigins.win/raw?url=",      // Molto stabile
-        "https://corsproxy.io/?",                   # Fast
-        "https://proxy.cors.sh/",                   # Professionale
-        "https://thingproxy.freeboard.io/fetch/",   # Backup
-        "https://cors-anywhere.herokuapp.com/"      # Ultima spiaggia
+        "https://corsproxy.io/?",                   // Fast
+        "https://proxy.cors.sh/",                   // Professionale
+        "https://thingproxy.freeboard.io/fetch/",   // Backup
+        "https://cors-anywhere.herokuapp.com/"      // Ultima spiaggia
     )
     
     // 📱 User Agents realistici (2025)
@@ -63,7 +63,7 @@ object CloudflareBypasser {
      * @param maxRetries Numero massimo di tentativi (default: 3)
      * @return Document HTML della pagina
      */
-    suspend fun getDocument(url: String, maxRetries: Int = 3): org.jsoup.nodes.Document {
+    suspend fun getProtected(url: String, maxRetries: Int = 3): org.jsoup.nodes.Document {
         var lastError: Exception? = null
         val domain = extractDomain(url)
         
@@ -312,29 +312,6 @@ object CloudflareBypasser {
         // Controlla indicatori di blocco
         return blockedIndicators.any { indicator ->
             html.contains(indicator) || text.contains(indicator)
-        }
-    }
-    
-    /**
-     * 🎯 METODO SEMPLICE PER IL TUO PLUGIN
-     * Sostituisci tutte le tue `app.get(url).document` con:
-     * `CloudflareBypasser.getProtected(url)`
-     */
-    suspend fun getProtected(url: String): org.jsoup.nodes.Document {
-        return try {
-            // Primo tentativo veloce
-            app.get(url, timeout = 30).document
-        } catch (e: Exception) {
-            // Se fallisce, usa il bypasser
-            if (e.message?.contains("cloudflare", ignoreCase = true) == true ||
-                e.message?.contains("too many", ignoreCase = true) == true ||
-                e.message?.contains("access denied", ignoreCase = true) == true) {
-                
-                println("🛡️ Attivazione CloudflareBypasser per: $url")
-                safeGet(url)
-            } else {
-                throw e
-            }
         }
     }
 }
