@@ -157,7 +157,6 @@ class AltaDefinizioneV1 : MainAPI() {
                       doc.select(".accordion-item").isNotEmpty()
         
         return if (isSeries) {
-            // Carica serie TV
             val episodes = getEpisodes(doc)
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 this.posterUrl = fixUrlNull(poster)
@@ -168,7 +167,6 @@ class AltaDefinizioneV1 : MainAPI() {
                 addScore(rating)
             }
         } else {
-            // Carica film
             val mirrors = extractMovieMirrors(doc)
             newMovieLoadResponse(title, url, TvType.Movie, mirrors) {
                 this.posterUrl = fixUrlNull(poster)
@@ -185,7 +183,6 @@ class AltaDefinizioneV1 : MainAPI() {
     private suspend fun extractMovieMirrors(doc: Document): List<String> {
         val mirrors = mutableListOf<String>()
         
-        // 1. Cerca i link nella sezione DOWNLOAD (FUNZIONA!)
         doc.select(".down-episode a[href]").forEach {
             val link = it.attr("href")
             if (link.isNotBlank() && !link.contains("javascript:")) {
@@ -193,7 +190,6 @@ class AltaDefinizioneV1 : MainAPI() {
             }
         }
         
-        // 2. Cerca nel modal download
         doc.select("#modal-download a[href]").forEach {
             val link = it.attr("href")
             if (link.isNotBlank() && !link.contains("javascript:")) {
@@ -201,7 +197,6 @@ class AltaDefinizioneV1 : MainAPI() {
             }
         }
         
-        // 3. Se non trova nulla, prova con la vecchia struttura
         if (mirrors.isEmpty()) {
             doc.select("span[data-link], button[data-link], a[data-link]").forEach {
                 val link = it.attr("data-link").ifBlank { it.attr("href") }
@@ -224,19 +219,16 @@ class AltaDefinizioneV1 : MainAPI() {
         val seriesPoster = doc.selectFirst("img.layer-image.lazy, img[data-src]")?.attr("data-src") ?: 
                        doc.selectFirst("img.layer-image.lazy, img[data-src]")?.attr("src")
         
-        // METODO PRIMARIO: Estrai dalla sezione DOWNLOAD (FUNZIONA!)
         doc.select(".accordion-item").forEachIndexed { seasonIndex, seasonItem ->
-            val seasonNum = seasonIndex + 1  // Le stagioni sono in ordine negli accordion
+            val seasonNum = seasonIndex + 1
             
             val episodeItems = seasonItem.select(".down-episode")
             episodeItems.forEachIndexed { episodeIndex, episodeItem ->
                 val episodeNum = episodeIndex + 1
                 
-                // Ottieni il testo dell'episodio (es: "3x1")
                 val episodeText = episodeItem.select("span b").text()
                 val cleanEpisodeText = if (episodeText.contains("x")) episodeText else "$seasonNum}x${episodeNum}"
                 
-                // Estrai i link
                 val links = episodeItem.select("a[href]").mapNotNull { 
                     val link = it.attr("href")
                     if (link.isNotBlank() && !link.contains("javascript:")) link else null
@@ -256,7 +248,6 @@ class AltaDefinizioneV1 : MainAPI() {
             }
         }
         
-        // METODO SECONDARIO: Se non trova nulla, prova con la struttura dropdown
         if (episodes.isEmpty()) {
             val seasonItems = doc.select("div.dropdown.seasons .dropdown-menu span[data-season]")
             
@@ -273,7 +264,6 @@ class AltaDefinizioneV1 : MainAPI() {
                         val episodeNum = parts.getOrNull(1)?.toIntOrNull()
                         val episodeName = episodeItem.text().trim()
                         
-                        // Cerca i mirror nella sezione dropdown
                         val mirrorContainer = doc.selectFirst("div.dropdown.mirrors[data-season=\"$seasonNum\"][data-episode=\"$episodeData\"]")
                         
                         val mirrors = mirrorContainer?.select("span[data-link]")?.mapNotNull { 
@@ -281,7 +271,6 @@ class AltaDefinizioneV1 : MainAPI() {
                             if (link.isNotBlank()) link else null
                         }?.distinct() ?: emptyList()
                         
-                        // Se non trova mirror nei dropdown, cerca nella sezione download
                         val finalLinks = if (mirrors.isEmpty()) {
                             val episodePattern = "${seasonNum}x${episodeNum}"
                             doc.select(".down-episode").find { container ->
@@ -321,17 +310,33 @@ class AltaDefinizioneV1 : MainAPI() {
     ): Boolean {
         val links = parseJson<List<String>>(data)
         
+        if (links.isEmpty()) {
+            return false
+        }
+        
+        var found = false
+        
         links.forEach { link ->
             when {
                 link.contains("dropload.tv") || link.contains("dropload.pro") -> {
-                    DroploadExtractor().getUrl(link, null, subtitleCallback, callback)
+                    DroploadExtractor().getUrl(link, mainUrl, subtitleCallback, callback)
+                    found = true
                 }
                 link.contains("supervideo.tv") || link.contains("supervideo.cc") || link.contains("mysupervideo") -> {
-                    MySupervideoExtractor().getUrl(link, null, subtitleCallback, callback)
+                    MySupervideoExtractor().getUrl(link, mainUrl, subtitleCallback, callback)
+                    found = true
+                }
+                else -> {
+                    try {
+                        loadExtractor(link, mainUrl, subtitleCallback, callback)
+                        found = true
+                    } catch (e: Exception) {
+                        // Ignora errori per estrattori sconosciuti
+                    }
                 }
             }
         }
         
-        return true
+        return found
     }
 }
