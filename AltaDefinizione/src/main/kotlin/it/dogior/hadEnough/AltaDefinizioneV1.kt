@@ -19,13 +19,11 @@ class AltaDefinizioneV1 : MainAPI() {
     override val mainPage = mainPageOf(
         "$mainUrl/" to "Home",
         "$mainUrl/cinema/" to "Cinema",
-    
         "$mainUrl/serie-tv/" to "Serie TV",
         "$mainUrl/miniserie-tv/" to "Miniserie TV", 
         "$mainUrl/tv-show/" to "Programmi TV",
         "$mainUrl/sitcom/" to "Serie Comiche",
         "$mainUrl/soap-opera/" to "Telenovelas",
-    
         "$mainUrl/azione/" to "Azione",
         "$mainUrl/avventura/" to "Avventura",
         "$mainUrl/animazione/" to "Animazione",
@@ -35,32 +33,25 @@ class AltaDefinizioneV1 : MainAPI() {
         "$mainUrl/horror/" to "Horror",
         "$mainUrl/fantascienza/" to "Fantascienza",
         "$mainUrl/fantasy/" to "Fantasy",
-    
         "$mainUrl/crime/" to "Crime",
         "$mainUrl/giallo/" to "Giallo",
         "$mainUrl/poliziesco/" to "Poliziesco",
         "$mainUrl/spionaggio/" to "Spionaggio",
-    
         "$mainUrl/guerra/" to "Guerra",
         "$mainUrl/western/" to "Western",
-    
         "$mainUrl/romantico/" to "Romantico",
         "$mainUrl/sentimentale/" to "Sentimentale",
         "$mainUrl/famiglia/" to "Famiglia",
         "$mainUrl/musical/" to "Musical",
         "$mainUrl/musicale/" to "Musicale",
-    
         "$mainUrl/storico-streaming/" to "Storico",
         "$mainUrl/biografico/" to "Biografico",
         "$mainUrl/fantastico/" to "Fantastico",
-    
         "$mainUrl/documentario/" to "Documentario",
-    
         "$mainUrl/reality/" to "Reality Show",
         "$mainUrl/talk-show/" to "Talk Show",
         "$mainUrl/talent-show/" to "Talent Show",
         "$mainUrl/intrattenimento/" to "Intrattenimento",
-    
         "$mainUrl/sportivo/" to "Sportivo"
     )
 
@@ -142,19 +133,16 @@ class AltaDefinizioneV1 : MainAPI() {
         val detailsContainer = content.selectFirst(".movie_entry-details, .details, .info, #details")
         val details = detailsContainer?.select("li") ?: emptyList()
         
-        // NUOVO: Estrai la DURATA dal meta-list e converti in Int
         val durationString = doc.selectFirst(".meta.movie_entry-info .meta-list")?.let { metaList ->
             metaList.select("span").find { span -> 
                 span.text().contains("min") 
             }?.text()?.trim()
         }
         
-        // Converti "105 min" in 105
         val duration = durationString?.let {
             it.substringBefore(" min").trim().toIntOrNull()
         }
         
-        // NUOVO: Estrai l'ANNO
         val year = details.find { it.text().contains("Anno:", ignoreCase = true) }
             ?.text()?.substringAfter("Anno:")?.trim()?.toIntOrNull()
         
@@ -164,9 +152,9 @@ class AltaDefinizioneV1 : MainAPI() {
         val actors = details.find { it.text().contains("Cast:", ignoreCase = true) }
             ?.select("a")?.map { ActorData(Actor(it.text())) } ?: emptyList()
         
-        // MODIFICA: Rileva meglio se è una serie TV
         val isSeries = url.contains("/serie-tv/") || 
-                      doc.select(".series-select, .dropdown.seasons, .dropdown.episodes, .dropdown.mirrors").isNotEmpty()
+                      doc.select(".series-select, .dropdown.seasons, .dropdown.episodes, .dropdown.mirrors").isNotEmpty() ||
+                      doc.select(".accordion-item").isNotEmpty()
         
         return if (isSeries) {
             // Carica serie TV
@@ -175,7 +163,7 @@ class AltaDefinizioneV1 : MainAPI() {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres
-                this.year = year  // <-- ANNO AGGIUNTO
+                this.year = year
                 this.actors = actors
                 addScore(rating)
             }
@@ -186,8 +174,8 @@ class AltaDefinizioneV1 : MainAPI() {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres
-                this.year = year  // <-- ANNO AGGIUNTO
-                this.duration = duration  // <-- DURATA AGGIUNTA (ora è Int?)
+                this.year = year
+                this.duration = duration
                 this.actors = actors
                 addScore(rating)
             }
@@ -197,120 +185,70 @@ class AltaDefinizioneV1 : MainAPI() {
     private suspend fun extractMovieMirrors(doc: Document): List<String> {
         val mirrors = mutableListOf<String>()
         
-        val iframeSrc = doc.select("#player1 iframe, .player iframe, iframe[src*='mostraguarda']").attr("src")
-        if (iframeSrc.isNotBlank()) {
-            mirrors.add(fixUrl(iframeSrc))
-        }
-        
-        doc.select("a[data-link], button[data-link], .mirror-link, .player-option").forEach {
-            val link = it.attr("data-link").ifBlank { it.attr("href") }
+        // 1. Cerca i link nella sezione DOWNLOAD (FUNZIONA!)
+        doc.select(".down-episode a[href]").forEach {
+            val link = it.attr("href")
             if (link.isNotBlank() && !link.contains("javascript:")) {
                 mirrors.add(fixUrl(link))
             }
         }
         
-        if (mirrors.isEmpty() || mirrors.all { it.contains("mostraguarda") }) {
-            val mostraGuardaLink = if (mirrors.isNotEmpty()) mirrors.first() else iframeSrc
-            if (mostraGuardaLink.contains("mostraguarda")) {
-                try {
-                    val mostraGuarda = app.get(mostraGuardaLink).document
-                    val playerMirrors = mostraGuarda.select("ul._player-mirrors > li").mapNotNull {
-                        val link = it.attr("data-link")
-                        if (link.contains("mostraguarda")) null else fixUrl(link)
-                    }
-                    return playerMirrors
-                } catch (e: Exception) {
-                    e.printStackTrace()
+        // 2. Cerca nel modal download
+        doc.select("#modal-download a[href]").forEach {
+            val link = it.attr("href")
+            if (link.isNotBlank() && !link.contains("javascript:")) {
+                mirrors.add(fixUrl(link))
+            }
+        }
+        
+        // 3. Se non trova nulla, prova con la vecchia struttura
+        if (mirrors.isEmpty()) {
+            doc.select("span[data-link], button[data-link], a[data-link]").forEach {
+                val link = it.attr("data-link").ifBlank { it.attr("href") }
+                if (link.isNotBlank() && !link.contains("javascript:")) {
+                    mirrors.add(fixUrl(link))
                 }
+            }
+            
+            val iframeSrc = doc.select("#player1 iframe, .player iframe, iframe[src*='mostraguarda']").attr("src")
+            if (iframeSrc.isNotBlank()) {
+                mirrors.add(fixUrl(iframeSrc))
             }
         }
         
         return mirrors.distinct()
     }
 
-    // FUNZIONE PER ESTRARRE EPISODI
     private fun getEpisodes(doc: Document): List<Episode> {
         val episodes = mutableListOf<Episode>()
-        
-        // Ottieni l'immagine principale della serie
         val seriesPoster = doc.selectFirst("img.layer-image.lazy, img[data-src]")?.attr("data-src") ?: 
                        doc.selectFirst("img.layer-image.lazy, img[data-src]")?.attr("src")
         
-        // Trova tutti i dropdown per le stagioni
-        val seasonItems = doc.select("div.dropdown.seasons .dropdown-menu span[data-season]")
-        
-        if (seasonItems.isNotEmpty()) {
-            // Per ogni stagione
-            seasonItems.forEach { seasonItem ->
-                val seasonNum = seasonItem.attr("data-season").toIntOrNull() ?: 1
-                
-                // Trova il dropdown episodes corrispondente a questa stagione
-                val episodeContainer = doc.selectFirst("div.dropdown.episodes[data-season=\"$seasonNum\"]")
-                
-                if (episodeContainer != null) {
-                    // Trova tutti gli episodi per questa stagione
-                    val episodeItems = episodeContainer.select("span[data-episode]")
-                    
-                    episodeItems.forEach { episodeItem ->
-                        val episodeData = episodeItem.attr("data-episode")
-                        val parts = episodeData.split("-")
-                        val episodeNum = parts.getOrNull(1)?.toIntOrNull()
-                        
-                        // Nome dell'episodio
-                        val episodeName = episodeItem.text().trim()
-                        
-                        // Trova i mirror per questo episodio
-                        val mirrorContainer = doc.selectFirst("div.dropdown.mirrors[data-season=\"$seasonNum\"][data-episode=\"$episodeData\"]")
-                        
-                        if (mirrorContainer != null) {
-                            val mirrorItems = mirrorContainer.select("span[data-link]")
-                            val mirrors = mirrorItems.mapNotNull { 
-                                val link = it.attr("data-link")
-                                if (link.isNotBlank()) link else null
-                            }.distinct()
-                            
-                            if (mirrors.isNotEmpty()) {
-                                episodes.add(
-                                    newEpisode(mirrors) {
-                                        this.season = seasonNum
-                                        this.episode = episodeNum
-                                        this.name = episodeName
-                                        this.description = "Stagione $seasonNum • $episodeName"
-                                        this.posterUrl = fixUrlNull(seriesPoster)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            // Struttura alternativa
-            val allMirrorContainers = doc.select("div.dropdown.mirrors[data-season][data-episode]")
+        // METODO PRIMARIO: Estrai dalla sezione DOWNLOAD (FUNZIONA!)
+        doc.select(".accordion-item").forEachIndexed { seasonIndex, seasonItem ->
+            val seasonNum = seasonIndex + 1  // Le stagioni sono in ordine negli accordion
             
-            allMirrorContainers.forEach { container ->
-                val seasonNum = container.attr("data-season").toIntOrNull() ?: 1
-                val episodeData = container.attr("data-episode")
-                val parts = episodeData.split("-")
-                val episodeNum = parts.getOrNull(1)?.toIntOrNull()
+            val episodeItems = seasonItem.select(".down-episode")
+            episodeItems.forEachIndexed { episodeIndex, episodeItem ->
+                val episodeNum = episodeIndex + 1
                 
-                // Trova il nome dell'episodio
-                val episodeItem = doc.selectFirst("div.dropdown.episodes[data-season=\"$seasonNum\"] span[data-episode=\"$episodeData\"]")
-                val episodeName = episodeItem?.text()?.trim() ?: "Episodio $episodeNum"
+                // Ottieni il testo dell'episodio (es: "3x1")
+                val episodeText = episodeItem.select("span b").text()
+                val cleanEpisodeText = if (episodeText.contains("x")) episodeText else "$seasonNum}x${episodeNum}"
                 
-                val mirrorItems = container.select("span[data-link]")
-                val mirrors = mirrorItems.mapNotNull { 
-                    val link = it.attr("data-link")
-                    if (link.isNotBlank()) link else null
+                // Estrai i link
+                val links = episodeItem.select("a[href]").mapNotNull { 
+                    val link = it.attr("href")
+                    if (link.isNotBlank() && !link.contains("javascript:")) link else null
                 }.distinct()
                 
-                if (mirrors.isNotEmpty()) {
+                if (links.isNotEmpty()) {
                     episodes.add(
-                        newEpisode(mirrors) {
+                        newEpisode(links) {
                             this.season = seasonNum
                             this.episode = episodeNum
-                            this.name = episodeName
-                            this.description = "Stagione $seasonNum • $episodeName"
+                            this.name = "Episodio $episodeNum"
+                            this.description = "Stagione $seasonNum • $cleanEpisodeText"
                             this.posterUrl = fixUrlNull(seriesPoster)
                         }
                     )
@@ -318,26 +256,56 @@ class AltaDefinizioneV1 : MainAPI() {
             }
         }
         
-        // Se non trova episodi con il metodo sopra, prova con una struttura più semplice
+        // METODO SECONDARIO: Se non trova nulla, prova con la struttura dropdown
         if (episodes.isEmpty()) {
-            val simpleMirrors = doc.select("div.dropdown.mirrors")
-            simpleMirrors.forEachIndexed { index, container ->
-                val mirrorItems = container.select("span[data-link]")
-                val mirrors = mirrorItems.mapNotNull { 
-                    val link = it.attr("data-link")
-                    if (link.isNotBlank()) link else null
-                }.distinct()
+            val seasonItems = doc.select("div.dropdown.seasons .dropdown-menu span[data-season]")
+            
+            seasonItems.forEach { seasonItem ->
+                val seasonNum = seasonItem.attr("data-season").toIntOrNull() ?: 1
+                val episodeContainer = doc.selectFirst("div.dropdown.episodes[data-season=\"$seasonNum\"]")
                 
-                if (mirrors.isNotEmpty()) {
-                    episodes.add(
-                        newEpisode(mirrors) {
-                            this.season = 1
-                            this.episode = index + 1
-                            this.name = "Episodio ${index + 1}"
-                            this.description = "Stagione 1, Episodio ${index + 1}"
-                            this.posterUrl = fixUrlNull(seriesPoster)
+                if (episodeContainer != null) {
+                    val episodeItems = episodeContainer.select("span[data-episode]")
+                    
+                    episodeItems.forEach { episodeItem ->
+                        val episodeData = episodeItem.attr("data-episode")
+                        val parts = episodeData.split("-")
+                        val episodeNum = parts.getOrNull(1)?.toIntOrNull()
+                        val episodeName = episodeItem.text().trim()
+                        
+                        // Cerca i mirror nella sezione dropdown
+                        val mirrorContainer = doc.selectFirst("div.dropdown.mirrors[data-season=\"$seasonNum\"][data-episode=\"$episodeData\"]")
+                        
+                        val mirrors = mirrorContainer?.select("span[data-link]")?.mapNotNull { 
+                            val link = it.attr("data-link")
+                            if (link.isNotBlank()) link else null
+                        }?.distinct() ?: emptyList()
+                        
+                        // Se non trova mirror nei dropdown, cerca nella sezione download
+                        val finalLinks = if (mirrors.isEmpty()) {
+                            val episodePattern = "${seasonNum}x${episodeNum}"
+                            doc.select(".down-episode").find { container ->
+                                container.text().contains(episodePattern)
+                            }?.select("a[href]")?.mapNotNull { 
+                                val link = it.attr("href")
+                                if (link.isNotBlank()) link else null
+                            } ?: emptyList()
+                        } else {
+                            mirrors
                         }
-                    )
+                        
+                        if (finalLinks.isNotEmpty()) {
+                            episodes.add(
+                                newEpisode(finalLinks) {
+                                    this.season = seasonNum
+                                    this.episode = episodeNum
+                                    this.name = episodeName
+                                    this.description = "Stagione $seasonNum • $episodeName"
+                                    this.posterUrl = fixUrlNull(seriesPoster)
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -355,10 +323,10 @@ class AltaDefinizioneV1 : MainAPI() {
         
         links.forEach { link ->
             when {
-                link.contains("dropload.tv") -> {
+                link.contains("dropload.tv") || link.contains("dropload.pro") -> {
                     DroploadExtractor().getUrl(link, null, subtitleCallback, callback)
                 }
-                link.contains("supervideo.tv") || link.contains("mysupervideo") -> {
+                link.contains("supervideo.tv") || link.contains("supervideo.cc") || link.contains("mysupervideo") -> {
                     MySupervideoExtractor().getUrl(link, null, subtitleCallback, callback)
                 }
             }
