@@ -8,6 +8,7 @@ import it.dogior.hadEnough.extractors.DroploadExtractor
 import it.dogior.hadEnough.extractors.MySupervideoExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import kotlinx.coroutines.delay
 
 class AltaDefinizioneV1 : MainAPI() {
     override var mainUrl = "https://altadefinizionez.skin"
@@ -16,14 +17,22 @@ class AltaDefinizioneV1 : MainAPI() {
     override var lang = "it"
     override val hasMainPage = true
 
+    private suspend fun getWithTimeout(url: String, timeout: Long = 120000): Document {
+        var lastException: Exception? = null
+        for (attempt in 1..3) {
+            try {
+                if (attempt > 1) delay(2000L * attempt)
+                return app.get(url, timeout = (timeout / 1000).toInt()).document
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        throw lastException ?: Exception("Timeout dopo 3 tentativi")
+    }
+
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Home",
-        "$mainUrl/cinema/" to "Cinema",
+        "$mainUrl/cinema/" to "Al Cinema",
         "$mainUrl/serie-tv/" to "Serie TV",
-        "$mainUrl/miniserie-tv/" to "Miniserie TV", 
-        "$mainUrl/tv-show/" to "Programmi TV",
-        "$mainUrl/sitcom/" to "Serie Comiche",
-        "$mainUrl/soap-opera/" to "Telenovelas",
         "$mainUrl/azione/" to "Azione",
         "$mainUrl/avventura/" to "Avventura",
         "$mainUrl/animazione/" to "Animazione",
@@ -34,30 +43,15 @@ class AltaDefinizioneV1 : MainAPI() {
         "$mainUrl/fantascienza/" to "Fantascienza",
         "$mainUrl/fantasy/" to "Fantasy",
         "$mainUrl/crime/" to "Crime",
-        "$mainUrl/giallo/" to "Giallo",
-        "$mainUrl/poliziesco/" to "Poliziesco",
-        "$mainUrl/spionaggio/" to "Spionaggio",
-        "$mainUrl/guerra/" to "Guerra",
-        "$mainUrl/western/" to "Western",
         "$mainUrl/romantico/" to "Romantico",
-        "$mainUrl/sentimentale/" to "Sentimentale",
         "$mainUrl/famiglia/" to "Famiglia",
-        "$mainUrl/musical/" to "Musical",
-        "$mainUrl/musicale/" to "Musicale",
-        "$mainUrl/storico-streaming/" to "Storico",
-        "$mainUrl/biografico/" to "Biografico",
-        "$mainUrl/fantastico/" to "Fantastico",
-        "$mainUrl/documentario/" to "Documentario",
-        "$mainUrl/reality/" to "Reality Show",
-        "$mainUrl/talk-show/" to "Talk Show",
-        "$mainUrl/talent-show/" to "Talent Show",
-        "$mainUrl/intrattenimento/" to "Intrattenimento",
-        "$mainUrl/sportivo/" to "Sportivo"
+        "$mainUrl/western/" to "Western",
+        "$mainUrl/documentario/" to "Documentario"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page == 1) request.data else "${request.data}page/$page/"
-        val doc = app.get(url).document
+        val doc = getWithTimeout(url)
         
         val items = doc.select("#dle-content > .col").mapNotNull {
             it.toSearchResponse()
@@ -104,7 +98,7 @@ class AltaDefinizioneV1 : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val searchUrl = "$mainUrl/?do=search&subaction=search&story=$query"
-        val doc = app.get(searchUrl).document
+        val doc = getWithTimeout(searchUrl)
         
         return doc.select("#dle-content > .col").mapNotNull {
             it.toSearchResponse()
@@ -112,7 +106,7 @@ class AltaDefinizioneV1 : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val doc = app.get(url).document
+        val doc = getWithTimeout(url)
         
         val content = doc.selectFirst("#dle-content") 
             ?: doc.selectFirst("main")
