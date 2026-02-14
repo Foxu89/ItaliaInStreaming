@@ -2,6 +2,7 @@ package it.dogior.hadEnough
 
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.SubtitleFile
 import it.dogior.hadEnough.extractors.DroploadExtractor
@@ -103,44 +104,44 @@ class AltaDefinizioneV2 : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val doc = app.get(url).document
         
-        // CORREZIONE 1: Titolo
+        // Titolo
         val title = doc.select("h1, h1 a, .single_head h1").text().trim()
             .replace("Streaming", "").replace("HD", "").replace("Gratis", "").trim()
             .let { if (it.isBlank()) doc.select("title").text().split(" - ").firstOrNull() ?: "Sconosciuto" else it }
         
-        // CORREZIONE 2: Poster
+        // Poster
         val poster = doc.select("meta[itemprop=image]").attr("content").ifEmpty { 
             doc.select("img.lazyload, img.wp-post-image").attr("data-src").ifEmpty {
                 doc.select("img.lazyload, img.wp-post-image").attr("src")
             }
         }
         
-        // CORREZIONE 3: Trama
+        // Trama
         val plot = doc.select(".entry-content p, meta[name=description]").attr("content").ifEmpty {
             doc.select(".entry-content p").text().ifEmpty {
                 doc.select(".ml-item-hiden p").text()
             }
         }
         
-        // CORREZIONE 4: Rating IMDB
+        // Rating IMDB
         val rating = doc.select(".imdb_r .a span, .imdb_bg, .ml-imdb b").text().trim()
         
-        // CORREZIONE 5: Anno
+        // Anno
         val year = doc.select(".meta_dd:contains(Anno), .ml-label").text()
             .let { Regex("\\d{4}").find(it)?.value?.toIntOrNull() }
         
-        // CORREZIONE 6: Generi
+        // Generi
         val genres = doc.select(".meta_dd:contains(Categorie) a, .meta_dd:contains(Genere) a, .ml-cat a").map { it.text() }
             .filter { !it.contains("Serie TV") && !it.contains("Cinema") && !it.contains("Sub-ITA") }
         
-        // CORREZIONE 7: Durata
+        // Durata
         val duration = doc.select(".meta_dd:contains(Durata)").text()
             .let { Regex("\\d+").find(it)?.value?.toIntOrNull() }
 
-        // CORREZIONE 8: Titolo originale
+        // Titolo originale
         val originalTitle = doc.select(".titulo_o").text().takeIf { it.isNotBlank() }
 
-        // CORREZIONE 9: Verifica se è serie TV
+        // Verifica se è serie TV
         val isSeries = url.contains("/serie-tv/") || 
                        doc.select("#tabs_holder, .tt_season, .se_num, .ml-label:contains(Serie TV)").isNotEmpty()
 
@@ -151,7 +152,7 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.plot = plot
                 this.tags = genres
                 this.year = year
-                rating.toFloatOrNull()?.let { this.addScore(it) }
+                rating.toFloatOrNull()?.let { this.addRating(it) }
             }
         } else {
             val videoLinks = extractVideoLinks(doc, url)
@@ -170,7 +171,7 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.tags = genres
                 this.year = year
                 this.duration = duration
-                rating.toFloatOrNull()?.let { this.addScore(it) }
+                rating.toFloatOrNull()?.let { this.addRating(it) }
             }
         }
     }
@@ -221,7 +222,7 @@ class AltaDefinizioneV2 : MainAPI() {
         val episodes = mutableListOf<Episode>()
         val seriesPoster = doc.select("img.lazyload").firstOrNull()?.attr("data-src")
         
-        // CORREZIONE 10: Parsing episodi dal formato tabs_holder (come nell'HTML della serie)
+        // Parsing episodi dal formato tabs_holder (come nell'HTML della serie)
         val seasons = doc.select("#tabs_holder .tab-pane")
         
         if (seasons.isNotEmpty()) {
