@@ -1,22 +1,9 @@
 package it.dogior.hadEnough
 
 import com.lagradost.api.Log
-import com.lagradost.cloudstream3.Episode
-import com.lagradost.cloudstream3.HomePageList
-import com.lagradost.cloudstream3.HomePageResponse
-import com.lagradost.cloudstream3.LoadResponse
-import com.lagradost.cloudstream3.TvType
-import com.lagradost.cloudstream3.MainAPI
-import com.lagradost.cloudstream3.MainPageRequest
-import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.newHomePageResponse
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.newMovieLoadResponse
-import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.SubtitleFile
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import it.dogior.hadEnough.extractors.DroploadExtractor
 import it.dogior.hadEnough.extractors.MySupervideoExtractor
@@ -31,7 +18,7 @@ class AltaDefinizioneV2 : MainAPI() {
     override val hasMainPage = true
 
     override val mainPage = mainPageOf(
-        "$mainUrl/film/" to "Ultimi Aggiunti",
+        "$mainUrl/page/1/" to "Ultimi Aggiunti",
         "$mainUrl/cinema/" to "Ora al Cinema",
         "$mainUrl/netflix-streaming/" to "Netflix",
         "$mainUrl/animazione/" to "Animazione",
@@ -59,81 +46,119 @@ class AltaDefinizioneV2 : MainAPI() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = "${request.data}page/$page/"
-        val doc = app.get(url).document
-        val items = doc.select("#dle-content > .col-lg-3").mapNotNull {
+        val baseUrl = if (request.data.contains("page/")) {
+            request.data.replace("page/1/", "page/$page/")
+        } else {
+            "${request.data}page/$page/"
+        }
+        
+        val doc = app.get(baseUrl).document
+        // CORREZIONE 1: Selettore corretto basato sull'HTML
+        val items = doc.select("#dle-content .boxgrid.caption").mapNotNull {
             it.toSearchResponse()
         }
-        val pagination = doc.select("div.pagin > a").last()?.text()?.toIntOrNull()
-        val hasNext = page < (pagination ?: 0)
+        
+        // CORREZIONE 2: Paginazione corretta
+        val hasNext = doc.select(".page_nav a").any { it.text() == (page + 1).toString() }
 
         return newHomePageResponse(HomePageList(request.name, items), hasNext = hasNext)
     }
 
     private fun Element.toSearchResponse(): MovieSearchResponse? {
-        val box = this.selectFirst(".wrapperImage") ?: return null
-        val img = box.selectFirst("img.wp-post-image")
-        val href = box.selectFirst("a")?.attr("href") ?: return null
-        val title = box.select("h2.titleFilm > a").text().trim()
-        val poster = if (img?.attr("data-src").isNullOrEmpty()) {
-            img?.attr("src")
-        } else {
-            img?.attr("data-src")
-        }
-        val rating = this.selectFirst("div.imdb-rate")?.ownText()
-        return newMovieSearchResponse(title, href) {
+        // CORREZIONE 3: Selettori corretti basati sull'HTML
+        val linkElement = this.selectFirst("h3 a, .cover h2 a") ?: return null
+        val href = fixUrl(linkElement.attr("href"))
+        val title = linkElement.text().trim()
+        
+        val img = this.selectFirst("img.lazyload")
+        val poster = img?.attr("data-src") ?: img?.attr("src")
+        
+        val rating = this.selectFirst(".imdb_bg")?.text()?.trim()
+        
+        val type = if (this.selectFirst(".se_num") != null) TvType.TvSeries else TvType.Movie
+
+        return newMovieSearchResponse(title, href, type) {
             this.posterUrl = fixUrlNull(poster)
-            this.score = Score.from(rating, 10)
+            this.score = rating?.let { Score.from(it, 10, 1) }
         }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val doc = app.get("$mainUrl/?story=$query&do=search&subaction=search").document
-        val container = doc.select("#dle-content > .col-lg-3")
-
-        return container.select("div.box").mapNotNull {
+        val doc = app.get("$mainUrl/index.php?do=search").document
+        // CORREZIONE 4: Form corretto per la ricerca
+        val searchDoc = app.post(
+            url = "$mainUrl/index.php?do=search",
+            data = mapOf(
+                "do" to "search",
+                "subaction" to "search",
+                "search_start" to "1",
+                "full_search" to "1",
+                "result_from" to "1",
+                "story" to query
+            )
+        ).document
+        
+        return searchDoc.select("#dle-content .boxgrid.caption").mapNotNull {
             it.toSearchResponse()
         }
     }
 
     override suspend fun load(url: String): LoadResponse? {
         val doc = app.get(url).document
-        val content = doc.selectFirst("#dle-content") ?: return null
-        val title = content.select("h2").text().ifEmpty { "Sconosciuto" }
-        val poster = fixUrlNull(content.select("img.wp-post-image").attr("src"))
-        val plot = content.selectFirst("#sfull")?.ownText()?.substringAfter("Trama: ")
-        val rating = content.selectFirst("span.rateIMDB")?.text()?.substringAfter("IMDb: ")
-
-        val details = content.select("#details > li")
-        val genreElements = details.toList().first { it.text().contains("Genere: ") }
-        val genres = genreElements.select("a").map { it.text() }
-        val yearElements = details.toList().first { it.text().contains("Anno: ") }
-        val year = yearElements.select("div").last()?.text()
+        val content = doc.selectFirst("#dle-content, #son_eklenen_kapsul") ?: return null
         
-        return if (url.contains("/serie-tv/")) {
-            // MODIFICA 1: Cambia questa chiamata
-            val episodes = getEpisodes(doc)  // <-- RIMUOVI "poster" dal parametro
+        // CORREZIONE 5: Estrazione dati migliorata basata sull'HTML
+        val title = doc.select("h1, h2, .h4").firstOrNull()?.text() 
+            ?: doc.select("title").text().replace(" - Streaming", "").trim()
+        
+        val poster = doc.select("img.lazyload").firstOrNull()?.attr("data-src") 
+            ?: doc.select("img.wp-post-image").attr("src")
+        
+        val plot = doc.select(".ml-item-hiden p").text().takeIf { it.isNotBlank() }
+            ?: doc.select("meta[name=description]").attr("content")
+        
+        val rating = doc.select(".ml-imdb b, .imdb_bg").text().trim().replace(",", ".")
+        
+        val genres = doc.select(".ml-cat a").map { it.text() }.filter { 
+            !it.contains("Serie TV") && !it.contains("Cinema") 
+        }
+        
+        val year = doc.select(".ml-label").firstOrNull()?.text()?.trim()?.take(4)
+
+        val isSeries = url.contains("/serie-tv/") || doc.select(".se_num").isNotEmpty()
+
+        return if (isSeries) {
+            val episodes = getEpisodes(doc)
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-                this.posterUrl = poster
+                this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres
+                this.year = year?.toIntOrNull()
                 addScore(rating)
             }
         } else {
-            val mostraGuardaLink = doc.select("#player1 > iframe").attr("src")
-            val link = if (mostraGuardaLink.contains("mostraguarda")) {
-                val mostraGuarda = app.get(mostraGuardaLink).document
-                val mirrors = mostraGuarda.select("ul._player-mirrors > li").mapNotNull {
-                    val l = it.attr("data-link")
-                    if (l.contains("mostraguarda")) null
-                    else fixUrlNull(l)
+            // CORREZIONE 6: Estrazione link migliorata
+            val iframeSrc = doc.select("#player1 iframe").attr("src")
+            val videoLinks = if (iframeSrc.isNotBlank()) {
+                if (iframeSrc.contains("mostraguarda")) {
+                    try {
+                        val iframeDoc = app.get(iframeSrc).document
+                        iframeDoc.select("[data-link]").mapNotNull { 
+                            it.attr("data-link").takeIf { l -> l.isNotBlank() }
+                        }.filter { !it.contains("mostraguarda") }
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                } else {
+                    listOf(iframeSrc)
                 }
-                mirrors
             } else {
-                emptyList()
+                // Cerca link nei dati json o attributi
+                doc.select(".mirrors a, .mr").mapNotNull { it.attr("data-link") }
             }
-            newMovieLoadResponse(title, url, TvType.Movie, link) {
-                this.posterUrl = poster
+
+            newMovieLoadResponse(title, url, TvType.Movie, videoLinks.joinToString(",")) {
+                this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres
                 this.year = year?.toIntOrNull()
@@ -142,32 +167,66 @@ class AltaDefinizioneV2 : MainAPI() {
         }
     }
 
-    // MODIFICA 2: Cambia questa funzione
-    private fun getEpisodes(doc: Document): List<Episode> {  // <-- RIMUOVI "poster: String?"
-        val seasons = doc.selectFirst("div.tab-content")?.select("div.tab-pane") ?: return emptyList()
-        // Ottieni il poster dalla pagina invece di riceverlo come parametro
-        val seriesPoster = doc.selectFirst("img.wp-post-image")?.attr("src")
-
-        return seasons.map {
-            val seasonNumber = it.attr("id").substringAfter("season-").toIntOrNull()
-            val episodes = it.select("li").map { ep ->
-                val mirrors = ep.select("div.mirrors > a.mr").map { mirror -> 
-                    mirror.attr("data-link") 
-                }
-                val epData = ep.select("a")
-                val epNumber = epData.attr("data-num").substringAfter("x").toIntOrNull()
-                val epTitle = epData.attr("data-title").substringBefore(":")
-                val epPlot = epData.attr("data-title").substringAfter(": ")
-                newEpisode(mirrors) {
-                    this.season = seasonNumber
-                    this.episode = epNumber
-                    this.name = epTitle
-                    this.description = epPlot
-                    this.posterUrl = fixUrlNull(seriesPoster)  // <-- USA seriesPoster invece di poster
-                }
+    private fun getEpisodes(doc: Document): List<Episode> {
+        val episodes = mutableListOf<Episode>()
+        val seriesPoster = doc.select("img.lazyload").firstOrNull()?.attr("data-src")
+        
+        // CORREZIONE 7: Parsing episodi basato sull'HTML effettivo
+        val episodeElements = doc.select("#dle-content .boxgrid.caption")
+        if (episodeElements.isNotEmpty()) {
+            episodeElements.forEach { element ->
+                val seasonSpan = element.select(".se_num").text()
+                val (season, episode) = parseSeasonEpisode(seasonSpan)
+                
+                val title = element.select("h3 a, .cover h2 a").text().trim()
+                val link = element.select("a[href]").attr("href")
+                val poster = element.select("img.lazyload").attr("data-src")
+                
+                episodes.add(
+                    newEpisode(link) {
+                        this.season = season
+                        this.episode = episode
+                        this.name = title
+                        this.posterUrl = fixUrlNull(if (poster.isNotBlank()) poster else seriesPoster)
+                    }
+                )
             }
-            episodes
-        }.flatten()
+        }
+        
+        // CORREZIONE 8: Parsing episodi dal formato alternativo
+        val hiddenEpisodes = doc.select(".ml-item-hiden").mapNotNull { hidden ->
+            val seasonEpisode = hidden.select(".se_num").text()
+            val (season, episode) = parseSeasonEpisode(seasonEpisode)
+            
+            val title = hidden.select(".h4").text()
+            val link = hidden.select("a.ml-watch").attr("href")
+            
+            newEpisode(link) {
+                this.season = season
+                this.episode = episode
+                this.name = title
+                this.posterUrl = fixUrlNull(seriesPoster)
+            }
+        }
+        
+        episodes.addAll(hiddenEpisodes)
+        
+        return episodes.distinctBy { "${it.season}-${it.episode}" }
+    }
+
+    private fun parseSeasonEpisode(text: String): Pair<Int?, Int?> {
+        if (text.isBlank()) return null to null
+        return when {
+            text.contains("x") -> {
+                val parts = text.split("x")
+                parts.getOrNull(0)?.toIntOrNull() to parts.getOrNull(1)?.toIntOrNull()
+            }
+            text.startsWith("Stagione") -> {
+                val season = text.replace("Stagione", "").trim().toIntOrNull()
+                season to 1
+            }
+            else -> null to null
+        }
     }
 
     override suspend fun loadLinks(
@@ -176,15 +235,28 @@ class AltaDefinizioneV2 : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        Log.d("Altadefinizione", "Links: $data")
-        val links = parseJson<List<String>>(data)
-        links.map {
-            if (it.contains("dropload.tv")) {
-                DroploadExtractor().getUrl(it, null, subtitleCallback, callback)
-            } else {
-                MySupervideoExtractor().getUrl(it, null, subtitleCallback, callback)
+        Log.d("Altadefinizione", "Loading links: $data")
+        
+        val links = if (data.startsWith("[")) {
+            try {
+                parseJson<List<String>>(data)
+            } catch (e: Exception) {
+                listOf(data)
+            }
+        } else {
+            data.split(",").filter { it.isNotBlank() }
+        }
+        
+        links.forEach { link ->
+            when {
+                link.contains("dropload.tv") -> {
+                    DroploadExtractor().getUrl(link, null, subtitleCallback, callback)
+                }
+                else -> {
+                    MySupervideoExtractor().getUrl(link, null, subtitleCallback, callback)
+                }
             }
         }
-        return false
+        return true
     }
 }
