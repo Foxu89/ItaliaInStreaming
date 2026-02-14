@@ -4,7 +4,6 @@ import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.SubtitleFile
-import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import it.dogior.hadEnough.extractors.DroploadExtractor
 import it.dogior.hadEnough.extractors.MySupervideoExtractor
 import org.jsoup.nodes.Document
@@ -77,8 +76,8 @@ class AltaDefinizioneV2 : MainAPI() {
 
         return newMovieSearchResponse(title, href, type) {
             this.posterUrl = fixUrlNull(poster)
-            this.score = rating?.let { 
-                Score.from(it.replace(",", "."), 10, 1)
+            rating?.let { 
+                this.score = Score.from(it.replace(",", ".").toFloatOrNull(), 10)
             }
         }
     }
@@ -128,7 +127,7 @@ class AltaDefinizioneV2 : MainAPI() {
         
         // CORREZIONE 5: Anno
         val year = doc.select(".meta_dd:contains(Anno), .ml-label").text()
-            .let { Regex("\\d{4}").find(it)?.value }
+            .let { Regex("\\d{4}").find(it)?.value?.toIntOrNull() }
         
         // CORREZIONE 6: Generi
         val genres = doc.select(".meta_dd:contains(Categorie) a, .meta_dd:contains(Genere) a, .ml-cat a").map { it.text() }
@@ -151,12 +150,11 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres
-                this.year = year?.toIntOrNull()
-                addRating(rating)
-                this.apiId = originalTitle
+                this.year = year
+                rating.toFloatOrNull()?.let { this.addScore(it) }
             }
         } else {
-            val videoLinks = extractVideoLinks(doc)
+            val videoLinks = extractVideoLinks(doc, url)
             
             // Se non troviamo link, controlla se c'è un iframe con src
             val iframeLinks = doc.select("iframe").mapNotNull { iframe ->
@@ -170,21 +168,14 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres
-                this.year = year?.toIntOrNull()
+                this.year = year
                 this.duration = duration
-                addRating(rating)
-                this.apiId = originalTitle
+                rating.toFloatOrNull()?.let { this.addScore(it) }
             }
         }
     }
 
-    private fun addRating(builder: LoadResponse.Builder, rating: String) {
-        if (rating.isNotBlank()) {
-            builder.addScore(Score.from(rating.replace(",", "."), 10, 1))
-        }
-    }
-
-    private fun extractVideoLinks(doc: Document): List<String> {
+    private suspend fun extractVideoLinks(doc: Document, currentUrl: String): List<String> {
         val links = mutableListOf<String>()
         
         // Cerca iframe diretti
@@ -260,7 +251,7 @@ class AltaDefinizioneV2 : MainAPI() {
                             episodes.add(
                                 newEpisode(mirrors.joinToString(",")) {
                                     this.season = seasonNum
-                                    this.episode = episodeNum
+                                    this.episode = episodeNum ?: episodes.size + 1
                                     this.name = episodeTitle
                                     this.description = episodePlot
                                     this.posterUrl = fixUrlNull(seriesPoster)
