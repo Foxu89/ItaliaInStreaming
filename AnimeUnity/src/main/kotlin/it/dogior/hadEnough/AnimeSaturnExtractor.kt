@@ -21,56 +21,30 @@ class AnimeSaturnExtractor : ExtractorApi() {
         try {
             val episodeDoc = app.get(url, timeout = timeout).document
             
-            val watchLink = episodeDoc.select("a[href*='/watch?file=']").attr("href")
-            val altWatchLink = episodeDoc.select("a[href*='&s=alt']").attr("href")
+            val watchLink = episodeDoc.select("a[href*='/watch?file=']:not([href*='&s=alt'])").attr("href")
+            if (watchLink.isBlank()) return
             
-            suspend fun processPlayer(playerUrl: String, playerName: String): Boolean {
-                if (playerUrl.isBlank()) return false
-                
-                val watchUrl = fixUrl(playerUrl)
-                val playerDoc = app.get(watchUrl, timeout = timeout).document
-                
-                var videoUrl = playerDoc.select("video source").attr("src")
-                
-                if (videoUrl.isBlank()) {
-                    val scripts = playerDoc.select("script")
-                    scripts.forEach { script ->
-                        val content = script.html()
-                        if (content.contains("jwplayer")) {
-                            val pattern = Regex("file: \"(https?://[^\"]+)\"")
-                            val match = pattern.find(content)
-                            videoUrl = match?.groupValues?.get(1) ?: ""
-                        }
+            val watchUrl = fixUrl(watchLink)
+            val playerDoc = app.get(watchUrl, timeout = timeout).document
+            
+            val videoUrl = playerDoc.select("video source").attr("src")
+            if (videoUrl.isNotBlank()) {
+                callback.invoke(
+                    newExtractorLink(
+                        source = this.name,
+                        name = "AnimeSaturn",
+                        url = videoUrl,
+                        type = ExtractorLinkType.VIDEO
+                    ) {
+                        this.quality = 1080
+                        this.referer = mainUrl
                     }
-                }
-                
-                if (videoUrl.isNotBlank()) {
-                    callback.invoke(
-                        newExtractorLink(
-                            source = this.name,
-                            name = playerName,
-                            url = videoUrl,
-                            type = ExtractorLinkType.VIDEO
-                        ) {
-                            this.quality = 1080
-                            this.referer = mainUrl
-                        }
-                    )
-                    return true
-                }
-                
-                return false
-            }
-            
-            if (processPlayer(watchLink, "AnimeSaturn")) {
-                return
-            }
-            
-            if (processPlayer(altWatchLink, "AnimeSaturn (Alt)")) {
+                )
                 return
             }
             
         } catch (e: Exception) {
+            // Silently fail
         }
     }
 }
