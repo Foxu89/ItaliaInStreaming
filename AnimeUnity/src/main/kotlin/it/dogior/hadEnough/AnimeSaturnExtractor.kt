@@ -1,4 +1,4 @@
-package it.dogior.hadEnough.extractors
+package it.dogior.hadEnough
 
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.app
