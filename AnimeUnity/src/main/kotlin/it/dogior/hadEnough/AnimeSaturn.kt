@@ -4,6 +4,11 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+import com.lagradost.cloudstream3.DubStatus
+import com.lagradost.cloudstream3.addDubStatus
+import com.lagradost.cloudstream3.addEpisodes
+import com.lagradost.cloudstream3.newAnimeLoadResponse
+import com.lagradost.cloudstream3.newAnimeSearchResponse
 import it.dogior.hadEnough.AnimeSaturnExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
