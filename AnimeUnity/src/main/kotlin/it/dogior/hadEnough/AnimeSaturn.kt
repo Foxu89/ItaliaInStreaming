@@ -3,11 +3,12 @@ package it.dogior.hadEnough
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
+import com.lagradost.cloudstream3.utils.AppUtils.parseJson  // <-- IMPORT MANCANTE
 import it.dogior.hadEnough.extractors.AnimeSaturnExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-class AnimeSaturn : MainAPI {  // <-- CAMBIATO DA AnimeSaturnPlugin a AnimeSaturn
+class AnimeSaturn : MainAPI() {  // <-- AGGIUNTE PARENTESI ()
     override var mainUrl = "https://www.animesaturn.cx"
     override var name = "AnimeSaturn"
     override val supportedTypes = setOf(TvType.Anime, TvType.AnimeMovie, TvType.OVA)
@@ -97,17 +98,10 @@ class AnimeSaturn : MainAPI {  // <-- CAMBIATO DA AnimeSaturnPlugin a AnimeSatur
             val response = app.get(searchUrl, timeout = timeout).text
             val json = parseJson<List<Map<String, Any>>>(response)
             
-            return json.mapNotNull { anime ->
+            return json.mapNotNull { anime: Map<String, Any> ->  // <-- TIPO ESPLICITO
                 val name = anime["name"] as? String ?: return@mapNotNull null
                 val link = anime["link"] as? String ?: return@mapNotNull null
                 val image = anime["image"] as? String ?: ""
-                val state = when ((anime["state"] as? String)?.toIntOrNull()) {
-                    0 -> "In corso"
-                    1 -> "Finito"
-                    2 -> "Non rilasciato"
-                    3 -> "Droppato"
-                    else -> null
-                }
                 
                 newMovieSearchResponse(name, "/anime/$link") {
                     this.posterUrl = fixUrlNull(image)
@@ -153,23 +147,21 @@ class AnimeSaturn : MainAPI {  // <-- CAMBIATO DA AnimeSaturnPlugin a AnimeSatur
         val isMovie = url.contains("/anime/") && episodes.isEmpty()
         
         return if (isMovie) {
-            // È un film (singolo episodio)
             newMovieLoadResponse(title, url, TvType.AnimeMovie, episodes.firstOrNull()?.data ?: url) {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres
                 this.year = year
                 this.duration = duration
-                addScore(rating)
+                addScore(rating?.toString())  // <-- CONVERTITO IN STRING
             }
         } else {
-            // È una serie TV
             newTvSeriesLoadResponse(title, url, TvType.Anime, episodes) {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres
                 this.year = year
-                addScore(rating)
+                addScore(rating?.toString())  // <-- CONVERTITO IN STRING
             }
         }
     }
@@ -200,7 +192,6 @@ class AnimeSaturn : MainAPI {  // <-- CAMBIATO DA AnimeSaturnPlugin a AnimeSatur
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        // data è l'URL della pagina episodio (es. /ep/Kuroko-no-Basket-3-ITA-ep-15)
         return AnimeSaturnExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
     }
 }
