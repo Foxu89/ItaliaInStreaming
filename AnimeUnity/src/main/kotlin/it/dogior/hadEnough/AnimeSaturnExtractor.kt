@@ -1,4 +1,4 @@
-package it.dogior.hadEnough
+package it.dogior.hadEnough.extractors
 
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.app
@@ -15,7 +15,7 @@ class AnimeSaturnExtractor : ExtractorApi() {
         referer: String?,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
-    ): Boolean {
+    ) {  // <-- NESSUNA DICHIARAZIONE DI TIPO, RESTITUISCE Unit
         val timeout = 60L
         
         try {
@@ -24,7 +24,7 @@ class AnimeSaturnExtractor : ExtractorApi() {
             
             // Step 2: Trova il link alla pagina player (/watch?file=...)
             val watchLink = episodeDoc.select("a[href*='/watch?file=']").attr("href")
-            if (watchLink.isBlank()) return false
+            if (watchLink.isBlank()) return
             
             // Step 3: Carica la pagina player
             val watchUrl = fixUrl(watchLink)
@@ -44,7 +44,7 @@ class AnimeSaturnExtractor : ExtractorApi() {
                         this.referer = mainUrl
                     }
                 )
-                return true
+                return
             }
             
             // Step 5: Se non trova video, cerca player alternativo
@@ -66,13 +66,12 @@ class AnimeSaturnExtractor : ExtractorApi() {
                             this.referer = mainUrl
                         }
                     )
-                    return true
+                    return
                 }
             }
             
-            return false
         } catch (e: Exception) {
-            return false
+            // Silently fail
         }
     }
 }
