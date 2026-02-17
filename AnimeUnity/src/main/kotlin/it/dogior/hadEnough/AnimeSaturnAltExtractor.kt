@@ -19,14 +19,13 @@ class AnimeSaturnAltExtractor : ExtractorApi() {
         val timeout = 60L
         
         try {
-            val episodeDoc = app.get(url, timeout = timeout).document
+            println("🎬 AnimeSaturnAltExtractor - URL player: $url")
             
-            val altWatchLink = episodeDoc.select("a[href*='&s=alt']").attr("href")
-            if (altWatchLink.isBlank()) return
-            
-            val watchUrl = fixUrl(altWatchLink)
+            // L'URL è già il link al player alternativo (/watch?file=...&s=alt)
+            val watchUrl = fixUrl(url)
             val playerDoc = app.get(watchUrl, timeout = timeout).document
             
+            // Cerca video in jwplayer
             var videoUrl = ""
             
             val scripts = playerDoc.select("script")
@@ -36,9 +35,13 @@ class AnimeSaturnAltExtractor : ExtractorApi() {
                     val pattern = Regex("file: \"(https?://[^\"]+)\"")
                     val match = pattern.find(content)
                     videoUrl = match?.groupValues?.get(1) ?: ""
+                    if (videoUrl.isNotBlank()) {
+                        println("🎬 Video URL trovato in jwplayer: $videoUrl")
+                    }
                 }
             }
             
+            // Se non trova con jwplayer, prova video source diretto
             if (videoUrl.isBlank()) {
                 videoUrl = playerDoc.select("video source").attr("src")
             }
@@ -59,7 +62,7 @@ class AnimeSaturnAltExtractor : ExtractorApi() {
             }
             
         } catch (e: Exception) {
-            // Silently fail
+            println("❌ Errore extractor: ${e.message}")
         }
     }
 }
