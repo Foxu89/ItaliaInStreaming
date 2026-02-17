@@ -257,7 +257,7 @@ class AnimeSaturn : MainAPI() {
         }
     }
 
-    private fun extractEpisodes(doc: Document, poster: String?): List<Episode> {
+    private suspend fun extractEpisodes(doc: Document, poster: String?): List<Episode> {
         val episodes = mutableListOf<Episode>()
         
         doc.select(".btn-group.episodes-button a[href*='/ep/']").forEach { episodeLink ->
