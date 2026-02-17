@@ -22,11 +22,10 @@ class AnimeSaturn : MainAPI() {
     private val timeout = 60L
 
     override val mainPage = mainPageOf(
-        "$mainUrl/newest" to "Nuove Aggiunte",
-        "$mainUrl/animeincorso" to "Anime in Corso",
-        "$mainUrl/animelist" to "Archivio Anime",
         "$mainUrl/toplist" to "Top Anime",
-        "$mainUrl/upcoming" to "Prossime Uscite"
+        "$mainUrl/animeincorso" to "Anime in Corso",
+        "$mainUrl/newest" to "Nuove Aggiunte",
+      //  "$mainUrl/upcoming" to "Prossime Uscite"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -44,7 +43,7 @@ class AnimeSaturn : MainAPI() {
                 extractTopAnime(doc).filterNotNull()
             
             else -> 
-                extractAnimeList(doc).filterNotNull()
+                extractNewestAnime(doc).filterNotNull()
         }
         
         val hasNext = doc.select("a:contains(Successivo)").isNotEmpty() ||
@@ -122,41 +121,6 @@ class AnimeSaturn : MainAPI() {
         }
         
         return items
-    }
-
-    private fun extractAnimeList(doc: Document): List<SearchResponse?> {
-        val cards = when {
-            doc.select(".anime-card-newanime.main-anime-card").isNotEmpty() -> 
-                doc.select(".anime-card-newanime.main-anime-card")
-            doc.select(".sebox").isNotEmpty() -> 
-                doc.select(".sebox")
-            doc.select(".w-100").size > 5 -> 
-                doc.select(".w-100").take(50)
-            else -> doc.select("div[class*='anime'], div[class*='movie']")
-        }
-        
-        return cards.mapNotNull { card ->
-            val linkElement = card.select("a[href*='/anime/']").first() 
-                ?: card.select("a").first() 
-                ?: return@mapNotNull null
-                
-            val title = card.select("h2, h3, h4, .title, .badge").first()?.text() 
-                ?: linkElement.text() 
-                ?: return@mapNotNull null
-                
-            val href = fixUrl(linkElement.attr("href"))
-            val poster = card.select("img").attr("src").ifEmpty {
-                card.select("img[data-src]").attr("data-src")
-            }
-            
-            val isDub = title.contains("(ITA)") || href.contains("-ITA")
-            
-            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
-                this.posterUrl = fixUrlNull(poster.takeIf { it.isNotBlank() })
-                this.type = TvType.Anime
-                addDubStatus(isDub)
-            }
-        }
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
