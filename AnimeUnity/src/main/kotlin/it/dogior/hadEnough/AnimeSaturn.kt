@@ -7,16 +7,12 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import it.dogior.hadEnough.AnimeSaturnExtractor
 import it.dogior.hadEnough.AnimeSaturnAltExtractor
+import it.dogior.hadEnough.AnimeSaturnEpisodeData
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.util.Locale
 
 const val TAG = "AnimeSaturn"
-
-data class AnimeSaturnEpisodeData(
-    val primaryUrl: String,
-    val altUrl: String? = null
-)
 
 class AnimeSaturn : MainAPI() {
     override var mainUrl = "https://www.animesaturn.cx"
