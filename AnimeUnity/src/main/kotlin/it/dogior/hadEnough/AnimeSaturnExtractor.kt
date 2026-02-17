@@ -19,14 +19,13 @@ class AnimeSaturnExtractor : ExtractorApi() {
         val timeout = 60L
         
         try {
-            val episodeDoc = app.get(url, timeout = timeout).document
+            println("🎬 AnimeSaturnExtractor - URL player: $url")
             
-            val watchLink = episodeDoc.select("a[href*='/watch?file=']:not([href*='&s=alt'])").attr("href")
-            if (watchLink.isBlank()) return
-            
-            val watchUrl = fixUrl(watchLink)
+            // L'URL è già il link al player (/watch?file=...)
+            val watchUrl = fixUrl(url)
             val playerDoc = app.get(watchUrl, timeout = timeout).document
             
+            // Estrai il video MP4 diretto
             val videoUrl = playerDoc.select("video source").attr("src")
             if (videoUrl.isNotBlank()) {
                 callback.invoke(
@@ -44,7 +43,7 @@ class AnimeSaturnExtractor : ExtractorApi() {
             }
             
         } catch (e: Exception) {
-            // Silently fail
+            println("❌ Errore extractor: ${e.message}")
         }
     }
 }
