@@ -4,6 +4,7 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import it.dogior.hadEnough.AnimeSaturnExtractor
 import it.dogior.hadEnough.AnimeSaturnAltExtractor
 import org.jsoup.nodes.Document
@@ -11,6 +12,11 @@ import org.jsoup.nodes.Element
 import java.util.Locale
 
 const val TAG = "AnimeSaturn"
+
+data class AnimeSaturnEpisodeData(
+    val primaryUrl: String,
+    val altUrl: String? = null
+)
 
 class AnimeSaturn : MainAPI() {
     override var mainUrl = "https://www.animesaturn.cx"
@@ -263,16 +269,37 @@ class AnimeSaturn : MainAPI() {
             val epText = episodeLink.text().trim()
             val epNum = Regex("\\d+").find(epText)?.value?.toIntOrNull() ?: 1
             
-            episodes.add(
-                newEpisode(epUrl) {
-                    this.name = epText
-                    this.episode = epNum
-                    this.posterUrl = fixUrlNull(poster)
-                }
-            )
+            try {
+                val episodePage = app.get(epUrl, timeout = timeout).document
+                
+                val primaryLink = episodePage.select("a[href*='/watch?file=']:not([href*='&s=alt'])").attr("href")
+                val altLink = episodePage.select("a[href*='&s=alt']").attr("href")
+                
+                val episodeData = AnimeSaturnEpisodeData(
+                    primaryUrl = primaryLink,
+                    altUrl = altLink.ifBlank { null }
+                ).toJson()
+                
+                episodes.add(
+                    newEpisode(episodeData) {
+                        this.name = epText
+                        this.episode = epNum
+                        this.posterUrl = fixUrlNull(poster)
+                    }
+                )
+                
+            } catch (e: Exception) {
+                episodes.add(
+                    newEpisode(epUrl) {
+                        this.name = epText
+                        this.episode = epNum
+                        this.posterUrl = fixUrlNull(poster)
+                    }
+                )
+            }
         }
         
-        return episodes.distinctBy { it.data }
+        return episodes.distinctBy { it.data }.sortedBy { it.episode }
     }
 
     override suspend fun loadLinks(
@@ -281,8 +308,22 @@ class AnimeSaturn : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        AnimeSaturnExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
-        AnimeSaturnAltExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
-        return true
+        return try {
+            val episodeData = parseJson<AnimeSaturnEpisodeData>(data)
+            
+            if (episodeData.primaryUrl.isNotBlank()) {
+                AnimeSaturnExtractor().getUrl(episodeData.primaryUrl, mainUrl, subtitleCallback, callback)
+            }
+            
+            if (!episodeData.altUrl.isNullOrBlank()) {
+                AnimeSaturnAltExtractor().getUrl(episodeData.altUrl, mainUrl, subtitleCallback, callback)
+            }
+            
+            true
+        } catch (e: Exception) {
+            AnimeSaturnExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
+            AnimeSaturnAltExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
+            true
+        }
     }
 }
