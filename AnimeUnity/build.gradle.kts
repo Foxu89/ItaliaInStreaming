@@ -1,5 +1,5 @@
 // use an integer for version numbers
-version = 17
+version = 18
 
 
 cloudstream {
@@ -15,7 +15,7 @@ cloudstream {
     * 2: Slow
     * 3: Beta only
     * */
-    status = 1
+    status = 3
     tvTypes = listOf(
         "AnimeMovie",
         "Anime",
@@ -25,5 +25,5 @@ cloudstream {
     language = "it"
     requiresResources = false
 
-    iconUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AnimeUnity/animesaturn_icon.png"
+    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/AnimeUnity/animesaturn_icon.png"
 }
