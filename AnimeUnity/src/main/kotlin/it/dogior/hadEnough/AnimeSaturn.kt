@@ -53,7 +53,7 @@ class AnimeSaturn : MainAPI() {
         )
     }
 
-    private fun extractNewestAnime(doc: Document): List<MovieSearchResponse> {
+    private fun extractNewestAnime(doc: Document): List<SearchResponse> {
         return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
             val linkElement = card.select("a").first() ?: return@mapNotNull null
             val title = card.select("span").text().ifEmpty { 
@@ -62,10 +62,10 @@ class AnimeSaturn : MainAPI() {
             val href = fixUrl(linkElement.attr("href"))
             val poster = card.select("img").attr("src")
             
-            // Controlla se è doppiato (ITA nel titolo o nell'URL)
             val isDub = title.contains("(ITA)") || href.contains("-ITA")
             
-            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
+            // Restituisce SearchResponse, NON AnimeSearchResponse
+            newSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
                 addDubStatus(isDub)
@@ -73,7 +73,7 @@ class AnimeSaturn : MainAPI() {
         }
     }
 
-    private fun extractTopAnime(doc: Document): List<MovieSearchResponse> {
+    private fun extractTopAnime(doc: Document): List<SearchResponse> {
         return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
             val linkElement = card.select("a").first() ?: return@mapNotNull null
             val title = card.select("span").text()
@@ -82,7 +82,7 @@ class AnimeSaturn : MainAPI() {
             
             val isDub = title.contains("(ITA)") || href.contains("-ITA")
             
-            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
+            newSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
                 addDubStatus(isDub)
@@ -90,7 +90,7 @@ class AnimeSaturn : MainAPI() {
         }
     }
 
-    private fun extractAnimeList(doc: Document): List<MovieSearchResponse> {
+    private fun extractAnimeList(doc: Document): List<SearchResponse> {
         return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
             val linkElement = card.select("a").first() ?: return@mapNotNull null
             val title = card.select("span").text()
@@ -99,7 +99,7 @@ class AnimeSaturn : MainAPI() {
             
             val isDub = title.contains("(ITA)") || href.contains("-ITA")
             
-            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
+            newSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
                 addDubStatus(isDub)
@@ -123,7 +123,7 @@ class AnimeSaturn : MainAPI() {
                 
                 val isDub = name.contains("(ITA)") || link.contains("-ITA")
                 
-                newAnimeSearchResponse(name.replace(" (ITA)", ""), "/anime/$link") {
+                newSearchResponse(name.replace(" (ITA)", ""), "/anime/$link") {
                     this.posterUrl = fixUrlNull(image)
                     this.type = TvType.Anime
                     addDubStatus(isDub)
@@ -158,7 +158,6 @@ class AnimeSaturn : MainAPI() {
         
         val genres = doc.select(".badge.badge-light.generi-as").map { it.text() }
         
-        // Determina se è doppiato
         val isDub = title.contains("(ITA)") || url.contains("-ITA")
         val dubStatus = if (isDub) DubStatus.Dubbed else DubStatus.Subbed
         
