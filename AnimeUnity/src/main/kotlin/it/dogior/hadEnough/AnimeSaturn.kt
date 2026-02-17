@@ -59,15 +59,16 @@ class AnimeSaturn : MainAPI() {
     private fun extractNewestAnime(doc: Document): List<SearchResponse?> {
         return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
             val linkElement = card.select("a").first() ?: return@mapNotNull null
-            val title = card.select("span").text().ifEmpty { 
+            val rawTitle = card.select("span").text().ifEmpty { 
                 card.select(".card-text span").text() 
             }
+            val title = cleanTitle(rawTitle)
             val href = fixUrl(linkElement.attr("href"))
             val poster = card.select("img").attr("src")
             
-            val isDub = title.contains("(ITA)") || href.contains("-ITA")
+            val isDub = rawTitle.contains("(ITA)") || href.contains("-ITA")
             
-            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
+            newAnimeSearchResponse(title, href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
                 addDubStatus(isDub)
@@ -78,16 +79,17 @@ class AnimeSaturn : MainAPI() {
     private fun extractAnimeInCorso(doc: Document): List<SearchResponse?> {
         return doc.select(".sebox").mapNotNull { sebox ->
             val linkElement = sebox.select(".headsebox h2 a").first() ?: return@mapNotNull null
-            val title = linkElement.text().trim()
+            val rawTitle = linkElement.text().trim()
+            val title = cleanTitle(rawTitle)
             val href = fixUrl(linkElement.attr("href"))
             
             val poster = sebox.select(".bigsebox .l img").attr("src").ifEmpty {
                 sebox.select(".bigsebox .l img").attr("data-src")
             }
             
-            val isDub = title.contains("(ITA)") || href.contains("-ITA")
+            val isDub = rawTitle.contains("(ITA)") || href.contains("-ITA")
             
-            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
+            newAnimeSearchResponse(title, href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
                 addDubStatus(isDub)
@@ -103,16 +105,17 @@ class AnimeSaturn : MainAPI() {
             val href = fixUrl(linkElement.attr("href"))
             
             val titleElement = container.select(".badge.badge-light").first()
-            val title = titleElement?.ownText()?.trim() ?: linkElement.attr("title") ?: return@forEach
+            val rawTitle = titleElement?.ownText()?.trim() ?: linkElement.attr("title") ?: return@forEach
+            val title = cleanTitle(rawTitle)
             
             val poster = container.select("img").attr("src").ifEmpty {
                 container.select("img").attr("data-src")
             }
             
-            val isDub = title.contains("(ITA)") || href.contains("-ITA")
+            val isDub = rawTitle.contains("(ITA)") || href.contains("-ITA")
             
             items.add(
-                newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
+                newAnimeSearchResponse(title, href) {
                     this.posterUrl = fixUrlNull(poster)
                     this.type = TvType.Anime
                     addDubStatus(isDub)
@@ -121,6 +124,14 @@ class AnimeSaturn : MainAPI() {
         }
         
         return items
+    }
+
+    private fun cleanTitle(rawTitle: String): String {
+        return rawTitle
+            .replace(" Sub ITA", "")
+            .replace(" (ITA)", "")
+            .replace(" ITA", "")
+            .trim()
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -133,13 +144,14 @@ class AnimeSaturn : MainAPI() {
             val json = parseJson<List<Map<String, Any>>>(response)
             
             return json.mapNotNull { anime: Map<String, Any> ->
-                val name = anime["name"] as? String ?: return@mapNotNull null
+                val rawName = anime["name"] as? String ?: return@mapNotNull null
+                val name = cleanTitle(rawName)
                 val link = anime["link"] as? String ?: return@mapNotNull null
                 val image = anime["image"] as? String ?: ""
                 
-                val isDub = name.contains("(ITA)") || link.contains("-ITA")
+                val isDub = rawName.contains("(ITA)") || link.contains("-ITA")
                 
-                newAnimeSearchResponse(name.replace(" (ITA)", ""), "/anime/$link") {
+                newAnimeSearchResponse(name, "/anime/$link") {
                     this.posterUrl = fixUrlNull(image)
                     this.type = TvType.Anime
                     addDubStatus(isDub)
@@ -153,12 +165,21 @@ class AnimeSaturn : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val doc = app.get(url, timeout = timeout).document
         
-        val title = doc.select(".anime-title-as b").text().ifEmpty {
+        val rawTitle = doc.select(".anime-title-as b").text().ifEmpty {
             doc.select("h1").text()
         }
+        val title = cleanTitle(rawTitle)
         
-        val poster = doc.select("img.cover-anime").attr("src").ifEmpty {
+        // CERCA IL POSTER NEL MODALE DELLA COPERTINA
+        var poster = doc.select("img.cover-anime").attr("src").ifEmpty {
             doc.select(".container img[src*='locandine']").attr("src")
+        }
+        
+        // Se non trova il poster, cerca nel modal della copertina
+        if (poster.isNullOrBlank()) {
+            poster = doc.select("#modal-cover-anime .modal-body img").attr("src").ifEmpty {
+                doc.select("img[src*='copertine']").attr("src")
+            }
         }
         
         val plot = doc.select("#shown-trama").text().ifEmpty {
@@ -174,7 +195,7 @@ class AnimeSaturn : MainAPI() {
         
         val genres = doc.select(".badge.badge-light.generi-as").map { it.text() }
         
-        val isDub = title.contains("(ITA)") || url.contains("-ITA")
+        val isDub = rawTitle.contains("(ITA)") || url.contains("-ITA")
         val dubStatus = if (isDub) DubStatus.Dubbed else DubStatus.Subbed
         
         val episodes = extractEpisodes(doc, poster)
@@ -182,7 +203,7 @@ class AnimeSaturn : MainAPI() {
         val isMovie = url.contains("/anime/") && episodes.isEmpty()
         
         return if (isMovie) {
-            newAnimeLoadResponse(title.replace(" (ITA)", ""), url, TvType.AnimeMovie) {
+            newAnimeLoadResponse(title, url, TvType.AnimeMovie) {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres.map { genre ->
@@ -200,7 +221,7 @@ class AnimeSaturn : MainAPI() {
                 ))
             }
         } else {
-            newAnimeLoadResponse(title.replace(" (ITA)", ""), url, TvType.Anime) {
+            newAnimeLoadResponse(title, url, TvType.Anime) {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
                 this.tags = genres.map { genre ->
