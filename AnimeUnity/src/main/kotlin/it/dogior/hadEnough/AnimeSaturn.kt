@@ -186,14 +186,13 @@ class AnimeSaturn : MainAPI() {
         
         val infoItems = doc.select(".bg-dark-as-box.mb-3.p-3.text-white").first()?.text() ?: ""
         
-        val durationString = Regex("Durata episodi: ([\\d+\\s?h?]+\\s?minuti?)").find(infoItems)?.groupValues?.get(1)
-            ?: Regex("([\\d+\\s?h?]+\\s?min)").find(infoItems)?.groupValues?.get(1)
+        val durationString = Regex("Durata episodi: ([^<]+)").find(infoItems)?.groupValues?.get(1)
         
         val duration = when {
-            durationString?.contains("h") == true -> {
-                val hours = Regex("(\\d+)h").find(durationString)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            durationString?.contains("h") == true || durationString?.contains("e") == true -> {
+                val hours = Regex("(\\d+)\\s?h").find(durationString)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 val minutes = Regex("(\\d+)\\s?min").find(durationString)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-                hours * 60 + minutes
+                (hours * 60) + minutes
             }
             durationString != null -> {
                 Regex("(\\d+)").find(durationString)?.groupValues?.get(1)?.toIntOrNull()
@@ -215,9 +214,11 @@ class AnimeSaturn : MainAPI() {
         
         val episodeCount = Regex("Episodi: (\\d+)").find(infoItems)?.groupValues?.get(1)?.toIntOrNull() ?: episodes.size
         
-        val isMovie = episodeCount == 1 || (duration != null && duration > 40)
+        val isMovie = episodeCount == 1 && (duration != null && duration > 40)
         
         return if (isMovie) {
+            val episodeUrl = doc.select(".btn-group.episodes-button a[href*='/ep/']").attr("href")
+            
             newAnimeLoadResponse(title, url, TvType.AnimeMovie) {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
@@ -230,7 +231,7 @@ class AnimeSaturn : MainAPI() {
                 this.duration = duration
                 addScore(rating?.toString())
                 addEpisodes(dubStatus, listOf(
-                    newEpisode(url) {
+                    newEpisode(fixUrl(episodeUrl)) {
                         this.name = "Film"
                         this.episode = 1
                     }
