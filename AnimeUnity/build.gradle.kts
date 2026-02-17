@@ -1,11 +1,11 @@
 // use an integer for version numbers
-version = 16
+version = 17
 
 
 cloudstream {
     // All of these properties are optional, you can safely remove them
 
-    description = "Anime da AnimeUnity"
+    description = "Anime da AnimeSaturn"
     authors = listOf("doGior","DieGon")
 
     /**
@@ -25,5 +25,5 @@ cloudstream {
     language = "it"
     requiresResources = false
 
-    iconUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AnimeUnity/animeunity_icon.png"
+    iconUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AnimeUnity/animesaturn_icon.png"
 }
