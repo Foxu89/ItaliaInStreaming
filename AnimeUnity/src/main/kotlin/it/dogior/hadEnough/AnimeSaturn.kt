@@ -192,6 +192,7 @@ class AnimeSaturn : MainAPI() {  // <-- AGGIUNTE PARENTESI ()
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        return AnimeSaturnExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
+        AnimeSaturnExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
+        return true
     }
 }
