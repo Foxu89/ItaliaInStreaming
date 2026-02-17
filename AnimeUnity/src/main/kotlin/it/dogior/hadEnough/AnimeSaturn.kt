@@ -3,12 +3,15 @@ package it.dogior.hadEnough
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
-import com.lagradost.cloudstream3.utils.AppUtils.parseJson  // <-- IMPORT MANCANTE
-import it.dogior.hadEnough.AnimeSaturnExtractor
+import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+import it.dogior.hadEnough.extractors.AnimeSaturnExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.util.Locale
 
-class AnimeSaturn : MainAPI() {  // <-- AGGIUNTE PARENTESI ()
+const val TAG = "AnimeSaturn"
+
+class AnimeSaturn : MainAPI() {
     override var mainUrl = "https://www.animesaturn.cx"
     override var name = "AnimeSaturn"
     override val supportedTypes = setOf(TvType.Anime, TvType.AnimeMovie, TvType.OVA)
@@ -54,9 +57,13 @@ class AnimeSaturn : MainAPI() {  // <-- AGGIUNTE PARENTESI ()
             val href = fixUrl(linkElement.attr("href"))
             val poster = card.select("img").attr("src")
             
-            newMovieSearchResponse(title, href) {
+            // Controlla se è doppiato (ITA nel titolo o nell'URL)
+            val isDub = title.contains("(ITA)") || href.contains("-ITA")
+            
+            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
+                addDubStatus(isDub)
             }
         }
     }
@@ -68,9 +75,12 @@ class AnimeSaturn : MainAPI() {  // <-- AGGIUNTE PARENTESI ()
             val href = fixUrl(linkElement.attr("href"))
             val poster = card.select("img").attr("src")
             
-            newMovieSearchResponse(title, href) {
+            val isDub = title.contains("(ITA)") || href.contains("-ITA")
+            
+            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
+                addDubStatus(isDub)
             }
         }
     }
@@ -82,9 +92,12 @@ class AnimeSaturn : MainAPI() {  // <-- AGGIUNTE PARENTESI ()
             val href = fixUrl(linkElement.attr("href"))
             val poster = card.select("img").attr("src")
             
-            newMovieSearchResponse(title, href) {
+            val isDub = title.contains("(ITA)") || href.contains("-ITA")
+            
+            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
+                addDubStatus(isDub)
             }
         }
     }
@@ -98,14 +111,17 @@ class AnimeSaturn : MainAPI() {  // <-- AGGIUNTE PARENTESI ()
             val response = app.get(searchUrl, timeout = timeout).text
             val json = parseJson<List<Map<String, Any>>>(response)
             
-            return json.mapNotNull { anime: Map<String, Any> ->  // <-- TIPO ESPLICITO
+            return json.mapNotNull { anime: Map<String, Any> ->
                 val name = anime["name"] as? String ?: return@mapNotNull null
                 val link = anime["link"] as? String ?: return@mapNotNull null
                 val image = anime["image"] as? String ?: ""
                 
-                newMovieSearchResponse(name, "/anime/$link") {
+                val isDub = name.contains("(ITA)") || link.contains("-ITA")
+                
+                newAnimeSearchResponse(name.replace(" (ITA)", ""), "/anime/$link") {
                     this.posterUrl = fixUrlNull(image)
                     this.type = TvType.Anime
+                    addDubStatus(isDub)
                 }
             }
         } catch (e: Exception) {
@@ -128,40 +144,53 @@ class AnimeSaturn : MainAPI() {  // <-- AGGIUNTE PARENTESI ()
             doc.select("#trama div").text()
         }
         
-        // Estrai informazioni
         val infoItems = doc.select(".bg-dark-as-box.mb-3.p-3.text-white").first()?.text() ?: ""
         
-        val studio = Regex("Studio: (.*?)(?:\n|$)").find(infoItems)?.groupValues?.get(1) ?: ""
-        val status = Regex("Stato: (.*?)(?:\n|$)").find(infoItems)?.groupValues?.get(1) ?: ""
-        val episodesCount = Regex("Episodi: (\\d+)").find(infoItems)?.groupValues?.get(1)?.toIntOrNull()
         val duration = Regex("Durata episodi: (\\d+) min").find(infoItems)?.groupValues?.get(1)?.toIntOrNull()
         val ratingString = Regex("Voto: (\\d+\\.?\\d*)").find(infoItems)?.groupValues?.get(1)
         val rating = ratingString?.toFloatOrNull()?.times(2)?.toInt()
-        
         val year = Regex("Data di uscita: .*?(\\d{4})").find(infoItems)?.groupValues?.get(1)?.toIntOrNull()
         
         val genres = doc.select(".badge.badge-light.generi-as").map { it.text() }
+        
+        // Determina se è doppiato
+        val isDub = title.contains("(ITA)") || url.contains("-ITA")
+        val dubStatus = if (isDub) DubStatus.Dubbed else DubStatus.Subbed
         
         val episodes = extractEpisodes(doc, poster)
         
         val isMovie = url.contains("/anime/") && episodes.isEmpty()
         
         return if (isMovie) {
-            newMovieLoadResponse(title, url, TvType.AnimeMovie, episodes.firstOrNull()?.data ?: url) {
+            newAnimeLoadResponse(title.replace(" (ITA)", ""), url, TvType.AnimeMovie) {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
-                this.tags = genres
+                this.tags = genres.map { genre ->
+                    genre.replaceFirstChar {
+                        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+                    }
+                }
                 this.year = year
                 this.duration = duration
-                addScore(rating?.toString())  // <-- CONVERTITO IN STRING
+                addScore(rating?.toString())
+                addEpisodes(dubStatus, listOf(
+                    newEpisode(url) {
+                        this.name = "Film"
+                    }
+                ))
             }
         } else {
-            newTvSeriesLoadResponse(title, url, TvType.Anime, episodes) {
+            newAnimeLoadResponse(title.replace(" (ITA)", ""), url, TvType.Anime) {
                 this.posterUrl = fixUrlNull(poster)
                 this.plot = plot
-                this.tags = genres
+                this.tags = genres.map { genre ->
+                    genre.replaceFirstChar {
+                        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+                    }
+                }
                 this.year = year
-                addScore(rating?.toString())  // <-- CONVERTITO IN STRING
+                addScore(rating?.toString())
+                addEpisodes(dubStatus, episodes)
             }
         }
     }
