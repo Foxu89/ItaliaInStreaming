@@ -25,7 +25,6 @@ class AnimeSaturn : MainAPI() {
         "$mainUrl/toplist" to "Top Anime",
         "$mainUrl/animeincorso" to "Anime in Corso",
         "$mainUrl/newest" to "Nuove Aggiunte",
-      //  "$mainUrl/upcoming" to "Prossime Uscite"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -131,6 +130,7 @@ class AnimeSaturn : MainAPI() {
             .replace(" Sub ITA", "")
             .replace(" (ITA)", "")
             .replace(" ITA", "")
+            .replace(" Sub", "")
             .trim()
     }
 
@@ -170,12 +170,10 @@ class AnimeSaturn : MainAPI() {
         }
         val title = cleanTitle(rawTitle)
         
-        // CERCA IL POSTER NEL MODALE DELLA COPERTINA
         var poster = doc.select("img.cover-anime").attr("src").ifEmpty {
             doc.select(".container img[src*='locandine']").attr("src")
         }
         
-        // Se non trova il poster, cerca nel modal della copertina
         if (poster.isNullOrBlank()) {
             poster = doc.select("#modal-cover-anime .modal-body img").attr("src").ifEmpty {
                 doc.select("img[src*='copertine']").attr("src")
@@ -188,9 +186,24 @@ class AnimeSaturn : MainAPI() {
         
         val infoItems = doc.select(".bg-dark-as-box.mb-3.p-3.text-white").first()?.text() ?: ""
         
-        val duration = Regex("Durata episodi: (\\d+) min").find(infoItems)?.groupValues?.get(1)?.toIntOrNull()
-        val ratingString = Regex("Voto: (\\d+\\.?\\d*)").find(infoItems)?.groupValues?.get(1)
+        val durationString = Regex("Durata episodi: ([\\d+\\s?h?]+\\s?minuti?)").find(infoItems)?.groupValues?.get(1)
+            ?: Regex("([\\d+\\s?h?]+\\s?min)").find(infoItems)?.groupValues?.get(1)
+        
+        val duration = when {
+            durationString?.contains("h") == true -> {
+                val hours = Regex("(\\d+)h").find(durationString)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                val minutes = Regex("(\\d+)\\s?min").find(durationString)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                hours * 60 + minutes
+            }
+            durationString != null -> {
+                Regex("(\\d+)").find(durationString)?.groupValues?.get(1)?.toIntOrNull()
+            }
+            else -> null
+        }
+        
+        val ratingString = Regex("Voto: ([\\d\\.]+)/5").find(infoItems)?.groupValues?.get(1)
         val rating = ratingString?.toFloatOrNull()?.times(2)?.toInt()
+        
         val year = Regex("Data di uscita: .*?(\\d{4})").find(infoItems)?.groupValues?.get(1)?.toIntOrNull()
         
         val genres = doc.select(".badge.badge-light.generi-as").map { it.text() }
@@ -200,7 +213,9 @@ class AnimeSaturn : MainAPI() {
         
         val episodes = extractEpisodes(doc, poster)
         
-        val isMovie = url.contains("/anime/") && episodes.isEmpty()
+        val episodeCount = Regex("Episodi: (\\d+)").find(infoItems)?.groupValues?.get(1)?.toIntOrNull() ?: episodes.size
+        
+        val isMovie = episodeCount == 1 || (duration != null && duration > 40)
         
         return if (isMovie) {
             newAnimeLoadResponse(title, url, TvType.AnimeMovie) {
@@ -217,6 +232,7 @@ class AnimeSaturn : MainAPI() {
                 addEpisodes(dubStatus, listOf(
                     newEpisode(url) {
                         this.name = "Film"
+                        this.episode = 1
                     }
                 ))
             }
