@@ -34,13 +34,22 @@ class AnimeSaturn : MainAPI() {
         val doc = app.get(url, timeout = timeout).document
         
         val items = when {
-            request.data.contains("newest") -> extractNewestAnime(doc).filterNotNull()
-            request.data.contains("toplist") -> extractTopAnime(doc).filterNotNull()
-            else -> extractAnimeList(doc).filterNotNull()
+            request.data.contains("newest") || request.data.contains("upcoming") -> 
+                extractNewestAnime(doc).filterNotNull()
+            
+            request.data.contains("animeincorso") -> 
+                extractAnimeInCorso(doc).filterNotNull()
+            
+            request.data.contains("toplist") -> 
+                extractTopAnime(doc).filterNotNull()
+            
+            else -> 
+                extractAnimeList(doc).filterNotNull()
         }
         
         val hasNext = doc.select("a:contains(Successivo)").isNotEmpty() ||
-                     doc.select(".pagination .next").isNotEmpty()
+                     doc.select(".pagination .next").isNotEmpty() ||
+                     doc.select(".pagination li.active + li").isNotEmpty()
         
         return newHomePageResponse(
             HomePageList(request.name, items),
@@ -67,12 +76,15 @@ class AnimeSaturn : MainAPI() {
         }
     }
 
-    private fun extractTopAnime(doc: Document): List<SearchResponse?> {
-        return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
-            val linkElement = card.select("a").first() ?: return@mapNotNull null
-            val title = card.select("span").text()
+    private fun extractAnimeInCorso(doc: Document): List<SearchResponse?> {
+        return doc.select(".sebox").mapNotNull { sebox ->
+            val linkElement = sebox.select(".headsebox h2 a").first() ?: return@mapNotNull null
+            val title = linkElement.text().trim()
             val href = fixUrl(linkElement.attr("href"))
-            val poster = card.select("img").attr("src")
+            
+            val poster = sebox.select(".bigsebox .l img").attr("src").ifEmpty {
+                sebox.select(".bigsebox .l img").attr("data-src")
+            }
             
             val isDub = title.contains("(ITA)") || href.contains("-ITA")
             
@@ -84,17 +96,63 @@ class AnimeSaturn : MainAPI() {
         }
     }
 
-    private fun extractAnimeList(doc: Document): List<SearchResponse?> {
-        return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
-            val linkElement = card.select("a").first() ?: return@mapNotNull null
-            val title = card.select("span").text()
+    private fun extractTopAnime(doc: Document): List<SearchResponse?> {
+        val items = mutableListOf<SearchResponse?>()
+        
+        doc.select(".w-100").forEach { container ->
+            val linkElement = container.select("a[href*='/anime/']").first() ?: return@forEach
             val href = fixUrl(linkElement.attr("href"))
-            val poster = card.select("img").attr("src")
+            
+            val titleElement = container.select(".badge.badge-light").first()
+            val title = titleElement?.ownText()?.trim() ?: linkElement.attr("title") ?: return@forEach
+            
+            val poster = container.select("img").attr("src").ifEmpty {
+                container.select("img").attr("data-src")
+            }
+            
+            val isDub = title.contains("(ITA)") || href.contains("-ITA")
+            
+            items.add(
+                newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
+                    this.posterUrl = fixUrlNull(poster)
+                    this.type = TvType.Anime
+                    addDubStatus(isDub)
+                }
+            )
+        }
+        
+        return items
+    }
+
+    private fun extractAnimeList(doc: Document): List<SearchResponse?> {
+        val cards = when {
+            doc.select(".anime-card-newanime.main-anime-card").isNotEmpty() -> 
+                doc.select(".anime-card-newanime.main-anime-card")
+            doc.select(".sebox").isNotEmpty() -> 
+                doc.select(".sebox")
+            doc.select(".w-100").size > 5 -> 
+                doc.select(".w-100").take(50)
+            else -> doc.select("div[class*='anime'], div[class*='movie']")
+        }
+        
+        return cards.mapNotNull { card ->
+            val linkElement = card.select("a[href*='/anime/']").first() 
+                ?: card.select("a").first() 
+                ?: return@mapNotNull null
+                
+            val title = card.select("h2, h3, h4, .title, .badge").first()?.text() 
+                ?: linkElement.text() 
+                ?: return@mapNotNull null
+                
+            val href = fixUrl(linkElement.attr("href"))
+            val poster = card.select("img").attr("src").ifEmpty {
+                card.select("img[data-src]").attr("data-src")
+            }
             
             val isDub = title.contains("(ITA)") || href.contains("-ITA")
             
             newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
-                this.posterUrl = fixUrlNull(poster)
+                this.posterUrl = fixUrlNull(poster.takeIf { it.isNotBlank() })
                 this.type = TvType.Anime
                 addDubStatus(isDub)
             }
