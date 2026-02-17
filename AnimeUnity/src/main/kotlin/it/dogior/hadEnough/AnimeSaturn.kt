@@ -4,11 +4,6 @@ import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
-import com.lagradost.cloudstream3.DubStatus
-import com.lagradost.cloudstream3.addDubStatus
-import com.lagradost.cloudstream3.addEpisodes
-import com.lagradost.cloudstream3.newAnimeLoadResponse
-import com.lagradost.cloudstream3.newAnimeSearchResponse
 import it.dogior.hadEnough.AnimeSaturnExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -39,9 +34,9 @@ class AnimeSaturn : MainAPI() {
         val doc = app.get(url, timeout = timeout).document
         
         val items = when {
-            request.data.contains("newest") -> extractNewestAnime(doc)
-            request.data.contains("toplist") -> extractTopAnime(doc)
-            else -> extractAnimeList(doc)
+            request.data.contains("newest") -> extractNewestAnime(doc).filterNotNull()
+            request.data.contains("toplist") -> extractTopAnime(doc).filterNotNull()
+            else -> extractAnimeList(doc).filterNotNull()
         }
         
         val hasNext = doc.select("a:contains(Successivo)").isNotEmpty() ||
@@ -53,7 +48,7 @@ class AnimeSaturn : MainAPI() {
         )
     }
 
-    private fun extractNewestAnime(doc: Document): List<SearchResponse> {
+    private fun extractNewestAnime(doc: Document): List<SearchResponse?> {
         return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
             val linkElement = card.select("a").first() ?: return@mapNotNull null
             val title = card.select("span").text().ifEmpty { 
@@ -64,8 +59,7 @@ class AnimeSaturn : MainAPI() {
             
             val isDub = title.contains("(ITA)") || href.contains("-ITA")
             
-            // Restituisce SearchResponse, NON AnimeSearchResponse
-            newSearchResponse(title.replace(" (ITA)", ""), href) {
+            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
                 addDubStatus(isDub)
@@ -73,7 +67,7 @@ class AnimeSaturn : MainAPI() {
         }
     }
 
-    private fun extractTopAnime(doc: Document): List<SearchResponse> {
+    private fun extractTopAnime(doc: Document): List<SearchResponse?> {
         return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
             val linkElement = card.select("a").first() ?: return@mapNotNull null
             val title = card.select("span").text()
@@ -82,7 +76,7 @@ class AnimeSaturn : MainAPI() {
             
             val isDub = title.contains("(ITA)") || href.contains("-ITA")
             
-            newSearchResponse(title.replace(" (ITA)", ""), href) {
+            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
                 addDubStatus(isDub)
@@ -90,7 +84,7 @@ class AnimeSaturn : MainAPI() {
         }
     }
 
-    private fun extractAnimeList(doc: Document): List<SearchResponse> {
+    private fun extractAnimeList(doc: Document): List<SearchResponse?> {
         return doc.select(".anime-card-newanime.main-anime-card").mapNotNull { card ->
             val linkElement = card.select("a").first() ?: return@mapNotNull null
             val title = card.select("span").text()
@@ -99,7 +93,7 @@ class AnimeSaturn : MainAPI() {
             
             val isDub = title.contains("(ITA)") || href.contains("-ITA")
             
-            newSearchResponse(title.replace(" (ITA)", ""), href) {
+            newAnimeSearchResponse(title.replace(" (ITA)", ""), href) {
                 this.posterUrl = fixUrlNull(poster)
                 this.type = TvType.Anime
                 addDubStatus(isDub)
@@ -123,7 +117,7 @@ class AnimeSaturn : MainAPI() {
                 
                 val isDub = name.contains("(ITA)") || link.contains("-ITA")
                 
-                newSearchResponse(name.replace(" (ITA)", ""), "/anime/$link") {
+                newAnimeSearchResponse(name.replace(" (ITA)", ""), "/anime/$link") {
                     this.posterUrl = fixUrlNull(image)
                     this.type = TvType.Anime
                     addDubStatus(isDub)
