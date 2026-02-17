@@ -3,12 +3,12 @@ package it.dogior.hadEnough
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.fixUrl
-import org.jsoup.Jsoup
+import com.lagradost.cloudstream3.SubtitleFile
 
 class AnimeSaturnExtractor : ExtractorApi() {
     override val name = "AnimeSaturn"
     override val mainUrl = "https://www.animesaturn.cx"
-    override val requiresReferer = false
+    override val requiresReferer = true
 
     override suspend fun getUrl(
         url: String,
