@@ -5,7 +5,6 @@ import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import it.dogior.hadEnough.AnimeSaturnExtractor
-import it.dogior.hadEnough.AnimeSaturnAltExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.util.Locale
