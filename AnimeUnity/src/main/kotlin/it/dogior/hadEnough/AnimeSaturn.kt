@@ -255,7 +255,7 @@ class AnimeSaturn : MainAPI() {
         }
     }
 
-    private suspend fun extractEpisodes(doc: Document, poster: String?): List<Episode> {
+    private fun extractEpisodes(doc: Document, poster: String?): List<Episode> {
         val episodes = mutableListOf<Episode>()
         
         doc.select(".btn-group.episodes-button a[href*='/ep/']").forEach { episodeLink ->
@@ -263,40 +263,16 @@ class AnimeSaturn : MainAPI() {
             val epText = episodeLink.text().trim()
             val epNum = Regex("\\d+").find(epText)?.value?.toIntOrNull() ?: 1
             
-            try {
-                val episodePage = app.get(epUrl, timeout = timeout).document
-                
-                // Salva i link come array di stringhe
-                val links = mutableListOf<String>()
-                
-                // Aggiungi link primario
-                val primaryLink = episodePage.select("a[href*='/watch?file=']:not([href*='&s=alt'])").attr("href")
-                if (primaryLink.isNotBlank()) {
-                    links.add(fixUrl(primaryLink))
+            episodes.add(
+                newEpisode(epUrl) {
+                    this.name = epText
+                    this.episode = epNum
+                    this.posterUrl = fixUrlNull(poster)
                 }
-                
-                // Aggiungi link alternativo
-                val altLink = episodePage.select("a[href*='&s=alt']").attr("href")
-                if (altLink.isNotBlank()) {
-                    links.add(fixUrl(altLink))
-                }
-                
-                if (links.isNotEmpty()) {
-                    episodes.add(
-                        newEpisode(links) {
-                            this.name = epText
-                            this.episode = epNum
-                            this.posterUrl = fixUrlNull(poster)
-                        }
-                    )
-                }
-                
-            } catch (e: Exception) {
-                // Fallback
-            }
+            )
         }
         
-        return episodes.distinctBy { it.data }.sortedBy { it.episode }
+        return episodes.distinctBy { it.data }
     }
 
     override suspend fun loadLinks(
@@ -305,22 +281,7 @@ class AnimeSaturn : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        try {
-            val links = parseJson<List<String>>(data)
-            
-            links.forEach { link ->
-                when {
-                    link.contains("&s=alt") -> {
-                        AnimeSaturnAltExtractor().getUrl(link, mainUrl, subtitleCallback, callback)
-                    }
-                    else -> {
-                        AnimeSaturnExtractor().getUrl(link, mainUrl, subtitleCallback, callback)
-                    }
-                }
-            }
-            return true
-        } catch (e: Exception) {
-            return false
-        }
+        AnimeSaturnExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
+        return true
     }
 }
