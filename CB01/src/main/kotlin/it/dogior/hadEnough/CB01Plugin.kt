@@ -7,7 +7,6 @@ import android.content.Context
 @CloudstreamPlugin
 class IlGenioDelloStreamingPlugin: Plugin() {
     override fun load(context: Context) {
-        // Registra il provider principale
         registerMainAPI(IlGenioDelloStreaming())
     }
 }
