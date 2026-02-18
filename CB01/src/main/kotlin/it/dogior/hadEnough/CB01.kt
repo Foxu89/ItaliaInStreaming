@@ -42,7 +42,7 @@ class IlGenioDelloStreaming : MainAPI() {
             if (seriesItems.isNotEmpty()) homePages.add(HomePageList("Ultime Serie TV", seriesItems))
         }
 
-        return HomePageResponse(homePages)
+        return newHomePageResponse(homePages)
     }
 
     // --- Funzione helper per convertire una card in SearchResponse ---
@@ -57,15 +57,11 @@ class IlGenioDelloStreaming : MainAPI() {
 
         val tvType = if (isSeries) TvType.TvSeries else TvType.Movie
 
-        return MovieSearchResponse(
-            name = title,
-            url = href,
-            apiName = this@IlGenioDelloStreaming.name,
-            posterUrl = poster,
-            quality = quality?.let { Qualities.fromString(it) },
-            year = year,
-            type = tvType
-        )
+        return newMovieSearchResponse(title, href, tvType) {
+            this.posterUrl = poster
+            this.year = year
+            quality?.let { this.quality = newQualityEnum(it) }
+        }
     }
 
     // --- PAGINA DETTAGLIO ---
@@ -87,29 +83,22 @@ class IlGenioDelloStreaming : MainAPI() {
 
         return if (isSeries) {
             // --- LOGICA PER SERIE TV (da implementare con un esempio reale) ---
-            TvSeriesLoadResponse(
-                name = title,
-                url = url,
-                apiName = this.name,
-                posterUrl = poster,
-                plot = description,
-                tags = tags,
-                year = year,
-                rating = rating
-                // episodes = TODO (dobbiamo parsare le stagioni e gli episodi)
-            )
+            newTvSeriesLoadResponse(title, url, TvType.TvSeries) {
+                this.posterUrl = poster
+                this.plot = description
+                this.tags = tags
+                this.year = year
+                this.rating = rating?.toInt()
+            }
         } else {
-            MovieLoadResponse(
-                name = title,
-                url = url,
-                apiName = this.name,
-                posterUrl = poster,
-                plot = description,
-                tags = tags,
-                year = year,
-                rating = rating,
-                duration = duration
-            )
+            newMovieLoadResponse(title, url, TvType.Movie, url) {
+                this.posterUrl = poster
+                this.plot = description
+                this.tags = tags
+                this.year = year
+                this.rating = rating?.toInt()
+                this.duration = duration
+            }
         }
     }
 
@@ -153,5 +142,17 @@ class IlGenioDelloStreaming : MainAPI() {
     // --- Funzione helper per fissare gli URL (es. /path -> https://sito.com/path) ---
     private fun fixUrl(url: String): String {
         return if (url.startsWith("http")) url else mainUrl + url
+    }
+
+    // --- Helper per convertire stringhe qualità in SearchQuality ---
+    private fun newQualityEnum(quality: String): SearchQuality {
+        return when {
+            quality.contains("4K", ignoreCase = true) -> SearchQuality.UHD_4K
+            quality.contains("HD", ignoreCase = true) -> SearchQuality.HD
+            quality.contains("SD", ignoreCase = true) -> SearchQuality.SD
+            quality.contains("CAM", ignoreCase = true) -> SearchQuality.CAM
+            quality.contains("TS", ignoreCase = true) -> SearchQuality.TS
+            else -> SearchQuality.Unknown
+        }
     }
 }
