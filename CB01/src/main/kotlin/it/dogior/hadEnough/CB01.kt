@@ -12,11 +12,9 @@ class IlGenioDelloStreaming : MainAPI() {
     override val hasSearchSupport = true
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
-    override val headers: Map<String, String> = mapOf(
-        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
-    )
+    // IMPORTANTE: NON mettere 'override' qui se non richiesto
+    var hasSearchSupport = true
+    var headers: Map<String, String>? = null
 
     // --- PAGINA PRINCIPALE ---
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -35,21 +33,19 @@ class IlGenioDelloStreaming : MainAPI() {
             if (items.isNotEmpty()) homePages.add(HomePageList("Ultimi inseriti", items))
         }
 
-        // Sezione "Ultime Serie tv Aggiornate" (cerca il badge episodio)
+        // Sezione "Ultime Serie tv Aggiornate"
         document.select("div.items").firstOrNull()?.let { section ->
-            // Filtra gli articoli che hanno lo span con classe 'se_num' (indicatore di episodio)
             val seriesItems = section.select("article.item.movies:has(span.se_num)").mapNotNull { it.toSearchResponse(isSeries = true) }
             if (seriesItems.isNotEmpty()) homePages.add(HomePageList("Ultime Serie TV", seriesItems))
         }
 
-        return newHomePageResponse(homePages)
+        return HomePageResponse(homePages)
     }
 
     // --- Funzione helper per convertire una card in SearchResponse ---
     private fun Element.toSearchResponse(isSeries: Boolean = false): SearchResponse? {
-        // Cerca il link principale nella card (di solito dentro div.poster a)
         val linkElement = this.selectFirst("div.poster a") ?: return null
-        val href = linkElement.attr("href")
+        val href = fixUrl(linkElement.attr("href"))
         val title = this.selectFirst("div.data h3 a")?.text() ?: return null
         val poster = this.selectFirst("div.poster img")?.attr("src")?.let { fixUrl(it) }
         val quality = this.selectFirst("span.quality")?.text()
@@ -57,48 +53,60 @@ class IlGenioDelloStreaming : MainAPI() {
 
         val tvType = if (isSeries) TvType.TvSeries else TvType.Movie
 
-        return newMovieSearchResponse(title, href, tvType) {
-            this.posterUrl = poster
-            this.year = year
-            quality?.let { this.quality = newQualityEnum(it) }
-        }
+        return MovieSearchResponse(
+            name = title,
+            url = href,
+            apiName = this@IlGenioDelloStreaming.name,
+            type = tvType,
+            posterUrl = poster,
+            year = year,
+            quality = quality?.let { Qualities.fromString(it) }
+        )
     }
 
     // --- PAGINA DETTAGLIO ---
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
 
-        // Estrai titolo (pulito dalla parola "streaming")
-        val title = document.selectFirst("div.data h1")?.text()?.replace(" streaming", "") ?: return LoadResponse.Error("Title not found")
+        val title = document.selectFirst("div.data h1")?.text()?.replace(" streaming", "") 
+            ?: return LoadResponse.Error("Title not found")
         val poster = document.selectFirst("div.poster img")?.attr("src")?.let { fixUrl(it) }
         val description = document.selectFirst("div.wp-content p")?.text()
         val year = document.selectFirst("span.date")?.text()?.substringAfterLast(" ")?.toIntOrNull()
-        val rating = document.selectFirst("span.dt_rating_vgs")?.text()?.toFloatOrNull()
+        val rating = document.selectFirst("span.dt_rating_vgs")?.text()?.toFloatOrNull()?.toInt()
         val duration = document.selectFirst("span.runtime")?.text()?.replace(" Min.", "")?.toIntOrNull()
         val tags = document.select("div.sgeneros a").map { it.text() }
 
-        // --- Decidi se è Film o Serie TV ---
-        // Controlliamo se nella pagina c'è un selettore di episodi (es. un tag <select> per le stagioni)
+        // Verifica se è una serie TV
         val isSeries = document.selectFirst("select#season-select, div.episode-list") != null
 
         return if (isSeries) {
-            // --- LOGICA PER SERIE TV (da implementare con un esempio reale) ---
-            newTvSeriesLoadResponse(title, url, TvType.TvSeries) {
-                this.posterUrl = poster
-                this.plot = description
-                this.tags = tags
-                this.year = year
-                this.rating = rating?.toInt()
-            }
+            TvSeriesLoadResponse(
+                name = title,
+                url = url,
+                apiName = this.name,
+                type = TvType.TvSeries,
+                episodes = emptyList(), // TODO: Implementare episodi
+                posterUrl = poster,
+                plot = description,
+                tags = tags,
+                year = year,
+                rating = rating
+            )
         } else {
-            newMovieLoadResponse(title, url, TvType.Movie, url) {
-                this.posterUrl = poster
-                this.plot = description
-                this.tags = tags
-                this.year = year
-                this.rating = rating?.toInt()
-                this.duration = duration
-            }
+            MovieLoadResponse(
+                name = title,
+                url = url,
+                apiName = this.name,
+                type = TvType.Movie,
+                dataUrl = url,
+                posterUrl = poster,
+                plot = description,
+                tags = tags,
+                year = year,
+                rating = rating,
+                duration = duration
+            )
         }
     }
 
@@ -111,20 +119,17 @@ class IlGenioDelloStreaming : MainAPI() {
     ): Boolean {
         val document = app.get(data).document
 
-        // --- 1. Estrai il player principale (iframe) ---
+        // Player principale
         val iframeSrc = document.selectFirst("div.player-container iframe")?.attr("src")
         if (!iframeSrc.isNullOrEmpty()) {
             loadExtractor(iframeSrc, data, subtitleCallback, callback)
         }
 
-        // --- 2. Estrai i server alternativi dal menù a tendina ---
-        // I link sono dentro <ul class="options-list">, con attributo 'data-link'
+        // Server alternativi
         document.select("ul.options-list a[data-link]").forEach { element ->
             val linkPath = element.attr("data-link")
-            val serverName = element.text()
             if (linkPath.isNotEmpty()) {
-                val fullUrl = fixUrl(linkPath).toString()
-                // Usa l'estrattore generico. Se il link è un iframe o un video diretto, lo gestirà.
+                val fullUrl = if (linkPath.startsWith("http")) linkPath else mainUrl + linkPath
                 loadExtractor(fullUrl, data, subtitleCallback, callback)
             }
         }
@@ -132,27 +137,34 @@ class IlGenioDelloStreaming : MainAPI() {
         return true
     }
 
-    // --- RICERCA (da implementare) ---
+    // --- RICERCA ---
     override suspend fun search(query: String): List<SearchResponse> {
-        // TODO: Implementare la ricerca quando avremo un esempio di URL di ricerca.
-        // Per ora restituiamo lista vuota.
-        return emptyList()
-    }
-
-    // --- Funzione helper per fissare gli URL (es. /path -> https://sito.com/path) ---
-    private fun fixUrl(url: String): String {
-        return if (url.startsWith("http")) url else mainUrl + url
-    }
-
-    // --- Helper per convertire stringhe qualità in SearchQuality ---
-    private fun newQualityEnum(quality: String): SearchQuality {
-        return when {
-            quality.contains("4K", ignoreCase = true) -> SearchQuality.UHD_4K
-            quality.contains("HD", ignoreCase = true) -> SearchQuality.HD
-            quality.contains("SD", ignoreCase = true) -> SearchQuality.SD
-            quality.contains("CAM", ignoreCase = true) -> SearchQuality.CAM
-            quality.contains("TS", ignoreCase = true) -> SearchQuality.TS
-            else -> SearchQuality.Unknown
+        if (query.isBlank()) return emptyList()
+        
+        val searchUrl = "$mainUrl/index.php?do=search&subaction=search&story=${query.urlEncoded()}"
+        val document = app.get(searchUrl).document
+        
+        return document.select("article.item.movies").mapNotNull { element ->
+            val link = element.selectFirst("div.poster a")?.attr("href") ?: return@mapNotNull null
+            val title = element.selectFirst("div.data h3 a")?.text() ?: return@mapNotNull null
+            val poster = element.selectFirst("div.poster img")?.attr("src")?.let { fixUrl(it) }
+            val quality = element.selectFirst("span.quality")?.text()
+            val year = element.selectFirst("div.data span")?.text()?.toIntOrNull()
+            val isSeries = element.selectFirst("span.se_num") != null
+            
+            MovieSearchResponse(
+                name = title,
+                url = fixUrl(link),
+                apiName = this.name,
+                type = if (isSeries) TvType.TvSeries else TvType.Movie,
+                posterUrl = poster,
+                year = year,
+                quality = quality?.let { Qualities.fromString(it) }
+            )
         }
+    }
+
+    private fun fixUrl(url: String): String {
+        return if (url.startsWith("http")) url else "https://il-geniodellostreaming.cyou$url"
     }
 }
