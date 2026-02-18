@@ -5,8 +5,9 @@ import com.lagradost.cloudstream3.plugins.Plugin
 import android.content.Context
 
 @CloudstreamPlugin
-class CB01Plugin: Plugin() {
+class IlGenioDelloStreamingPlugin: Plugin() {
     override fun load(context: Context) {
-        registerMainAPI(CB01())
+        // Registra il provider principale
+        registerMainAPI(IlGenioDelloStreaming())
     }
 }
