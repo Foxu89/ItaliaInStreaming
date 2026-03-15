@@ -25,28 +25,10 @@
                 android:layout_rowWeight="1"
                 android:layout_marginTop="20dp"
                 android:layout_marginBottom="5dp"
-                android:text="SyncStream Settings"
+                android:text="Impostazioni di SyncStream"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <ImageView
-                    android:id="@+id/save"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
-                    android:layout_marginBottom="5dp"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/config_img"
-                    android:nextFocusUp="@id/save" />
-
-            </LinearLayout>
-
         </LinearLayout>
 
         <ImageView
@@ -59,131 +41,34 @@
             android:layout_marginBottom="10dp"
             android:layout_marginTop="10dp" />
 
-        <!-- RIMOSSA COMPLETAMENTE la sezione "Configure Meta Providers" -->
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical">
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:text="Configure Extension Sections"
+                android:layout_weight="1"
+                android:id="@+id/login_text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <ImageView
-                    android:id="@+id/config_img"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/reorder_img"
-                    android:nextFocusUp="@id/save" />  <!-- Cambiato: ora punta a save -->
-
-            </LinearLayout>
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp">
-
-            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:text="Reorder Sections"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="right">
+                android:gravity="center_vertical|end">
 
                 <ImageView
-                    android:id="@+id/reorder_img"
+                    android:id="@+id/button_login"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/watch_sync_img"
-                    android:nextFocusUp="@id/config_img" />
-
-            </LinearLayout>
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:text="Cross Device Watch Sync"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <ImageView
-                    android:id="@+id/watch_sync_img"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/guide_icon"
-                    android:nextFocusUp="@id/reorder_img" />
-
-            </LinearLayout>
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:text="Setup Guide -->"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <ImageView
-                    android:id="@+id/guide_icon"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/delete_img"
-                    android:nextFocusUp="@id/watch_sync_img" />
+                    android:focusable="true" 
+                    android:nextFocusDown="@id/button_group"
+                    android:nextFocusUp="@id/button_login" />
 
             </LinearLayout>
 
@@ -203,32 +88,30 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:gravity="center_vertical">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:text="Reset SyncStream"
+                android:layout_weight="1"
+                android:id="@+id/group_text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="right">
+                android:gravity="center_vertical|end">
 
-                <TextView
-                    android:id="@+id/delete_img"
+                <ImageView
+                    android:id="@+id/button_group"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:padding="10dp"
+                    android:padding="5dp"
                     android:focusable="true"
-                    android:text="Reset"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:nextFocusDown="@id/save"
-                    android:nextFocusUp="@id/guide_icon" />
+                    android:nextFocusDown="@id/button_group"
+                    android:nextFocusUp="@id/button_login" />
 
             </LinearLayout>
 

@@ -17,51 +17,24 @@ import androidx.annotation.RequiresApi
 import androidx.core.view.isVisible
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
-import com.lagradost.api.Log
-
-private const val ARG_PARAM1 = "param1"
-private const val ARG_PARAM2 = "param2"
 
 class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
-    private var param1: String? = null
-    private var param2: String? = null
     private val sm = UltimaStorageManager
     private val res: Resources = plugin.resources ?: throw Exception("Unable to read resources")
-    private val extensions = sm.fetchExtensions().also {
-        Log.d("UltimaDebug", "Fetched ${it.size} extensions.")
-        it.forEach { ext ->
-            Log.d("UltimaDebug", "→ Extension: ${ext.name}")
-            ext.sections?.forEach { sec ->
-                Log.d("UltimaDebug", " - Section: ${sec.name}, enabled=${sec.enabled}")
-            }
-        }
-    }
+    private val extensions = sm.fetchExtensions()
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        arguments?.let {
-            param1 = it.getString(ARG_PARAM1)
-            param2 = it.getString(ARG_PARAM2)
-        }
-    }
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState) }
 
-    // #region - Utility functions
     @SuppressLint("DiscouragedApi")
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
         val id = res.getIdentifier(name, "layout", "it.dogior.hadEnough") 
-        val layout = res.getLayout(id)
-        return inflater.inflate(layout, container, false)
+        return inflater.inflate(res.getLayout(id), container, false)
     }
 
     @SuppressLint("UseCompatLoadingForDrawables")
     private fun getDrawable(name: String): Drawable {
         val id = res.getIdentifier(name, "drawable", "it.dogior.hadEnough") 
         return res.getDrawable(id, null) ?: throw Exception("Drawable $name not found")
-    }
-
-    private fun getString(name: String): String {
-        val id = res.getIdentifier(name, "string", "it.dogior.hadEnough") 
-        return res.getString(id)
     }
 
     private fun <T : View> View.findView(name: String): T {
@@ -73,76 +46,47 @@ class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFra
         val outlineId = res.getIdentifier("outline", "drawable", "it.dogior.hadEnough") 
         this.background = res.getDrawable(outlineId, null)
     }
-    // #endregion
 
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val settings = getLayout("configure_extensions", inflater, container)
 
-        // Save button
         val saveBtn = settings.findView<ImageView>("save")
         saveBtn.setImageDrawable(getDrawable("save_icon"))
         saveBtn.makeTvCompatible()
         saveBtn.setOnClickListener {
-            // Debug log all selected sections
-            extensions.forEach { ext ->
-                Log.d("UltimaDebug", "Saving Extension: ${ext.name}")
-                ext.sections?.forEach { sec ->
-                    Log.d("UltimaDebug", "-- Section: ${sec.name} enabled=${sec.enabled}")
-                }
-            }
-
             sm.currentExtensions = extensions
             plugin.reload()
-            showToast("Saved")
+            showToast("Salvato")
             dismiss()
         }
 
-        // Toggle switch: Show extension name on home
         val extNameOnHomeBtn = settings.findView<Switch>("ext_name_on_home_toggle")
         extNameOnHomeBtn.makeTvCompatible()
         extNameOnHomeBtn.isChecked = sm.extNameOnHome
-        extNameOnHomeBtn.setOnClickListener {
-            sm.extNameOnHome = extNameOnHomeBtn.isChecked
-        }
+        extNameOnHomeBtn.setOnClickListener { sm.extNameOnHome = extNameOnHomeBtn.isChecked }
 
-        // Extensions list
         val extensionsListLayout = settings.findView<LinearLayout>("extensions_list")
         extensions.forEach { extension ->
-            val extensionLayoutView = buildExtensionView(extension, inflater, container)
-            extensionsListLayout.addView(extensionLayoutView)
+            extensionsListLayout.addView(buildExtensionView(extension, inflater, container))
         }
 
         return settings
     }
 
-    // Create one full view for each extension
     private fun buildExtensionView(
         extension: UltimaUtils.ExtensionInfo,
         inflater: LayoutInflater,
         container: ViewGroup?
     ): View {
-
-        fun buildSectionView(
-            section: UltimaUtils.SectionInfo,
-            inflater: LayoutInflater,
-            container: ViewGroup?
-        ): View {
+        fun buildSectionView(section: UltimaUtils.SectionInfo, inflater: LayoutInflater, container: ViewGroup?): View {
             val sectionView = getLayout("list_section_item", inflater, container)
             val checkBox = sectionView.findView<CheckBox>("section_checkbox")
-
             checkBox.text = section.name
             checkBox.makeTvCompatible()
-
-            // Auto-enable sections by default if not already toggled
             if (section.enabled == null) section.enabled = true
-
             checkBox.isChecked = section.enabled == true
-            checkBox.setOnCheckedChangeListener { _, isChecked ->
-                section.enabled = isChecked
-                Log.d("UltimaDebug", "Section '${section.name}' in '${extension.name}' set to $isChecked")
-            }
-
+            checkBox.setOnCheckedChangeListener { _, isChecked -> section.enabled = isChecked }
             return sectionView
         }
 
@@ -154,7 +98,6 @@ class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFra
 
         expandImage.setImageDrawable(getDrawable("triangle"))
         expandImage.rotation = 90f
-
         extensionNameBtn.text = extension.name
         extensionDataBtn.makeTvCompatible()
         extensionDataBtn.setOnClickListener {
@@ -163,10 +106,8 @@ class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFra
             expandImage.rotation = if (isVisible) 90f else 180f
         }
 
-        // Add sections
         extension.sections?.forEach { section ->
-            val sectionView = buildSectionView(section, inflater, container)
-            childList.addView(sectionView)
+            childList.addView(buildSectionView(section, inflater, container))
         }
 
         return extView
@@ -176,11 +117,7 @@ class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFra
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {}
 
     override fun onDetach() {
-        val settings = UltimaSettings(plugin)
-        settings.show(
-            activity?.supportFragmentManager ?: throw Exception("Unable to open configure settings"),
-            ""
-        )
+        UltimaSettings(plugin).show(activity?.supportFragmentManager ?: throw Exception("Impossibile aprire le impostazioni"), "")
         super.onDetach()
     }
 }

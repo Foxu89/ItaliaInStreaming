@@ -14,12 +14,7 @@ class UltimaPlugin : Plugin() {
     
     override fun load(context: Context) {
         activity = context as AppCompatActivity
-        
-        // Registra solo l'API principale Ultima
         registerMainAPI(Ultima(this))
-
-        // NOTA: Ho rimosso completamente il blocco dei meta provider
-        // perché hai detto di aver eliminato quei file
         
         openSettings = { ctx ->
             val act = ctx as? AppCompatActivity
@@ -34,8 +29,6 @@ class UltimaPlugin : Plugin() {
 
     fun reload() {
         val pluginData = PluginManager.getPluginsOnline().find { it.internalName.contains("Ultima") }
-        if (pluginData == null) {
-            afterPluginsLoadedEvent.invoke(true)
-        }
+        if (pluginData == null) afterPluginsLoadedEvent.invoke(true)
     }
 }

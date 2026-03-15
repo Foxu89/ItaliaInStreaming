@@ -15,7 +15,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="GitHub token"
+            android:text="Token Github"
             android:textSize="18sp" />
 
         <EditText
@@ -29,7 +29,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Project number"
+            android:text="Numero del progetto"
             android:textSize="18sp" />
 
         <EditText
@@ -38,20 +38,25 @@
             android:layout_width="match_parent"
             android:padding="5dp"
             android:layout_marginBottom="10dp"
-            android:inputType="text" />
+            android:inputType="number" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Device name"
-            android:textSize="18sp" />
-
-        <EditText
-            android:id="@+id/device_name"
-            android:layout_height="wrap_content"
+        <Switch
+            android:id="@+id/backup_device"
             android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="17sp"
             android:padding="5dp"
-            android:inputType="text" />
+            android:layout_marginBottom="10dp"
+            android:focusable="true" />
+
+        <Switch
+            android:id="@+id/restore_device"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="17sp"
+            android:padding="5dp"
+            android:layout_marginBottom="10dp"
+            android:focusable="true" />
 
     </LinearLayout>
 

@@ -18,6 +18,7 @@ include(
     "Huhu",
     "IlGenioDelloStreaming",
 //    "OnlineSerieTV",
+    "SectionOrganizer",
     "StreamingCommunity",
     "Stremio",
     "SyncStream",
