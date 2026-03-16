@@ -43,7 +43,7 @@ lines.append(f"Salute repository: {salute_emoji}{salute_percent}%")
 lines.append(f"Plugin funzionanti: {funzionanti}/{total}")
 lines.append("")
 
-# Link installa
+# Link installazione
 install_url = f"https://t.me/c/1978830401/1000"
 lines.append(f"📦 INSTALLA: [CLICCA QUI]({install_url})")
 
