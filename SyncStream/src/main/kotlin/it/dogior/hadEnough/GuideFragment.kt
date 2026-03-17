@@ -17,12 +17,6 @@ import kotlinx.coroutines.*
 class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     private val guideUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/guide/README_SyncStream.md"
     
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // Imposta lo stile per avere sfondo opaco
-        setStyle(STYLE_NORMAL, com.google.android.material.R.style.Theme_Material3_BottomSheetDialog)
-    }
-    
     private fun <T : View> View.findView(name: String): T {
         val id = plugin.resources!!.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
         return this.findViewById(id)
@@ -39,8 +33,6 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Forza lo sfondo opaco
-        dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
         return try {
             getLayout("guide_fragment", inflater, container)
         } catch (e: Exception) {
@@ -89,17 +81,32 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     
     private fun parseMarkdown(markdown: String): CharSequence {
         var html = markdown
-            .replace(Regex("^# (.*?)$", setOf(RegexOption.MULTILINE)), "<h1 style='margin:8px 0 4px 0;color:#FFFFFF;'>$1</h1>")
-            .replace(Regex("^## (.*?)$", setOf(RegexOption.MULTILINE)), "<h2 style='margin:6px 0 3px 0;color:#FFFFFF;'>$1</h2>")
-            .replace(Regex("^### (.*?)$", setOf(RegexOption.MULTILINE)), "<h3 style='margin:4px 0 2px 0;color:#FFFFFF;'>$1</h3>")
+            // Headers con margini ridotti
+            .replace(Regex("^# (.*?)$", setOf(RegexOption.MULTILINE)), "<h1 style='margin:8px 0 4px 0;'>$1</h1>")
+            .replace(Regex("^## (.*?)$", setOf(RegexOption.MULTILINE)), "<h2 style='margin:6px 0 3px 0;'>$1</h2>")
+            .replace(Regex("^### (.*?)$", setOf(RegexOption.MULTILINE)), "<h3 style='margin:4px 0 2px 0;'>$1</h3>")
+            
+            // Grassetto e corsivo
             .replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
             .replace(Regex("\\*(.*?)\\*"), "<i>$1</i>")
+            
+            // Link
             .replace(Regex("\\[(.*?)\\]\\((.*?)\\)"), "<a href=\"$2\">$1</a>")
+            
+            // Elenchi
             .replace(Regex("^- (.*?)$", setOf(RegexOption.MULTILINE)), "• $1<br/>")
             .replace(Regex("^\\d+\\. (.*?)$", setOf(RegexOption.MULTILINE)), "$1<br/>")
+            
+            // Citazioni
             .replace(Regex("^> (.*?)$", setOf(RegexOption.MULTILINE)), "<i>$1</i><br/>")
-            .replace(Regex("^---$", setOf(RegexOption.MULTILINE)), "<hr style='margin:8px 0;border-color:#3D3D3D;'/>")
+            
+            // Linee divisorie
+            .replace(Regex("^---$", setOf(RegexOption.MULTILINE)), "<hr style='margin:8px 0;'/>")
+            
+            // Paragrafi (doppio a capo)
             .replace(Regex("\\n\\n+"), "<br/><br/>")
+            
+            // Singolo a capo diventa spazio, non nuova riga
             .replace("\n", " ")
         
         return HtmlCompat.fromHtml(html, HtmlCompat.FROM_HTML_MODE_LEGACY)
