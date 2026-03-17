@@ -5,7 +5,7 @@ rootProject.name = "CloudstreamPlugins"
 
 // Plugins are included like this
 include(
-    "AltaDefinizione",
+/**    "AltaDefinizione",
     "AnimeSaturn",
     "AnimeUnity",
     "AnimeWorld",
@@ -20,10 +20,10 @@ include(
 //    "OnlineSerieTV",
     "SectionOrganizer",
     "StreamingCommunity",
-    "Stremio",
+    "Stremio",**/
     "SyncStream",
-    "TV",
+/**    "TV",
 //    "ToonItalia",
     "Torrentio"
-//    "YouTube"
+//    "YouTube"**/
 )
