@@ -81,17 +81,33 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     
     private fun parseMarkdown(markdown: String): CharSequence {
         var html = markdown
-            .replace(Regex("^# (.*?)$", setOf(RegexOption.MULTILINE)), "<h1>$1</h1>")
-            .replace(Regex("^## (.*?)$", setOf(RegexOption.MULTILINE)), "<h2>$1</h2>")
-            .replace(Regex("^### (.*?)$", setOf(RegexOption.MULTILINE)), "<h3>$1</h3>")
+            // Headers con margini ridotti
+            .replace(Regex("^# (.*?)$", setOf(RegexOption.MULTILINE)), "<h1 style='margin:8px 0 4px 0;'>$1</h1>")
+            .replace(Regex("^## (.*?)$", setOf(RegexOption.MULTILINE)), "<h2 style='margin:6px 0 3px 0;'>$1</h2>")
+            .replace(Regex("^### (.*?)$", setOf(RegexOption.MULTILINE)), "<h3 style='margin:4px 0 2px 0;'>$1</h3>")
+            
+            // Grassetto e corsivo
             .replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
             .replace(Regex("\\*(.*?)\\*"), "<i>$1</i>")
+            
+            // Link
             .replace(Regex("\\[(.*?)\\]\\((.*?)\\)"), "<a href=\"$2\">$1</a>")
+            
+            // Elenchi
             .replace(Regex("^- (.*?)$", setOf(RegexOption.MULTILINE)), "• $1<br/>")
             .replace(Regex("^\\d+\\. (.*?)$", setOf(RegexOption.MULTILINE)), "$1<br/>")
+            
+            // Citazioni
             .replace(Regex("^> (.*?)$", setOf(RegexOption.MULTILINE)), "<i>$1</i><br/>")
-            .replace(Regex("^---$", setOf(RegexOption.MULTILINE)), "<hr/>")
-            .replace("\n", "<br/>")
+            
+            // Linee divisorie
+            .replace(Regex("^---$", setOf(RegexOption.MULTILINE)), "<hr style='margin:8px 0;'/>")
+            
+            // Paragrafi (doppio a capo)
+            .replace(Regex("\\n\\n+"), "<br/><br/>")
+            
+            // Singolo a capo diventa spazio, non nuova riga
+            .replace("\n", " ")
         
         return HtmlCompat.fromHtml(html, HtmlCompat.FROM_HTML_MODE_LEGACY)
     }
