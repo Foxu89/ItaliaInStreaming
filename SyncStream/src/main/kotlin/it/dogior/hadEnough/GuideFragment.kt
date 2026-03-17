@@ -10,7 +10,6 @@ import android.widget.ImageButton
 import android.widget.TextView
 import androidx.core.text.HtmlCompat
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.plugins.Plugin
 import kotlinx.coroutines.*
@@ -23,11 +22,11 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Trova l'ID del layout usando il plugin
+        // Trova l'ID del layout usando il plugin - QUESTO È IL METODO CORRETTO
         val layoutId = plugin.resources?.getIdentifier(
             "guide_fragment", 
             "layout", 
-            BuildConfig.LIBRARY_PACKAGE_NAME
+            plugin.context?.packageName ?: "it.dogior.hadEnough"
         ) ?: return null
         
         return inflater.inflate(layoutId, container, false)
@@ -36,7 +35,7 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        // Trova le view usando gli ID
+        // Trova le view usando getIdentifier
         val closeButton = findView<ImageButton>(view, "close_button")
         val contentText = findView<TextView>(view, "guide_content")
         val githubButton = findView<Button>(view, "github_button")
@@ -71,7 +70,8 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     }
     
     private fun <T : View> findView(root: View, name: String): T? {
-        val id = plugin.resources?.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val packageName = plugin.context?.packageName ?: "it.dogior.hadEnough"
+        val id = plugin.resources?.getIdentifier(name, "id", packageName)
         return if (id != null && id != 0) root.findViewById(id) else null
     }
     
