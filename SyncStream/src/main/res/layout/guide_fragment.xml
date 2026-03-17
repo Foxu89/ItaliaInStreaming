@@ -1,73 +1,94 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#1E1E1E">
+    android:background="?attr/primaryBlackBackground">
 
-    <!-- Header con titolo e bottone chiudi -->
-    <RelativeLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:padding="8dp"
-        android:background="#2D2D2D">
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:background="?attr/primaryBlackBackground"
+        android:gravity="center_vertical">
 
         <TextView
             android:id="@+id/guide_title"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
-            android:layout_alignParentStart="true"
+            android:layout_weight="1"
             android:text="Guida SyncStream"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:textColor="?attr/textColor"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/google_sans" />
 
         <ImageButton
             android:id="@+id/close_button"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:layout_alignParentEnd="true"
-            android:layout_centerVertical="true"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:tint="#FFFFFF" />
-    </RelativeLayout>
+            android:tint="?attr/iconColor"
+            android:contentDescription="Chiudi" />
+    </LinearLayout>
 
-    <!-- Area scrollabile per il contenuto -->
-    <ScrollView
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="?android:attr/listDivider"
+        android:layout_marginHorizontal="16dp" />
+
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="16dp"
-        android:scrollbars="vertical">
+        android:fillViewport="true"
+        android:scrollbars="vertical"
+        android:fadeScrollbars="false"
+        android:background="?attr/primaryBlackBackground">
 
-        <TextView
-            android:id="@+id/guide_content"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#DDDDDD"
-            android:textSize="14sp"
-            android:lineSpacingExtra="4dp" />
-    </ScrollView>
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="12dp">
 
-    <!-- Bottone per aprire su GitHub -->
-    <LinearLayout
+            <TextView
+                android:id="@+id/guide_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="15sp"
+                android:lineSpacingExtra="4dp"
+                android:textColor="?attr/grayTextColor"
+                android:textColorLink="#4DA6FF"
+                android:fontFamily="@font/google_sans"
+                android:text="Caricamento guida in corso..." />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="?android:attr/listDivider"
+        android:layout_marginHorizontal="16dp" />
+
+    <Button
+        android:id="@+id/github_button"
+        style="@style/BlackButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="16dp"
-        android:background="#2D2D2D"
-        android:gravity="center">
-
-        <Button
-            android:id="@+id/github_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:padding="12dp"
-            android:backgroundTint="#238636"
-            android:text="Apri su GitHub"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp" />
-    </LinearLayout>
+        android:layout_margin="16dp"
+        android:text="Apri su GitHub"
+        android:fontFamily="@font/google_sans"
+        android:drawableStart="@drawable/telegram"
+        android:drawablePadding="8dp"
+        android:textColor="?attr/textColor"
+        android:backgroundTint="?attr/colorButtonNormal" />
 
 </LinearLayout>
