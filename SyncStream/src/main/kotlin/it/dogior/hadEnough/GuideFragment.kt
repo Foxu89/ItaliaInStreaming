@@ -17,7 +17,6 @@ import kotlinx.coroutines.*
 class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     private val guideUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/guide/README_SyncStream.md"
     
-    // COPIA ESATTAMENTE I LORO METODI
     private fun <T : View> View.findView(name: String): T {
         val id = plugin.resources!!.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
         return this.findViewById(id)
@@ -35,10 +34,8 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
         savedInstanceState: Bundle?
     ): View? {
         return try {
-            // CARICA IL LAYOUT COME FANNO LORO
             getLayout("guide_fragment", inflater, container)
         } catch (e: Exception) {
-            e.printStackTrace()
             null
         }
     }
@@ -47,7 +44,6 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
         super.onViewCreated(view, savedInstanceState)
         
         try {
-            // TROVA LE VIEW COME FANNO LORO
             val closeButton = view.findView<ImageButton>("close_button")
             val contentText = view.findView<TextView>("guide_content")
             val githubButton = view.findView<Button>("github_button")
@@ -64,7 +60,6 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
             
             contentText.movementMethod = LinkMovementMethod.getInstance()
             
-            // Carica la guida
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val response = app.get(guideUrl)
@@ -80,7 +75,7 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            // Ignora
         }
     }
     
@@ -90,8 +85,12 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
             .replace(Regex("^## (.*?)$", setOf(RegexOption.MULTILINE)), "<h2>$1</h2>")
             .replace(Regex("^### (.*?)$", setOf(RegexOption.MULTILINE)), "<h3>$1</h3>")
             .replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
+            .replace(Regex("\\*(.*?)\\*"), "<i>$1</i>")
             .replace(Regex("\\[(.*?)\\]\\((.*?)\\)"), "<a href=\"$2\">$1</a>")
             .replace(Regex("^- (.*?)$", setOf(RegexOption.MULTILINE)), "• $1<br/>")
+            .replace(Regex("^\\d+\\. (.*?)$", setOf(RegexOption.MULTILINE)), "$1<br/>")
+            .replace(Regex("^> (.*?)$", setOf(RegexOption.MULTILINE)), "<i>$1</i><br/>")
+            .replace(Regex("^---$", setOf(RegexOption.MULTILINE)), "<hr/>")
             .replace("\n", "<br/>")
         
         return HtmlCompat.fromHtml(html, HtmlCompat.FROM_HTML_MODE_LEGACY)
