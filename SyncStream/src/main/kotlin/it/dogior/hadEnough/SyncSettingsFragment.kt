@@ -134,9 +134,8 @@ class SyncSettingsFragment(private val plugin: Plugin) : BottomSheetDialogFragme
 
             groupButton.setOnClickListener(object : View.OnClickListener {
                 override fun onClick(v: View?) {
-                    val url = "https://github.com/DieGon7771/ItaliaInStreaming/blob/master/guide/README_SyncStream.md"
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    startActivity(intent)
+                    val guideFragment = GuideFragment()
+                    guideFragment.show(parentFragmentManager, "GuideFragment")
                 }
             })
 
