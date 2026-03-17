@@ -17,64 +17,71 @@ import kotlinx.coroutines.*
 class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     private val guideUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/guide/README_SyncStream.md"
     
+    // COPIA ESATTAMENTE I LORO METODI
+    private fun <T : View> View.findView(name: String): T {
+        val id = plugin.resources!!.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
+        return this.findViewById(id)
+    }
+
+    private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
+        val id = plugin.resources!!.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val layout = plugin.resources!!.getLayout(id)
+        return inflater.inflate(layout, container, false)
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Usa requireContext() per ottenere il contesto
-        val packageName = requireContext().packageName
-        val layoutId = plugin.resources?.getIdentifier(
-            "guide_fragment", 
-            "layout", 
-            packageName
-        ) ?: return null
-        
-        return inflater.inflate(layoutId, container, false)
+        return try {
+            // CARICA IL LAYOUT COME FANNO LORO
+            getLayout("guide_fragment", inflater, container)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
     
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        // Trova le view
-        val closeButton = findView<ImageButton>(view, "close_button")
-        val contentText = findView<TextView>(view, "guide_content")
-        val githubButton = findView<Button>(view, "github_button")
-        
-        closeButton?.setOnClickListener { dismiss() }
-        
-        githubButton?.setOnClickListener {
-            val intent = android.content.Intent(
-                android.content.Intent.ACTION_VIEW,
-                android.net.Uri.parse("https://github.com/DieGon7771/ItaliaInStreaming/blob/master/guide/README_SyncStream.md")
-            )
-            startActivity(intent)
-        }
-        
-        contentText?.movementMethod = LinkMovementMethod.getInstance()
-        
-        // Carica la guida
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val response = app.get(guideUrl)
-                val markdown = response.text
-                
-                withContext(Dispatchers.Main) {
-                    contentText?.text = parseMarkdown(markdown)
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    contentText?.text = "Errore nel caricare la guida:\n${e.message}"
+        try {
+            // TROVA LE VIEW COME FANNO LORO
+            val closeButton = view.findView<ImageButton>("close_button")
+            val contentText = view.findView<TextView>("guide_content")
+            val githubButton = view.findView<Button>("github_button")
+            
+            closeButton.setOnClickListener { dismiss() }
+            
+            githubButton.setOnClickListener {
+                val intent = android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://github.com/DieGon7771/ItaliaInStreaming/blob/master/guide/README_SyncStream.md")
+                )
+                startActivity(intent)
+            }
+            
+            contentText.movementMethod = LinkMovementMethod.getInstance()
+            
+            // Carica la guida
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val response = app.get(guideUrl)
+                    val markdown = response.text
+                    
+                    withContext(Dispatchers.Main) {
+                        contentText.text = parseMarkdown(markdown)
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        contentText.text = "Errore nel caricare la guida:\n${e.message}"
+                    }
                 }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-    }
-    
-    private fun <T : View> findView(root: View, name: String): T? {
-        // Usa requireContext() anche qui
-        val packageName = requireContext().packageName
-        val id = plugin.resources?.getIdentifier(name, "id", packageName)
-        return if (id != null && id != 0) root.findViewById(id) else null
     }
     
     private fun parseMarkdown(markdown: String): CharSequence {
