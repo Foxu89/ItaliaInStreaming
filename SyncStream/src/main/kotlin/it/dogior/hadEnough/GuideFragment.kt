@@ -22,8 +22,8 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Usa plugin.activity per ottenere il contesto
-        val packageName = plugin.activity?.packageName ?: "it.dogior.hadEnough"
+        // Usa requireContext() per ottenere il contesto
+        val packageName = requireContext().packageName
         val layoutId = plugin.resources?.getIdentifier(
             "guide_fragment", 
             "layout", 
@@ -36,12 +36,10 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        val packageName = plugin.activity?.packageName ?: "it.dogior.hadEnough"
-        
-        // Trova le view usando getIdentifier
-        val closeButton = findView<ImageButton>(view, "close_button", packageName)
-        val contentText = findView<TextView>(view, "guide_content", packageName)
-        val githubButton = findView<Button>(view, "github_button", packageName)
+        // Trova le view
+        val closeButton = findView<ImageButton>(view, "close_button")
+        val contentText = findView<TextView>(view, "guide_content")
+        val githubButton = findView<Button>(view, "github_button")
         
         closeButton?.setOnClickListener { dismiss() }
         
@@ -72,7 +70,9 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
         }
     }
     
-    private fun <T : View> findView(root: View, name: String, packageName: String): T? {
+    private fun <T : View> findView(root: View, name: String): T? {
+        // Usa requireContext() anche qui
+        val packageName = requireContext().packageName
         val id = plugin.resources?.getIdentifier(name, "id", packageName)
         return if (id != null && id != 0) root.findViewById(id) else null
     }
