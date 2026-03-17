@@ -12,9 +12,10 @@ import androidx.core.text.HtmlCompat
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.plugins.Plugin
 import kotlinx.coroutines.*
 
-class GuideFragment : BottomSheetDialogFragment() {
+class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     private val guideUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/guide/README_SyncStream.md"
     
     override fun onCreateView(
@@ -22,21 +23,27 @@ class GuideFragment : BottomSheetDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        return inflater.inflate(R.layout.guide_fragment, container, false)
+        // Trova l'ID del layout usando il plugin
+        val layoutId = plugin.resources?.getIdentifier(
+            "guide_fragment", 
+            "layout", 
+            BuildConfig.LIBRARY_PACKAGE_NAME
+        ) ?: return null
+        
+        return inflater.inflate(layoutId, container, false)
     }
     
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        val closeButton = view.findViewById<ImageButton>(R.id.close_button)
-        val contentText = view.findViewById<TextView>(R.id.guide_content)
-        val githubButton = view.findViewById<Button>(R.id.github_button)
+        // Trova le view usando gli ID
+        val closeButton = findView<ImageButton>(view, "close_button")
+        val contentText = findView<TextView>(view, "guide_content")
+        val githubButton = findView<Button>(view, "github_button")
         
-        closeButton.setOnClickListener {
-            dismiss()
-        }
+        closeButton?.setOnClickListener { dismiss() }
         
-        githubButton.setOnClickListener {
+        githubButton?.setOnClickListener {
             val intent = android.content.Intent(
                 android.content.Intent.ACTION_VIEW,
                 android.net.Uri.parse("https://github.com/DieGon7771/ItaliaInStreaming/blob/master/guide/README_SyncStream.md")
@@ -44,7 +51,7 @@ class GuideFragment : BottomSheetDialogFragment() {
             startActivity(intent)
         }
         
-        contentText.movementMethod = LinkMovementMethod.getInstance()
+        contentText?.movementMethod = LinkMovementMethod.getInstance()
         
         // Carica la guida
         CoroutineScope(Dispatchers.IO).launch {
@@ -53,37 +60,29 @@ class GuideFragment : BottomSheetDialogFragment() {
                 val markdown = response.text
                 
                 withContext(Dispatchers.Main) {
-                    contentText.text = parseMarkdown(markdown)
+                    contentText?.text = parseMarkdown(markdown)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    contentText.text = "Errore nel caricare la guida:\n${e.message}"
+                    contentText?.text = "Errore nel caricare la guida:\n${e.message}"
                 }
             }
         }
     }
     
+    private fun <T : View> findView(root: View, name: String): T? {
+        val id = plugin.resources?.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
+        return if (id != null && id != 0) root.findViewById(id) else null
+    }
+    
     private fun parseMarkdown(markdown: String): CharSequence {
         var html = markdown
-            // Headers
             .replace(Regex("^# (.*?)$", setOf(RegexOption.MULTILINE)), "<h1>$1</h1>")
             .replace(Regex("^## (.*?)$", setOf(RegexOption.MULTILINE)), "<h2>$1</h2>")
             .replace(Regex("^### (.*?)$", setOf(RegexOption.MULTILINE)), "<h3>$1</h3>")
-            
-            // Grassetto
             .replace(Regex("\\*\\*(.*?)\\*\\*"), "<b>$1</b>")
-            
-            // Link
             .replace(Regex("\\[(.*?)\\]\\((.*?)\\)"), "<a href=\"$2\">$1</a>")
-            
-            // Elenchi
             .replace(Regex("^- (.*?)$", setOf(RegexOption.MULTILINE)), "• $1<br/>")
-            .replace(Regex("^\\d+\\. (.*?)$", setOf(RegexOption.MULTILINE)), "$1<br/>")
-            
-            // Citazioni
-            .replace(Regex("^> (.*?)$", setOf(RegexOption.MULTILINE)), "<i>$1</i><br/>")
-            
-            // Nuove righe
             .replace("\n", "<br/>")
         
         return HtmlCompat.fromHtml(html, HtmlCompat.FROM_HTML_MODE_LEGACY)
