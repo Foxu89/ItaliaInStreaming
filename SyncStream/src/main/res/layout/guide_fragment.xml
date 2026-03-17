@@ -4,15 +4,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FF1E1E1E">
+    android:background="#1E1E1E">
 
-    <!-- Header con titolo e bottone chiudi -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:padding="16dp"
-        android:background="#FF2D2D2D"
+        android:background="#2D2D2D"
         android:gravity="center_vertical">
 
         <TextView
@@ -21,7 +20,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Guida SyncStream"
-            android:textColor="#FFFFFFFF"
+            android:textColor="#FFFFFF"
             android:textSize="20sp"
             android:textStyle="bold" />
 
@@ -31,18 +30,10 @@
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:tint="#FFFFFFFF"
+            android:tint="#FFFFFF"
             android:contentDescription="Chiudi" />
     </LinearLayout>
 
-    <!-- Divisore -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#FF3D3D3D"
-        android:layout_marginHorizontal="16dp" />
-
-    <!-- NestedScrollView -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -50,13 +41,13 @@
         android:fillViewport="true"
         android:scrollbars="vertical"
         android:fadeScrollbars="false"
-        android:background="#FF1E1E1E">
+        android:background="#1E1E1E">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="20dp"
+            android:paddingHorizontal="16dp"
             android:paddingTop="16dp"
             android:paddingBottom="12dp">
 
@@ -66,32 +57,29 @@
                 android:layout_height="wrap_content"
                 android:textSize="15sp"
                 android:lineSpacingExtra="4dp"
-                android:textColor="#FFDDDDDD"
-                android:textColorLink="#FF4DA6FF"
+                android:textColor="#DDDDDD"
+                android:textColorLink="#4DA6FF"
                 android:text="Caricamento guida in corso..." />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 
-    <!-- Divisore -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#FF3D3D3D"
-        android:layout_marginHorizontal="16dp" />
-
-    <!-- Bottone GitHub -->
-    <Button
-        android:id="@+id/github_button"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:text="Apri su GitHub"
-        android:textColor="#FFFFFFFF"
-        android:textSize="16sp"
-        android:backgroundTint="#FF238636"
-        android:drawableStart="@drawable/telegram"
-        android:drawablePadding="8dp"
-        android:padding="12dp" />
+        android:padding="16dp"
+        android:background="#2D2D2D"
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/github_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="12dp"
+            android:backgroundTint="#238636"
+            android:text="Apri su GitHub"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+    </LinearLayout>
 
 </LinearLayout>
