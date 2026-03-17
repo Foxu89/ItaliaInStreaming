@@ -20,7 +20,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Guida SyncStream"
+            android:text="Guida Rapida"
             android:textColor="#FFFFFF"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -39,46 +39,33 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#3D3D3D"
-        android:layout_marginHorizontal="16dp" />
+        android:background="#3D3D3D" />
 
-    <!-- NestedScrollView per uno scroll fluido -->
-    <androidx.core.widget.NestedScrollView
+    <!-- ScrollView normale -->
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true"
+        android:padding="16dp"
         android:scrollbars="vertical"
-        android:fadeScrollbars="false"
-        android:background="#1E1E1E">
+        android:fadeScrollbars="false">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/guide_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="20dp"
-            android:paddingTop="16dp"
-            android:paddingBottom="12dp">
-
-            <TextView
-                android:id="@+id/guide_content"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="15sp"
-                android:lineSpacingExtra="4dp"
-                android:textColor="#DDDDDD"
-                android:textColorLink="#4DA6FF"
-                android:text="Caricamento guida in corso..." />
-
-        </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
+            android:textColor="#DDDDDD"
+            android:textColorLink="#4DA6FF"
+            android:textSize="15sp"
+            android:lineSpacingExtra="4dp"
+            android:text="Caricamento guida in corso..." />
+    </ScrollView>
 
     <!-- Divisore -->
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="#3D3D3D"
-        android:layout_marginHorizontal="16dp" />
+        android:background="#3D3D3D" />
 
     <!-- Bottone GitHub -->
     <Button
