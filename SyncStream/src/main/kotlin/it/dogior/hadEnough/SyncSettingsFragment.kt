@@ -135,7 +135,7 @@ class SyncSettingsFragment(private val plugin: Plugin) : BottomSheetDialogFragme
             groupButton.setOnClickListener(object : View.OnClickListener {
                 override fun onClick(v: View?) {
                     val guideFragment = GuideFragment()
-                    guideFragment.show(parentFragmentManager, "GuideFragment")
+                    guideFragment.show(requireActivity().supportFragmentManager, "GuideFragment")
                 }
             })
 
