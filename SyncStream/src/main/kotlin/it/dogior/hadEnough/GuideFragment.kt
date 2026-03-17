@@ -22,11 +22,12 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Trova l'ID del layout usando il plugin - QUESTO È IL METODO CORRETTO
+        // Usa plugin.activity per ottenere il contesto
+        val packageName = plugin.activity?.packageName ?: "it.dogior.hadEnough"
         val layoutId = plugin.resources?.getIdentifier(
             "guide_fragment", 
             "layout", 
-            plugin.context?.packageName ?: "it.dogior.hadEnough"
+            packageName
         ) ?: return null
         
         return inflater.inflate(layoutId, container, false)
@@ -35,10 +36,12 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
+        val packageName = plugin.activity?.packageName ?: "it.dogior.hadEnough"
+        
         // Trova le view usando getIdentifier
-        val closeButton = findView<ImageButton>(view, "close_button")
-        val contentText = findView<TextView>(view, "guide_content")
-        val githubButton = findView<Button>(view, "github_button")
+        val closeButton = findView<ImageButton>(view, "close_button", packageName)
+        val contentText = findView<TextView>(view, "guide_content", packageName)
+        val githubButton = findView<Button>(view, "github_button", packageName)
         
         closeButton?.setOnClickListener { dismiss() }
         
@@ -69,8 +72,7 @@ class GuideFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
         }
     }
     
-    private fun <T : View> findView(root: View, name: String): T? {
-        val packageName = plugin.context?.packageName ?: "it.dogior.hadEnough"
+    private fun <T : View> findView(root: View, name: String, packageName: String): T? {
         val id = plugin.resources?.getIdentifier(name, "id", packageName)
         return if (id != null && id != 0) root.findViewById(id) else null
     }
