@@ -51,56 +51,22 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
                 "reason" to "app-blur",
                 "locale" to "de",
                 "theme" to "dark",
-                "metadata" to mapOf(
-                    "device" to mapOf(
-                        "type" to "Handset",
-                        "brand" to "google",
-                        "model" to "Nexus",
-                        "name" to "21081111RG",
-                        "uniqueId" to uniqueId
-                    ),
-                    "os" to mapOf(
-                        "name" to "android",
-                        "version" to "7.1.2",
-                        "abis" to listOf("arm64-v8a"),
-                        "host" to "android"
-                    ),
-                    "app" to mapOf(
-                        "platform" to "android",
-                        "version" to "1.1.0",
-                        "buildId" to "97215000",
-                        "engine" to "hbc85",
-                        "signatures" to listOf("6e8a975e3cbf07d5de823a760d4c2547f86c1403105020adee5de67ac510999e"),
-                        "installer" to "com.android.vending"
-                    ),
-                    "version" to mapOf(
-                        "package" to "app.lokke.main",
-                        "binary" to "1.1.0",
-                        "js" to "1.1.0"
-                    )
-                ),
-                "appFocusTime" to 0,
-                "playerActive" to false,
-                "playDuration" to 0,
-                "devMode" to true,
-                "hasAddon" to true,
-                "castConnected" to false,
+                "metadata" to """{"device":{"type":"Handset","brand":"google","model":"Nexus","name":"21081111RG","uniqueId":"$uniqueId"},"os":{"name":"android","version":"7.1.2","abis":["arm64-v8a"],"host":"android"},"app":{"platform":"android","version":"1.1.0","buildId":"97215000","engine":"hbc85","signatures":["6e8a975e3cbf07d5de823a760d4c2547f86c1403105020adee5de67ac510999e"],"installer":"com.android.vending"},"version":{"package":"app.lokke.main","binary":"1.1.0","js":"1.1.0"}}""",
+                "appFocusTime" to "0",
+                "playerActive" to "false",
+                "playDuration" to "0",
+                "devMode" to "true",
+                "hasAddon" to "true",
+                "castConnected" to "false",
                 "package" to "app.lokke.main",
                 "version" to "1.1.0",
                 "process" to "app",
-                "firstAppStart" to System.currentTimeMillis() - 86400000,
-                "lastAppStart" to System.currentTimeMillis(),
-                "ipLocation" to null,
-                "adblockEnabled" to false,
-                "proxy" to mapOf(
-                    "supported" to listOf("ss", "openvpn"),
-                    "engine" to "openvpn",
-                    "ssVersion" to 1,
-                    "enabled" to false,
-                    "autoServer" to true,
-                    "id" to "fi-hel"
-                ),
-                "iap" to mapOf("supported" to true)
+                "firstAppStart" to (System.currentTimeMillis() - 86400000).toString(),
+                "lastAppStart" to System.currentTimeMillis().toString(),
+                "ipLocation" to "",
+                "adblockEnabled" to "false",
+                "proxy" to """{"supported":["ss","openvpn"],"engine":"openvpn","ssVersion":1,"enabled":false,"autoServer":true,"id":"fi-hel"}""",
+                "iap" to """{"supported":true}"""
             )
 
             val headers = mapOf(
