@@ -21,7 +21,7 @@ include(
     "SectionOrganizer",
     "StreamingCommunity",
     "Stremio",**/
-    "SyncStream",
+ //   "SyncStream",
 /**    "TV",
 //    "ToonItalia",
     "Torrentio"
