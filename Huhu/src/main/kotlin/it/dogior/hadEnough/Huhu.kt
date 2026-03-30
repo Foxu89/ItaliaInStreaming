@@ -2,9 +2,26 @@ package it.dogior.hadEnough
 
 import android.util.Log
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.utils.*
-import kotlinx.coroutines.delay
+import com.lagradost.cloudstream3.HomePageList
+import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LiveSearchResponse
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.VPNStatus
+import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.newHomePageResponse
+import com.lagradost.cloudstream3.newLiveSearchResponse
+import com.lagradost.cloudstream3.newLiveStreamLoadResponse
+import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+import com.lagradost.cloudstream3.utils.AppUtils.toJson
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.newExtractorLink
+import com.lagradost.cloudstream3.utils.Qualities
 import org.json.JSONObject
 
 class Huhu(domain: String, private val countries: Map<String, Boolean>, language: String) : MainAPI() {
@@ -222,7 +239,6 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         try {
             val originalUrl = data
             
-            // Prova a risolvere l'URL con il resolver
             val signature = getVavooSignature()
             
             if (signature != null) {
@@ -246,7 +262,6 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
                 }
             }
             
-            // Fallback: usa l'URL originale
             Log.d("Huhu", "Using original URL (no resolution)")
             callback(
                 newExtractorLink(
