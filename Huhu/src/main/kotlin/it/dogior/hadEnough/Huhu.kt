@@ -208,9 +208,8 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         try {
-            val channel = parseJson<Channel>(data)
-            val originalUrl = "https://huhu.to/play/${channel.id}/index.m3u8"
-            
+            // data è già l'URL M3U8, non è JSON!
+            val originalUrl = data
             Log.d("Huhu", "Original URL: $originalUrl")
             
             val signature = getVavooSignature()
