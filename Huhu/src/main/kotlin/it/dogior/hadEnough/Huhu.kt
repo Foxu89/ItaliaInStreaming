@@ -257,7 +257,6 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
                     this.referer = mainUrl
                     this.quality = Qualities.Unknown.value
                     // 🔥 FLAG PER GESTIRE M3U8 CON TOKEN SCADUTI
-                    this.isM3u8 = true
                     this.extractor = "m3u8"
                 }
             )
