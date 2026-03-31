@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LiveSearchResponse
+import com.lagradost.cloudstream3.LiveStreamLoadResponse
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.MainAPI
@@ -59,7 +60,9 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
                 )
             }.sortedBy { it.name }
 
-        return newHomePageResponse(sections, false)
+        return newHomePageResponse(
+            sections, false
+        )
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
@@ -76,11 +79,8 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     override suspend fun load(url: String): LoadResponse {
         Log.d("TV2", url)
         val channel = parseJson<Channel>(url)
-        return newLiveStreamLoadResponse(
-            channel.name,
-            url,
-            "https://huhu.to/play/${channel.id}/index.m3u8"
-        ) {
+        return newLiveStreamLoadResponse(channel.name,
+            url, "https://huhu.to/play/${channel.id}/index.m3u8"){
             this.posterUrl = Companion.posterUrl
             this.tags = listOf(channel.country)
         }
@@ -92,38 +92,29 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        try {
-            val channel = parseJson<Channel>(data)
-            val streamUrl = "https://huhu.to/play/${channel.id}/index.m3u8"
-            
-            // HEADERS completi per simulare un browser reale
-            val headers = mapOf(
-                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept" to "application/vnd.apple.mpegurl, */*",
-                "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Referer" to mainUrl,
-                "Origin" to mainUrl,
-                "Connection" to "keep-alive"
-            )
-            
-            callback(
-                newExtractorLink(
-                    this.name,
-                    this.name,
-                    streamUrl,
-                    type = ExtractorLinkType.M3U8
-                ) {
-                    this.headers = headers
-                    this.referer = mainUrl
-                    this.quality = Qualities.Unknown.value
-                }
-            )
-            return true
-            
-        } catch (e: Exception) {
-            Log.e("Huhu", "Error in loadLinks: ${e.message}")
-            return false
-        }
+        // SOLO AGGIUNTA HEADERS
+        val headers = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept" to "*/*",
+            "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer" to mainUrl,
+            "Origin" to mainUrl,
+            "Connection" to "keep-alive"
+        )
+        
+        callback(
+            newExtractorLink(
+                this.name,
+                this.name,
+                data,
+                type = ExtractorLinkType.M3U8
+            ){
+                this.referer = mainUrl
+                this.headers = headers
+                this.quality = Qualities.Unknown.value
+            }
+        )
+        return true
     }
 
     data class Channel(
@@ -136,9 +127,8 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         @JsonProperty("p")
         val p: Int
     )
-    
     fun channelToSearchResponse(channel: Channel): LiveSearchResponse {
-        return newLiveSearchResponse(channel.name, channel.toJson()) {
+        return newLiveSearchResponse(channel.name, channel.toJson()){
             posterUrl = Companion.posterUrl
         }
     }
