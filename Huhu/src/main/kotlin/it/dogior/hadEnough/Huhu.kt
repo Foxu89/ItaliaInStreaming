@@ -43,6 +43,36 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         "Connection" to "keep-alive"
     )
 
+    private val workerUrl = "https://bitter-butterfly-1eec.appbeta870.workers.dev"
+
+    private suspend fun getStreamViaWorker(vavooUrl: String): String? {
+        try {
+            val encodedUrl = java.net.URLEncoder.encode(vavooUrl, "UTF-8")
+            val workerReqUrl = "$workerUrl?url=$encodedUrl"
+            Log.d("Huhu", "Trying worker: $workerReqUrl")
+            
+            val response = app.get(workerReqUrl, timeout = 15)
+            
+            if (response.isSuccessful) {
+                val text = response.text
+                Log.d("Huhu", "Worker response: ${text.take(200)}")
+                
+                if (text.startsWith("http")) {
+                    return text.trim()
+                }
+                
+                try {
+                    val json = JSONObject(text)
+                    val url = json.optString("url", null)
+                    if (url != null && url.isNotEmpty()) return url
+                } catch (e: Exception) { }
+            }
+        } catch (e: Exception) {
+            Log.d("Huhu", "Worker failed: ${e.message}")
+        }
+        return null
+    }
+
     private suspend fun getVavooSignature(): String? {
         try {
             val uniqueId = generateUniqueId()
@@ -144,45 +174,27 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
 
     companion object {
         var channels = emptyList<Channel>()
-
-        @Suppress("ConstPropertyName")
-        const val posterUrl =
-            "https://raw.githubusercontent.com/doGior/doGiorsHadEnough/master/Huhu/tv.png"
+        const val posterUrl = "https://raw.githubusercontent.com/doGior/doGiorsHadEnough/master/Huhu/tv.png"
     }
 
     fun Channel.toSearchResponse(): LiveSearchResponse {
-        return newLiveSearchResponse(
-            name,
-            this.toJson(),
-            TvType.Live
-        ) {
+        return newLiveSearchResponse(name, this.toJson(), TvType.Live) {
             this.posterUrl = Huhu.posterUrl
         }
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        if (channels.isEmpty()) {
-            channels = getChannels()
-        }
-        val sections =
-            channels.groupBy { it.country }.map {
-                HomePageList(
-                    it.key,
-                    it.value.map { channel -> channel.toSearchResponse() },
-                    false
-                )
-            }.sortedBy { it.name }
-
+        if (channels.isEmpty()) channels = getChannels()
+        val sections = channels.groupBy { it.country }.map {
+            HomePageList(it.key, it.value.map { channel -> channel.toSearchResponse() }, false)
+        }.sortedBy { it.name }
         return newHomePageResponse(sections, false)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        if (channels.isEmpty()) {
-            channels = getChannels()
-        }
+        if (channels.isEmpty()) channels = getChannels()
         val matches = channels.filter { channel ->
-            query.lowercase().replace(" ", "") in
-                    channel.name.lowercase().replace(" ", "")
+            query.lowercase().replace(" ", "") in channel.name.lowercase().replace(" ", "")
         }
         return matches.map { it.toSearchResponse() }
     }
@@ -190,12 +202,7 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     override suspend fun load(url: String): LoadResponse {
         val channel = parseJson<Channel>(url)
         val streamUrl = "https://huhu.to/play/${channel.id}/index.m3u8"
-        
-        return newLiveStreamLoadResponse(
-            channel.name,
-            url,
-            streamUrl
-        ) {
+        return newLiveStreamLoadResponse(channel.name, url, streamUrl) {
             this.posterUrl = Companion.posterUrl
             this.tags = listOf(channel.country)
         }
@@ -208,45 +215,41 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         try {
-            // data è già l'URL M3U8, non è JSON!
             val originalUrl = data
             Log.d("Huhu", "Original URL: $originalUrl")
             
-            val signature = getVavooSignature()
+            var finalUrl: String? = null
             
-            if (signature != null) {
-                Log.d("Huhu", "Got signature: ${signature.take(50)}...")
-                
-                val resolvedUrl = resolveVavooUrl(originalUrl, signature)
-                
-                if (resolvedUrl != null) {
-                    Log.d("Huhu", "RESOLVED URL: $resolvedUrl")
-                    
-                    callback(
-                        newExtractorLink(
-                            this.name,
-                            this.name,
-                            resolvedUrl,
-                            type = ExtractorLinkType.M3U8
-                        ) {
-                            this.headers = defaultHeaders
-                            this.referer = mainUrl
-                            this.quality = Qualities.Unknown.value
-                        }
-                    )
-                    return true
-                } else {
-                    Log.d("Huhu", "Resolution failed, using original URL")
+            // 1. PROVA WORKER
+            val workerResult = getStreamViaWorker(originalUrl)
+            if (workerResult != null) {
+                Log.d("Huhu", "✅ Worker gave URL: $workerResult")
+                finalUrl = workerResult
+            }
+            
+            // 2. SE WORKER FALLISCE, PROVA RESOLVER
+            if (finalUrl == null) {
+                val signature = getVavooSignature()
+                if (signature != null) {
+                    val resolved = resolveVavooUrl(originalUrl, signature)
+                    if (resolved != null) {
+                        Log.d("Huhu", "✅ Resolver gave URL: $resolved")
+                        finalUrl = resolved
+                    }
                 }
-            } else {
-                Log.d("Huhu", "No signature, using original URL")
+            }
+            
+            // 3. FALLBACK
+            if (finalUrl == null) {
+                Log.d("Huhu", "⚠️ Using original URL")
+                finalUrl = originalUrl
             }
             
             callback(
                 newExtractorLink(
                     this.name,
                     this.name,
-                    originalUrl,
+                    finalUrl,
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.headers = defaultHeaders
@@ -263,13 +266,9 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     }
 
     data class Channel(
-        @JsonProperty("country")
-        val country: String,
-        @JsonProperty("id")
-        val id: Long,
-        @JsonProperty("name")
-        val name: String,
-        @JsonProperty("p")
-        val p: Int
+        @JsonProperty("country") val country: String,
+        @JsonProperty("id") val id: Long,
+        @JsonProperty("name") val name: String,
+        @JsonProperty("p") val p: Int
     )
 }
