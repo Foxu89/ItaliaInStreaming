@@ -22,7 +22,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
-import org.json.JSONObject
 
 class Huhu(domain: String, private val countries: Map<String, Boolean>, language: String) : MainAPI() {
     override var mainUrl = "https://$domain"
@@ -32,104 +31,6 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     override val hasMainPage = true
     override val hasDownloadSupport = false
     override val vpnStatus = VPNStatus.MightBeNeeded
-
-    private val defaultHeaders = mapOf(
-        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept" to "*/*",
-        "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Origin" to mainUrl,
-        "Referer" to "$mainUrl/",
-        "Connection" to "keep-alive"
-    )
-
-    private suspend fun getVavooSignature(): String? {
-        try {
-            val uniqueId = (1..16).map { "%02x".format((0..255).random()) }.joinToString("")
-            
-            val pingBody = mapOf(
-                "token" to "ldCvE092e7gER0rVIajfsXIvRhwlrAzP6_1oEJ4q6HH89QHt24v6NNL_jQJO219hiLOXF2hqEfsUuEWitEIGN4EaHHEHb7Cd7gojc5SQYRFzU3XWo_kMeryAUbcwWnQrnf0-",
-                "reason" to "app-blur",
-                "locale" to "de",
-                "theme" to "dark",
-                "metadata" to """{"device":{"type":"Handset","brand":"google","model":"Nexus","name":"21081111RG","uniqueId":"$uniqueId"},"os":{"name":"android","version":"7.1.2","abis":["arm64-v8a"],"host":"android"},"app":{"platform":"android","version":"1.1.0","buildId":"97215000","engine":"hbc85","signatures":["6e8a975e3cbf07d5de823a760d4c2547f86c1403105020adee5de67ac510999e"],"installer":"com.android.vending"},"version":{"package":"app.lokke.main","binary":"1.1.0","js":"1.1.0"}}""",
-                "appFocusTime" to "0",
-                "playerActive" to "false",
-                "playDuration" to "0",
-                "devMode" to "true",
-                "hasAddon" to "true",
-                "castConnected" to "false",
-                "package" to "app.lokke.main",
-                "version" to "1.1.0",
-                "process" to "app",
-                "firstAppStart" to (System.currentTimeMillis() - 86400000).toString(),
-                "lastAppStart" to System.currentTimeMillis().toString(),
-                "ipLocation" to "",
-                "adblockEnabled" to "false",
-                "proxy" to """{"supported":["ss","openvpn"],"engine":"openvpn","ssVersion":1,"enabled":false,"autoServer":true,"id":"fi-hel"}""",
-                "iap" to """{"supported":true}"""
-            )
-
-            val headers = mapOf(
-                "User-Agent" to "okhttp/4.11.0",
-                "Accept" to "application/json",
-                "Content-Type" to "application/json; charset=utf-8",
-                "Accept-Encoding" to "gzip"
-            )
-
-            val response = app.post(
-                "https://www.lokke.app/api/app/ping",
-                headers = headers,
-                data = pingBody
-            )
-
-            val json = JSONObject(response.text)
-            return json.optString("addonSig", null)
-            
-        } catch (e: Exception) {
-            Log.e("Huhu", "Error getting signature: ${e.message}")
-            return null
-        }
-    }
-
-    private suspend fun resolveVavooUrl(vavooUrl: String, signature: String): String? {
-        try {
-            val resolveBody = mapOf(
-                "language" to "de",
-                "region" to "AT",
-                "url" to vavooUrl,
-                "clientVersion" to "3.0.2"
-            )
-
-            val headers = mapOf(
-                "User-Agent" to "MediaHubMX/2",
-                "Accept" to "application/json",
-                "Content-Type" to "application/json; charset=utf-8",
-                "Accept-Encoding" to "gzip",
-                "mediahubmx-signature" to signature
-            )
-
-            val response = app.post(
-                "https://vavoo.to/mediahubmx-resolve.json",
-                headers = headers,
-                data = resolveBody
-            )
-
-            val json = JSONObject(response.text)
-            
-            if (json.has("data") && json.getJSONObject("data").has("url")) {
-                return json.getJSONObject("data").getString("url")
-            }
-            if (json.has("url")) {
-                return json.getString("url")
-            }
-            
-            return null
-            
-        } catch (e: Exception) {
-            Log.e("Huhu", "Error resolving URL: ${e.message}")
-            return null
-        }
-    }
 
     private suspend fun getChannels(): List<Channel> {
         val enabledCountries = countries.filter { it.value }.keys.toList()
@@ -145,16 +46,6 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
             "https://raw.githubusercontent.com/doGior/doGiorsHadEnough/master/Huhu/tv.png"
     }
 
-    fun Channel.toSearchResponse(): LiveSearchResponse {
-        return newLiveSearchResponse(
-            name,
-            this.toJson(),
-            TvType.Live
-        ) {
-            this.posterUrl = Huhu.posterUrl
-        }
-    }
-
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         if (channels.isEmpty()) {
             channels = getChannels()
@@ -163,7 +54,7 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
             channels.groupBy { it.country }.map {
                 HomePageList(
                     it.key,
-                    it.value.map { channel -> channel.toSearchResponse() },
+                    it.value.map { channel -> channelToSearchResponse(channel) },
                     false
                 )
             }.sortedBy { it.name }
@@ -179,17 +70,16 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
             query.lowercase().replace(" ", "") in
                     channel.name.lowercase().replace(" ", "")
         }
-        return matches.map { it.toSearchResponse() }
+        return matches.map { channelToSearchResponse(it) }
     }
 
     override suspend fun load(url: String): LoadResponse {
+        Log.d("TV2", url)
         val channel = parseJson<Channel>(url)
-        val streamUrl = "https://huhu.to/play/${channel.id}/index.m3u8"
-        
         return newLiveStreamLoadResponse(
             channel.name,
             url,
-            streamUrl
+            "https://huhu.to/play/${channel.id}/index.m3u8"
         ) {
             this.posterUrl = Companion.posterUrl
             this.tags = listOf(channel.country)
@@ -203,44 +93,27 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         try {
-            // data contiene il JSON del canale, non l'URL M3U8!
             val channel = parseJson<Channel>(data)
-            val m3u8Url = "https://huhu.to/play/${channel.id}/index.m3u8"
+            val streamUrl = "https://huhu.to/play/${channel.id}/index.m3u8"
             
-            val signature = getVavooSignature()
+            // HEADERS completi per simulare un browser reale
+            val headers = mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept" to "application/vnd.apple.mpegurl, */*",
+                "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer" to mainUrl,
+                "Origin" to mainUrl,
+                "Connection" to "keep-alive"
+            )
             
-            if (signature != null) {
-                // Usa l'URL M3U8 corretto per il resolver
-                val resolvedUrl = resolveVavooUrl(m3u8Url, signature)
-                
-                if (resolvedUrl != null) {
-                    Log.d("Huhu", "Resolved URL successfully: $resolvedUrl")
-                    callback(
-                        newExtractorLink(
-                            this.name,
-                            this.name,
-                            resolvedUrl,
-                            type = ExtractorLinkType.M3U8
-                        ) {
-                            this.headers = defaultHeaders
-                            this.referer = mainUrl
-                            this.quality = Qualities.Unknown.value
-                        }
-                    )
-                    return true
-                }
-            }
-            
-            // Fallback: URL originale
-            Log.d("Huhu", "Using original URL (no resolution): $m3u8Url")
             callback(
                 newExtractorLink(
                     this.name,
                     this.name,
-                    m3u8Url,
+                    streamUrl,
                     type = ExtractorLinkType.M3U8
                 ) {
-                    this.headers = defaultHeaders
+                    this.headers = headers
                     this.referer = mainUrl
                     this.quality = Qualities.Unknown.value
                 }
@@ -263,4 +136,10 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         @JsonProperty("p")
         val p: Int
     )
+    
+    fun channelToSearchResponse(channel: Channel): LiveSearchResponse {
+        return newLiveSearchResponse(channel.name, channel.toJson()) {
+            posterUrl = Companion.posterUrl
+        }
+    }
 }
