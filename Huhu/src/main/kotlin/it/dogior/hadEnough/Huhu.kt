@@ -203,15 +203,18 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         try {
-            val originalUrl = data
+            // data contiene il JSON del canale, non l'URL M3U8!
+            val channel = parseJson<Channel>(data)
+            val m3u8Url = "https://huhu.to/play/${channel.id}/index.m3u8"
             
             val signature = getVavooSignature()
             
             if (signature != null) {
-                val resolvedUrl = resolveVavooUrl(originalUrl, signature)
+                // Usa l'URL M3U8 corretto per il resolver
+                val resolvedUrl = resolveVavooUrl(m3u8Url, signature)
                 
                 if (resolvedUrl != null) {
-                    Log.d("Huhu", "Resolved URL successfully")
+                    Log.d("Huhu", "Resolved URL successfully: $resolvedUrl")
                     callback(
                         newExtractorLink(
                             this.name,
@@ -228,12 +231,13 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
                 }
             }
             
-            Log.d("Huhu", "Using original URL (no resolution)")
+            // Fallback: URL originale
+            Log.d("Huhu", "Using original URL (no resolution): $m3u8Url")
             callback(
                 newExtractorLink(
                     this.name,
                     this.name,
-                    originalUrl,
+                    m3u8Url,
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.headers = defaultHeaders
