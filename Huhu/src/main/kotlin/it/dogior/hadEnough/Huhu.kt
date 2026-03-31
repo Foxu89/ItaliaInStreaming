@@ -47,35 +47,28 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         try {
             val uniqueId = generateUniqueId()
             
-            val pingBody = """
-                {
-                    "token": "ldCvE092e7gER0rVIajfsXIvRhwlrAzP6_1oEJ4q6HH89QHt24v6NNL_jQJO219hiLOXF2hqEfsUuEWitEIGN4EaHHEHb7Cd7gojc5SQYRFzU3XWo_kMeryAUbcwWnQrnf0-",
-                    "reason": "app-blur",
-                    "locale": "de",
-                    "theme": "dark",
-                    "metadata": {
-                        "device": {"type": "Handset","brand": "google","model": "Nexus","name": "21081111RG","uniqueId": "$uniqueId"},
-                        "os": {"name": "android","version": "7.1.2","abis": ["arm64-v8a"],"host": "android"},
-                        "app": {"platform": "android","version": "1.1.0","buildId": "97215000","engine": "hbc85","signatures": ["6e8a975e3cbf07d5de823a760d4c2547f86c1403105020adee5de67ac510999e"],"installer": "com.android.vending"},
-                        "version": {"package": "app.lokke.main","binary": "1.1.0","js": "1.1.0"}
-                    },
-                    "appFocusTime": 0,
-                    "playerActive": false,
-                    "playDuration": 0,
-                    "devMode": true,
-                    "hasAddon": true,
-                    "castConnected": false,
-                    "package": "app.lokke.main",
-                    "version": "1.1.0",
-                    "process": "app",
-                    "firstAppStart": ${System.currentTimeMillis() - 86400000},
-                    "lastAppStart": ${System.currentTimeMillis()},
-                    "ipLocation": null,
-                    "adblockEnabled": false,
-                    "proxy": {"supported": ["ss","openvpn"],"engine": "openvpn","ssVersion": 1,"enabled": false,"autoServer": true,"id": "fi-hel"},
-                    "iap": {"supported": true}
-                }
-            """.trimIndent()
+            val pingData = mapOf(
+                "token" to "ldCvE092e7gER0rVIajfsXIvRhwlrAzP6_1oEJ4q6HH89QHt24v6NNL_jQJO219hiLOXF2hqEfsUuEWitEIGN4EaHHEHb7Cd7gojc5SQYRFzU3XWo_kMeryAUbcwWnQrnf0-",
+                "reason" to "app-blur",
+                "locale" to "de",
+                "theme" to "dark",
+                "metadata" to """{"device":{"type":"Handset","brand":"google","model":"Nexus","name":"21081111RG","uniqueId":"$uniqueId"},"os":{"name":"android","version":"7.1.2","abis":["arm64-v8a"],"host":"android"},"app":{"platform":"android","version":"1.1.0","buildId":"97215000","engine":"hbc85","signatures":["6e8a975e3cbf07d5de823a760d4c2547f86c1403105020adee5de67ac510999e"],"installer":"com.android.vending"},"version":{"package":"app.lokke.main","binary":"1.1.0","js":"1.1.0"}}""",
+                "appFocusTime" to "0",
+                "playerActive" to "false",
+                "playDuration" to "0",
+                "devMode" to "true",
+                "hasAddon" to "true",
+                "castConnected" to "false",
+                "package" to "app.lokke.main",
+                "version" to "1.1.0",
+                "process" to "app",
+                "firstAppStart" to (System.currentTimeMillis() - 86400000).toString(),
+                "lastAppStart" to System.currentTimeMillis().toString(),
+                "ipLocation" to "",
+                "adblockEnabled" to "false",
+                "proxy" to """{"supported":["ss","openvpn"],"engine":"openvpn","ssVersion":1,"enabled":false,"autoServer":true,"id":"fi-hel"}""",
+                "iap" to """{"supported":true}"""
+            )
 
             val headers = mapOf(
                 "User-Agent" to "okhttp/4.11.0",
@@ -86,7 +79,7 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
             val response = app.post(
                 "https://www.lokke.app/api/app/ping",
                 headers = headers,
-                data = pingBody
+                data = pingData
             )
 
             val json = JSONObject(response.text)
@@ -106,14 +99,12 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
 
     private suspend fun resolveVavooUrl(vavooUrl: String, signature: String): String? {
         try {
-            val resolveBody = """
-                {
-                    "language": "de",
-                    "region": "AT",
-                    "url": "$vavooUrl",
-                    "clientVersion": "3.0.2"
-                }
-            """.trimIndent()
+            val resolveData = mapOf(
+                "language" to "de",
+                "region" to "AT",
+                "url" to vavooUrl,
+                "clientVersion" to "3.0.2"
+            )
 
             val headers = mapOf(
                 "User-Agent" to "MediaHubMX/2",
@@ -125,7 +116,7 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
             val response = app.post(
                 "https://vavoo.to/mediahubmx-resolve.json",
                 headers = headers,
-                data = resolveBody
+                data = resolveData
             )
 
             val json = JSONObject(response.text)
