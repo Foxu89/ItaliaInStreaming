@@ -43,29 +43,6 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
 
     private val workerUrl = "https://bitter-butterfly-1eec.appbeta870.workers.dev"
 
-    private suspend fun getStreamFromWorker(vavooUrl: String): String? {
-        try {
-            val encodedUrl = java.net.URLEncoder.encode(vavooUrl, "UTF-8")
-            val workerReqUrl = "$workerUrl?url=$encodedUrl"
-            Log.d("Huhu", "Calling worker: $workerReqUrl")
-            
-            val response = app.get(workerReqUrl, timeout = 20)
-            
-            if (response.isSuccessful) {
-                val result = response.text.trim()
-                Log.d("Huhu", "Worker response: ${result.take(200)}")
-                if (result.startsWith("http")) {
-                    return result
-                }
-            } else {
-                Log.d("Huhu", "Worker returned status: ${response.code}")
-            }
-        } catch (e: Exception) {
-            Log.d("Huhu", "Worker error: ${e.message}")
-        }
-        return null
-    }
-
     private suspend fun getChannels(): List<Channel> {
         val enabledCountries = countries.filter { it.value }.keys.toList()
         val response = app.get("$mainUrl/channels").body.string()
@@ -116,24 +93,28 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     ): Boolean {
         try {
             val originalUrl = data
-            Log.d("Huhu", "Original URL: $originalUrl")
+            val encodedUrl = java.net.URLEncoder.encode(originalUrl, "UTF-8")
+            val workerReqUrl = "$workerUrl?url=$encodedUrl"
             
-            var finalUrl: String? = null
+            Log.d("Huhu", "Calling worker: $workerReqUrl")
             
-            finalUrl = getStreamFromWorker(originalUrl)
+            val response = app.get(workerReqUrl, timeout = 20)
             
-            if (finalUrl == null) {
-                Log.d("Huhu", "⚠️ Worker failed, using original URL")
-                finalUrl = originalUrl
-            } else {
-                Log.d("Huhu", "✅ Worker returned URL: $finalUrl")
+            if (!response.isSuccessful) {
+                Log.e("Huhu", "Worker returned error: ${response.code}")
+                return false
             }
             
+            val m3u8Content = response.text
+            Log.d("Huhu", "Worker returned M3U8, length: ${m3u8Content.length}")
+            
+            // Il worker restituisce un M3U8 dinamico con segmenti che si autorinfrescano
+            // Lo passiamo direttamente a CloudStream
             callback(
                 newExtractorLink(
                     this.name,
                     this.name,
-                    finalUrl,
+                    workerReqUrl,  // L'URL che restituisce l'M3U8
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.headers = defaultHeaders
