@@ -22,6 +22,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
+import org.json.JSONObject
 
 class Huhu(domain: String, private val countries: Map<String, Boolean>, language: String) : MainAPI() {
     override var mainUrl = "https://$domain"
@@ -33,15 +34,13 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     override val vpnStatus = VPNStatus.MightBeNeeded
 
     private val defaultHeaders = mapOf(
-        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept" to "*/*",
         "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
         "Origin" to mainUrl,
         "Referer" to "$mainUrl/",
         "Connection" to "keep-alive"
     )
-
-    private val workerUrl = "https://bitter-butterfly-1eec.appbeta870.workers.dev"
 
     private suspend fun getChannels(): List<Channel> {
         val enabledCountries = countries.filter { it.value }.keys.toList()
@@ -78,11 +77,45 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
 
     override suspend fun load(url: String): LoadResponse {
         val channel = parseJson<Channel>(url)
-        val streamUrl = "https://huhu.to/play/${channel.id}/index.m3u8"
-        return newLiveStreamLoadResponse(channel.name, url, streamUrl) {
+        val originalUrl = "https://huhu.to/play/${channel.id}/index.m3u8"
+        
+        // 🔥 IL TRUCCO: risolvi l'URL in load(), non in loadLinks()!
+        val resolvedUrl = resolveUrl(originalUrl)
+        
+        return newLiveStreamLoadResponse(channel.name, url, resolvedUrl) {
             this.posterUrl = Companion.posterUrl
             this.tags = listOf(channel.country)
         }
+    }
+    
+    private suspend fun resolveUrl(vavooUrl: String): String {
+        try {
+            val payload = mapOf(
+                "language" to "de",
+                "region" to "AT",
+                "url" to vavooUrl,
+                "clientVersion" to "3.0.2"
+            )
+            
+            val response = app.post(
+                "https://vavoo.to/mediahubmx-resolve.json",
+                headers = mapOf("Content-Type" to "application/json; charset=utf-8"),
+                data = payload
+            )
+            
+            val json = JSONObject(response.text)
+            
+            if (json.has("data") && json.getJSONObject("data").has("url")) {
+                return json.getJSONObject("data").getString("url")
+            }
+            if (json.has("url")) {
+                return json.getString("url")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("Huhu", "Resolve error: ${e.message}")
+        }
+        return vavooUrl
     }
 
     override suspend fun loadLinks(
@@ -92,29 +125,11 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         try {
-            val originalUrl = data
-            val encodedUrl = java.net.URLEncoder.encode(originalUrl, "UTF-8")
-            val workerReqUrl = "$workerUrl?url=$encodedUrl"
-            
-            Log.d("Huhu", "Calling worker: $workerReqUrl")
-            
-            val response = app.get(workerReqUrl, timeout = 20)
-            
-            if (!response.isSuccessful) {
-                Log.e("Huhu", "Worker returned error: ${response.code}")
-                return false
-            }
-            
-            val m3u8Content = response.text
-            Log.d("Huhu", "Worker returned M3U8, length: ${m3u8Content.length}")
-            
-            // Il worker restituisce un M3U8 dinamico con segmenti che si autorinfrescano
-            // Lo passiamo direttamente a CloudStream
             callback(
                 newExtractorLink(
                     this.name,
                     this.name,
-                    workerReqUrl,  // L'URL che restituisce l'M3U8
+                    data,  // data è già l'URL risolto da load()
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.headers = defaultHeaders
@@ -123,9 +138,8 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
                 }
             )
             return true
-            
         } catch (e: Exception) {
-            Log.e("Huhu", "Error in loadLinks: ${e.message}")
+            Log.e("Huhu", "Error: ${e.message}")
             return false
         }
     }
