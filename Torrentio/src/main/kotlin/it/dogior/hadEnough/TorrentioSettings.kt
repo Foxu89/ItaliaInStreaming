@@ -35,21 +35,18 @@ class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment(
     ): View? {
         val settings = getLayout("torrentio_settings", inflater, container)
         
-        // Abilita/Disabilita Debrid
         val debridToggle = settings.findView<Switch>("debrid_toggle")
         debridToggle.isChecked = getKey("torrentio_debrid_enabled") == true
         debridToggle.setOnCheckedChangeListener { _, isChecked ->
             setKey("torrentio_debrid_enabled", isChecked)
         }
         
-        // Bottone configurazione TorBox
         val torboxButton = settings.findView<ImageButton>("torbox_button")
         torboxButton.setOnClickListener {
             showTorboxConfigDialog()
         }
         
-        // Mostra stato connessione
-        updateConnectionStatus()
+        updateConnectionStatus(settings)
         
         return settings
     }
@@ -69,15 +66,15 @@ class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment(
                 setKey("torrentio_torbox_token", tokenInput.text.toString())
                 setKey("torrentio_torbox_enabled", enableToggle.isChecked)
                 showToast("Configurazione TorBox salvata")
-                updateConnectionStatus()
+                updateConnectionStatus(view)
                 dismiss()
             }
             .setNegativeButton("Annulla", null)
             .show()
     }
     
-    private fun updateConnectionStatus() {
-        val statusView = view?.findView<TextView>("debrid_status")
+    private fun updateConnectionStatus(root: View?) {
+        val statusView = root?.findView<TextView>("debrid_status")
         val isEnabled = getKey("torrentio_torbox_enabled") == true
         val hasToken = !getKey("torrentio_torbox_token").isNullOrEmpty()
         
