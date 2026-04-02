@@ -109,9 +109,7 @@
                     android:layout_height="wrap_content"
                     android:padding="5dp"
                     android:focusable="true"
-                    android:src="@drawable/edit_icon"
-                    android:nextFocusDown="@id/torbox_button"
-                    android:nextFocusUp="@id/debrid_toggle" />
+                    android:src="@drawable/edit_icon" />
 
             </LinearLayout>
 
@@ -122,17 +120,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:textSize="14sp"
-            android:textColor="#AAAAAA" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Come ottenere il token TorBox:\n1. Vai su torbox.app\n2. Accedi al tuo account\n3. Vai su Settings → API\n4. Copia il tuo token API"
-            android:textSize="12sp"
-            android:textColor="#AAAAAA"
-            android:lineSpacingExtra="4dp" />
+            android:textSize="14sp" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
