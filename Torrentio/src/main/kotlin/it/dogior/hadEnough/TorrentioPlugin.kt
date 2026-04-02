@@ -10,7 +10,6 @@ class TorrentioPlugin : Plugin() {
     override fun load(context: Context) {
         registerMainAPI(Torrentio())
         
-        // Aggiungi impostazioni
         openSettings = { ctx ->
             val activity = ctx as? AppCompatActivity
             if (activity != null) {
