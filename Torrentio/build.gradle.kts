@@ -1,4 +1,10 @@
+@file:Suppress("UnstableApiUsage")
+
 import org.jetbrains.kotlin.konan.properties.Properties
+
+dependencies {
+    implementation("com.google.android.material:material:1.4.0")
+}
 
 // use an integer for version numbers
 version = 5
