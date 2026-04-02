@@ -2,20 +2,24 @@
 
 package it.dogior.hadEnough
 
+import android.view.*
+import android.widget.*
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.Switch
-import android.widget.TextView
+import android.net.Uri
+import android.content.Intent
+import android.content.DialogInterface
+import android.content.res.ColorStateList
+import android.graphics.drawable.Drawable
+import androidx.core.content.res.ResourcesCompat
 import androidx.appcompat.app.AlertDialog
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
-import com.lagradost.cloudstream3.plugins.Plugin
+import com.lagradost.cloudstream3.utils.AppUtils.toJson
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import kotlinx.coroutines.*
 
 class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment() {
     
