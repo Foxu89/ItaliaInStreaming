@@ -86,11 +86,11 @@ class Torrentio : TmdbProvider() {
     // ======================== DEBRID TORBOX ========================
     
     private fun isDebridEnabled(): Boolean {
-        return getKey("torrentio_debrid_enabled") == true && getKey("torrentio_torbox_enabled") == true
+        return getKey<Boolean>("torrentio_debrid_enabled") == true && getKey<Boolean>("torrentio_torbox_enabled") == true
     }
     
     private fun getTorboxToken(): String? {
-        return getKey("torrentio_torbox_token")
+        return getKey<String>("torrentio_torbox_token")
     }
     
     private suspend fun resolveWithTorbox(magnetLink: String): String? {
@@ -302,7 +302,6 @@ class Torrentio : TmdbProvider() {
                     "Torrentio | $tags | Seeder: $seeder | Provider: $provider".trim()
                 }
             
-            // 🔥 SE DEBRID È ATTIVO, USA TORBOX
             val finalUrl = if (isDebridEnabled()) {
                 val debridUrl = resolveWithTorbox(magnet)
                 if (debridUrl != null) {
