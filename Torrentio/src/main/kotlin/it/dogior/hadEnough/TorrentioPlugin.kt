@@ -4,6 +4,7 @@ package it.dogior.hadEnough
 
 import android.content.Context
 import androidx.appcompat.app.AppCompatActivity
+import com.lagradost.cloudstream3.CommonActivity.activity
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
 
