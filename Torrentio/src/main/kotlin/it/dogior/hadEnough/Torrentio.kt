@@ -30,10 +30,11 @@ import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newSearchResponseList
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
-
 
 class Torrentio : TmdbProvider() {
     private val torrentioUrl = "https://torrentio.strem.fun"
@@ -77,9 +78,46 @@ class Torrentio : TmdbProvider() {
     private fun getDate(): String {
         val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val calendar = Calendar.getInstance()
-        val today = formatter.format(calendar.time)
-        return today
+        return formatter.format(calendar.time)
     }
+
+    // ======================== DEBRID TORBOX ========================
+    
+    private fun isDebridEnabled(): Boolean {
+        return getKey("torrentio_debrid_enabled") == true && getKey("torrentio_torbox_enabled") == true
+    }
+    
+    private fun getTorboxToken(): String? {
+        return getKey("torrentio_torbox_token")
+    }
+    
+    private suspend fun resolveWithTorbox(magnetLink: String): String? {
+        try {
+            val token = getTorboxToken()
+            if (token.isNullOrEmpty()) return null
+            
+            val response = app.get(
+                "https://api.torbox.app/v1/api/torrents/createlink",
+                params = mapOf(
+                    "token" to token,
+                    "magnet" to magnetLink
+                ),
+                timeout = 30
+            )
+            
+            val json = JSONObject(response.text)
+            if (json.optBoolean("success", false)) {
+                val data = json.getJSONObject("data")
+                return data.optString("download", null)
+            }
+            Log.e("Torrentio", "TorBox error: ${json.optString("detail")}")
+        } catch (e: Exception) {
+            Log.e("Torrentio", "TorBox resolve error: ${e.message}")
+        }
+        return null
+    }
+    
+    // ======================== METODI ESISTENTI ========================
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val resp = app.get("${request.data}&page=$page", headers = authHeaders).body.string()
@@ -116,7 +154,6 @@ class Torrentio : TmdbProvider() {
         }
         val res = app.get(resUrl, headers = authHeaders).parsedSafe<MediaDetail>()
             ?: throw ErrorLoadingException("Invalid Json Response")
-//        Log.d("Torrentio", res.toJson())
 
         val title = res.title ?: res.name ?: return null
         val poster = getImageUrl(res.posterPath, getOriginal = true)
@@ -221,6 +258,8 @@ class Torrentio : TmdbProvider() {
         return episodes ?: emptyList()
     }
 
+    // ======================== LOAD LINKS MODIFICATO CON TORBOX ========================
+    
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -229,20 +268,26 @@ class Torrentio : TmdbProvider() {
     ): Boolean {
         val show = parseJson<LinkData>(data)
         var success = false
+        
         val url = if (show.season == null) {
             "$mainUrl/stream/movie/${show.imdbId}.json"
         } else {
             "$mainUrl/stream/series/${show.imdbId}:${show.season}:${show.episode}.json"
         }
+        
         val headers = mapOf(
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
         )
+        
         val res = app.get(url, headers = headers, timeout = 100L)
         val body = res.body.string()
         val response = parseJson<TorrentioResponse>(body)
 
         response.streams.forEach { stream ->
+            val magnet = generateMagnetLink(TRACKER_LIST_URL, stream.infoHash)
+            if (magnet.isNotEmpty()) success = true
+            
             val formattedTitleName = stream.title
                 ?.let { title ->
                     val tags = "\\[(.*?)]".toRegex().findAll(title)
@@ -254,13 +299,27 @@ class Torrentio : TmdbProvider() {
                             ?: "Unknown"
                     "Torrentio | $tags | Seeder: $seeder | Provider: $provider".trim()
                 }
-            val magnet = generateMagnetLink(TRACKER_LIST_URL, stream.infoHash)
-            if (magnet.isNotEmpty()) success = true
+            
+            // 🔥 SE DEBRID È ATTIVO, USA TORBOX
+            val finalUrl = if (isDebridEnabled()) {
+                val debridUrl = resolveWithTorbox(magnet)
+                if (debridUrl != null) {
+                    Log.d("Torrentio", "✅ TorBox risolto: $debridUrl")
+                    debridUrl
+                } else {
+                    Log.d("Torrentio", "⚠️ TorBox fallito, uso magnet")
+                    magnet
+                }
+            } else {
+                magnet
+            }
+            
             callback.invoke(
                 newExtractorLink(
                     "Torrentio",
-                    formattedTitleName ?: stream.name ?: "",
-                    url = magnet,
+                    if (isDebridEnabled() && finalUrl != magnet) "Torrentio (TorBox) | $formattedTitleName" 
+                    else formattedTitleName ?: stream.name ?: "",
+                    url = finalUrl,
                     INFER_TYPE
                 ) {
                     this.referer = ""
@@ -273,10 +332,8 @@ class Torrentio : TmdbProvider() {
 
     private suspend fun generateMagnetLink(url: String, hash: String?): String {
         val response = app.get(url)
+        val trackerList = response.text.trim().split("\n")
 
-        val trackerList = response.text.trim().split("\n") // Assuming each tracker is on a new line
-
-        // Build the magnet link
         return buildString {
             append("magnet:?xt=urn:btih:$hash")
             trackerList.forEach { tracker ->
