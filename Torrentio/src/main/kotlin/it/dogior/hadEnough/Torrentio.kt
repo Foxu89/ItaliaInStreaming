@@ -123,7 +123,7 @@ class Torrentio : TmdbProvider() {
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val resp = app.get("${request.data}&page=$page", headers = authHeaders).body.string()
-        val parsedResponse = parseJson<Results>(resp).results?.mapNotNull { media ->
+        val parsedResponse = parseJson<Results>(resp)?.results?.mapNotNull { media ->
             val type = if (request.data.contains("tv")) "tv" else "movie"
             media.toSearchResponse(type = type)
         }?.toMutableList()
