@@ -25,7 +25,8 @@ class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment(
     
     private fun <T : View> View.findView(name: String): T {
         val id = plugin.resources!!.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
-        return this.findViewById(id)
+        @Suppress("UNCHECKED_CAST")
+        return this.findViewById(id) as T
     }
 
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
