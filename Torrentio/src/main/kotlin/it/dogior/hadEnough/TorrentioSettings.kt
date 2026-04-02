@@ -43,7 +43,7 @@ class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment(
         val settings = getLayout("torrentio_settings", inflater, container)
         
         val debridToggle = settings.findView<Switch>("debrid_toggle")
-        debridToggle.isChecked = getKey("torrentio_debrid_enabled") == true
+        debridToggle.isChecked = getKey<Boolean>("torrentio_debrid_enabled") == true
         debridToggle.setOnCheckedChangeListener { _, isChecked ->
             setKey("torrentio_debrid_enabled", isChecked)
         }
@@ -63,8 +63,8 @@ class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment(
         val tokenInput = credsView.findView<EditText>("torbox_token")
         val enableToggle = credsView.findView<Switch>("torbox_enable")
         
-        tokenInput.setText(getKey("torrentio_torbox_token") ?: "")
-        enableToggle.isChecked = getKey("torrentio_torbox_enabled") == true
+        tokenInput.setText(getKey<String>("torrentio_torbox_token") ?: "")
+        enableToggle.isChecked = getKey<Boolean>("torrentio_torbox_enabled") == true
         
         AlertDialog.Builder(requireContext())
             .setTitle("Configurazione TorBox")
@@ -83,8 +83,8 @@ class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment(
     private fun updateConnectionStatus(view: View?) {
         if (view == null) return
         val statusView = view.findView<TextView>("debrid_status")
-        val isEnabled = getKey("torrentio_torbox_enabled") == true
-        val hasToken = !getKey("torrentio_torbox_token").isNullOrEmpty()
+        val isEnabled = getKey<Boolean>("torrentio_torbox_enabled") == true
+        val hasToken = !getKey<String>("torrentio_torbox_token").isNullOrEmpty()
         
         val status = when {
             !isEnabled -> "❌ Disabilitato"
