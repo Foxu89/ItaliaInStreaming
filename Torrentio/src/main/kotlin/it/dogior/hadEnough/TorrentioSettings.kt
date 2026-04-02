@@ -1,3 +1,5 @@
+@file:OptIn(com.lagradost.cloudstream3.Prerelease::class)
+
 package it.dogior.hadEnough
 
 import android.os.Bundle
@@ -52,16 +54,16 @@ class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment(
     }
     
     private fun showTorboxConfigDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.torbox_config, null)
-        val tokenInput = dialogView.findViewById<EditText>(R.id.torbox_token)
-        val enableToggle = dialogView.findViewById<Switch>(R.id.torbox_enable)
+        val credsView = getLayout("torbox_config", LayoutInflater.from(requireContext()), null)
+        val tokenInput = credsView.findView<EditText>("torbox_token")
+        val enableToggle = credsView.findView<Switch>("torbox_enable")
         
         tokenInput.setText(getKey("torrentio_torbox_token") ?: "")
         enableToggle.isChecked = getKey("torrentio_torbox_enabled") == true
         
         AlertDialog.Builder(requireContext())
             .setTitle("Configurazione TorBox")
-            .setView(dialogView)
+            .setView(credsView)
             .setPositiveButton("Salva") { _, _ ->
                 setKey("torrentio_torbox_token", tokenInput.text.toString())
                 setKey("torrentio_torbox_enabled", enableToggle.isChecked)
@@ -73,8 +75,9 @@ class TorrentioSettings(private val plugin: Plugin) : BottomSheetDialogFragment(
             .show()
     }
     
-    private fun updateConnectionStatus(root: View?) {
-        val statusView = root?.findView<TextView>("debrid_status")
+    private fun updateConnectionStatus(view: View?) {
+        if (view == null) return
+        val statusView = view.findView<TextView>("debrid_status")
         val isEnabled = getKey("torrentio_torbox_enabled") == true
         val hasToken = !getKey("torrentio_torbox_token").isNullOrEmpty()
         
