@@ -1,25 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="16dp"
+    android:background="#1E1E1E">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Token API TorBox"
-        android:textSize="18sp"
+        android:textSize="16sp"
+        android:textColor="#FFFFFF"
         android:layout_marginBottom="8dp" />
 
     <EditText
         android:id="@+id/torbox_token"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="5dp"
-        android:layout_marginBottom="16dp"
+        android:hint="Inserisci il tuo token API"
         android:inputType="text"
-        android:hint="Inserisci il tuo token API" />
+        android:padding="12dp"
+        android:background="#2D2D2D"
+        android:textColor="#FFFFFF"
+        android:hintTextColor="#AAAAAA"
+        android:layout_marginBottom="16dp" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -32,7 +37,8 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Abilita TorBox"
-            android:textSize="18sp" />
+            android:textSize="16sp"
+            android:textColor="#FFFFFF" />
 
         <Switch
             android:id="@+id/torbox_enable"
