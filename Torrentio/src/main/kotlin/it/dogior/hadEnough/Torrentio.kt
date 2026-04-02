@@ -1,3 +1,5 @@
+@file:OptIn(com.lagradost.cloudstream3.Prerelease::class)
+
 package it.dogior.hadEnough
 
 import com.lagradost.api.Log
