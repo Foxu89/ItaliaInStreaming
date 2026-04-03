@@ -13,8 +13,8 @@ include(
     "CalcioStreaming",
     "CB01",
     "CorsaroNero",
-//    "DaddyLive",
-    "GuardaSerie",**/
+//    "DaddyLive",**/
+    "GuardaSerie",
 //    "Huhu",
  /**   "IlGenioDelloStreaming",
 //    "OnlineSerieTV",
