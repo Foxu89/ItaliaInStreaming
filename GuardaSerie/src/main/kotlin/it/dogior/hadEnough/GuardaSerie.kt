@@ -1,6 +1,5 @@
 package it.dogior.hadEnough
 
-import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
@@ -10,7 +9,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import it.dogior.hadEnough.VixSrcExtractor
 import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
 
 class GuardaSerie : MainAPI() {
     override var mainUrl = "https://guarda-serie.ovh"
@@ -21,18 +19,18 @@ class GuardaSerie : MainAPI() {
     override val hasQuickSearch = false
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "I titoli del momento",
-        "$mainUrl/archive?sort=vote" to "Top IMDB",
-        "$mainUrl/archive?genre_id=18&type=tv" to "Dramma",
-        "$mainUrl/archive?genre_id=35&type=tv" to "Commedia",
-        "$mainUrl/archive?genre_id=80&type=tv" to "Crime",
-        "$mainUrl/archive?genre_id=10759&type=tv" to "Action & Adventure",
-        "$mainUrl/archive?genre_id=16&type=tv" to "Animazione",
-        "$mainUrl/archive?genre_id=10765&type=tv" to "Sci-Fi & Fantasy",
-        "$mainUrl/archive?genre_id=9648&type=tv" to "Mistero",
-        "$mainUrl/archive?genre_id=10768&type=tv" to "War & Politics",
-        "$mainUrl/archive?genre_id=10766&type=tv" to "Soap",
-        "$mainUrl/archive?genre_id=37&type=tv" to "Western"
+        "$mainUrl/" to "🔥 I titoli del momento",
+        "$mainUrl/archive?sort=vote" to "⭐ Top IMDB",
+        "$mainUrl/archive?genre_id=18&type=tv" to "🎭 Dramma",
+        "$mainUrl/archive?genre_id=35&type=tv" to "😄 Commedia",
+        "$mainUrl/archive?genre_id=80&type=tv" to "🔪 Crime",
+        "$mainUrl/archive?genre_id=10759&type=tv" to "⚔️ Action & Adventure",
+        "$mainUrl/archive?genre_id=16&type=tv" to "🎨 Animazione",
+        "$mainUrl/archive?genre_id=10765&type=tv" to "🚀 Sci-Fi & Fantasy",
+        "$mainUrl/archive?genre_id=9648&type=tv" to "🕵️ Mistero",
+        "$mainUrl/archive?genre_id=10768&type=tv" to "⚔️ War & Politics",
+        "$mainUrl/archive?genre_id=10766&type=tv" to "🧼 Soap",
+        "$mainUrl/archive?genre_id=37&type=tv" to "🤠 Western"
     )
 
     data class EpisodeData(
@@ -48,7 +46,7 @@ class GuardaSerie : MainAPI() {
         val url: String
     )
 
-    private fun getImageUrl(link: String?, size: String = "w200"): String? {
+    private fun getImageUrl(link: String?): String? {
         if (link.isNullOrEmpty()) return null
         return if (link.startsWith("/")) "https://guarda-serie.ovh$link" else link
     }
@@ -58,45 +56,61 @@ class GuardaSerie : MainAPI() {
         val doc = app.get(url).document
         val items = mutableListOf<SearchResponse>()
         
-        // Slider items (I titoli del momento)
-        if (url == "$mainUrl/") {
-            doc.select(".slider-item").forEach { element ->
-                val link = element.select("a").first()?.attr("href") ?: return@forEach
-                val title = element.select("img").attr("alt")
-                val poster = getImageUrl(element.select("img").attr("src"))
+        when {
+            // Home page - slider "I titoli del momento"
+            url == "$mainUrl/" -> {
+                doc.select(".slider-item").forEach { element ->
+                    val link = element.select("a").first()?.attr("href") ?: return@forEach
+                    val title = element.select("img").attr("alt")
+                    val poster = getImageUrl(element.select("img").attr("src"))
+                    
+                    if (link.isNotEmpty() && title.isNotEmpty()) {
+                        items.add(
+                            newTvSeriesSearchResponse(title, fixUrl(link)) {
+                                this.posterUrl = poster
+                            }
+                        )
+                    }
+                }
+            }
+            
+            // Archive con classifica (Top IMDB, generi)
+            url.contains("/archive") -> {
+                // Lista classifica (#ranked-list)
+                doc.select("#ranked-list ul li a.ranked-link").forEach { element ->
+                    val link = element.attr("href")
+                    val title = element.select(".rank-name").text()
+                    
+                    if (link.isNotEmpty() && title.isNotEmpty()) {
+                        items.add(
+                            newTvSeriesSearchResponse(title, fixUrl(link)) {
+                                this.posterUrl = null
+                            }
+                        )
+                    }
+                }
                 
-                if (link.isNotEmpty() && title.isNotEmpty()) {
-                    items.add(
-                        newTvSeriesSearchResponse(title, fixUrl(link)) {
-                            this.posterUrl = poster
-                        }
-                    )
+                // Lista normale (.mlnew)
+                doc.select(".mlnew").forEach { element ->
+                    val link = element.select(".mlnh-thumb a").attr("href")
+                    val title = element.select(".mlnh-2 h2 a").text()
+                    val poster = getImageUrl(element.select(".mlnh-thumb img").attr("src"))
+                    
+                    if (link.isNotEmpty() && title.isNotEmpty()) {
+                        items.add(
+                            newTvSeriesSearchResponse(title, fixUrl(link)) {
+                                this.posterUrl = poster
+                            }
+                        )
+                    }
                 }
             }
         }
         
-        // Archive items (categorie e top)
-        if (url.contains("/archive")) {
-            doc.select("#ranked-list ul li a.ranked-link, .mlnew").forEach { element ->
-                val link = element.attr("href")
-                val title = element.select(".rank-name").text()
-                    .ifEmpty { element.select("h2 a, .rank-title .rank-name").text() }
-                    .ifEmpty { element.ownText() }
-                
-                if (link.isNotEmpty() && title.isNotEmpty()) {
-                    items.add(
-                        newTvSeriesSearchResponse(title, fixUrl(link)) {
-                            this.posterUrl = null
-                        }
-                    )
-                }
-            }
-        }
-        
-        val hasNext = doc.select(".pagenavi a:contains(Next)").isNotEmpty()
+        val hasNext = doc.select(".mlnew-pagination a:contains(Next)").isNotEmpty()
         
         return newHomePageResponse(
-            HomePageList(request.name, items, isHorizontalImages = true),
+            HomePageList(request.name, items, isHorizontalImages = false),
             hasNext = hasNext
         )
     }
@@ -104,18 +118,38 @@ class GuardaSerie : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val doc = app.get("$mainUrl/search?q=${query.replace(" ", "+")}").document
         
-        return doc.select(".mlnew, #ranked-list ul li a.ranked-link").mapNotNull { element ->
+        val results = mutableListOf<SearchResponse>()
+        
+        // Cerca nella classifica
+        doc.select("#ranked-list ul li a.ranked-link").forEach { element ->
             val link = element.attr("href")
             val title = element.select(".rank-name").text()
-                .ifEmpty { element.select("h2 a").text() }
-                .ifEmpty { element.ownText() }
             
             if (link.isNotEmpty() && title.isNotEmpty() && link.contains("/detail/tv-")) {
-                newTvSeriesSearchResponse(title, fixUrl(link)) {
-                    this.posterUrl = null
-                }
-            } else null
+                results.add(
+                    newTvSeriesSearchResponse(title, fixUrl(link)) {
+                        this.posterUrl = null
+                    }
+                )
+            }
         }
+        
+        // Cerca nella lista normale
+        doc.select(".mlnew").forEach { element ->
+            val link = element.select(".mlnh-thumb a").attr("href")
+            val title = element.select(".mlnh-2 h2 a").text()
+            val poster = getImageUrl(element.select(".mlnh-thumb img").attr("src"))
+            
+            if (link.isNotEmpty() && title.isNotEmpty() && link.contains("/detail/tv-")) {
+                results.add(
+                    newTvSeriesSearchResponse(title, fixUrl(link)) {
+                        this.posterUrl = poster
+                    }
+                )
+            }
+        }
+        
+        return results
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -127,7 +161,7 @@ class GuardaSerie : MainAPI() {
             .trim()
         
         // Poster
-        val poster = getImageUrl(doc.select("#tv-info-poster img").attr("src"), "w200")
+        val poster = getImageUrl(doc.select("#tv-info-poster img").attr("src"))
         
         // Trama
         val plot = doc.select(".tv-info-right").text()
@@ -163,6 +197,7 @@ class GuardaSerie : MainAPI() {
 
     private fun getEpisodes(doc: Document, poster: String?): List<Episode> {
         val episodes = mutableListOf<Episode>()
+        val tmdbId = getTmdbIdFromDocument(doc)
         
         // Cerca i tab delle stagioni
         val seasonTabs = doc.select(".tt-season ul li a")
@@ -179,14 +214,14 @@ class GuardaSerie : MainAPI() {
                         ?: episodeLink?.text()?.toIntOrNull()
                         ?: continue
                     
-                    val episodeTitle = episodeLink?.attr("data-title") ?: "Episodio $episodeNum"
+                    // Titolo episodio dall'attributo data-title
+                    val episodeTitle = episodeLink?.attr("data-title")?.trim()
+                        ?: "Episodio $episodeNum"
                     
                     // Costruisci l'URL del player
-                    val playerUrl = "https://vixsrc.to/tv/${getTmdbIdFromUrl(doc)}/$seasonNumber/$episodeNum?lang=it"
+                    val playerUrl = "https://vixsrc.to/tv/$tmdbId/$seasonNumber/$episodeNum?lang=it"
                     
-                    val mirrors = listOf(
-                        MirrorLink("VixSrc", playerUrl)
-                    )
+                    val mirrors = listOf(MirrorLink("VixSrc", playerUrl))
                     
                     val episodeData = EpisodeData(seasonNumber, episodeNum, episodeTitle, null, mirrors)
                     episodes.add(
@@ -216,12 +251,17 @@ class GuardaSerie : MainAPI() {
                     if (episodeMatch != null) {
                         val episodeNum = episodeMatch.groupValues[2].toInt()
                         
-                        val playerUrl = "https://vixsrc.to/tv/${getTmdbIdFromUrl(doc)}/$seasonNumber/$episodeNum?lang=it"
+                        // Cerca titolo episodio nella riga
+                        val titleMatch = Regex("""\d+x\d+\s*-\s*([^<]+)""").find(line)
+                        val episodeTitle = titleMatch?.groupValues?.get(1)?.trim() ?: "Episodio $episodeNum"
+                        
+                        val playerUrl = "https://vixsrc.to/tv/$tmdbId/$seasonNumber/$episodeNum?lang=it"
                         val mirrors = listOf(MirrorLink("VixSrc", playerUrl))
                         
-                        val episodeData = EpisodeData(seasonNumber, episodeNum, "Episodio $episodeNum", null, mirrors)
+                        val episodeData = EpisodeData(seasonNumber, episodeNum, episodeTitle, null, mirrors)
                         episodes.add(
                             newEpisode(episodeData.toJson()) {
+                                this.name = episodeTitle
                                 this.season = seasonNumber
                                 this.episode = episodeNum
                                 this.posterUrl = poster
@@ -235,8 +275,7 @@ class GuardaSerie : MainAPI() {
         return episodes.sortedWith(compareBy({ it.season }, { it.episode }))
     }
     
-    private fun getTmdbIdFromUrl(doc: Document): String {
-        // Cerca lo script che contiene tmdbID
+    private fun getTmdbIdFromDocument(doc: Document): String {
         val scripts = doc.select("script")
         for (script in scripts) {
             val data = script.data()
@@ -258,11 +297,9 @@ class GuardaSerie : MainAPI() {
             val episodeData = parseJson<EpisodeData>(data)
             
             episodeData.mirrors.forEach { mirror ->
-                // Usa solo VixSrcExtractor
                 if (mirror.url.contains("vixsrc.to")) {
                     VixSrcExtractor().getUrl(mirror.url, mainUrl, subtitleCallback, callback)
                 } else {
-                    // Fallback generico
                     loadExtractor(mirror.url, mainUrl, subtitleCallback, callback)
                 }
             }
