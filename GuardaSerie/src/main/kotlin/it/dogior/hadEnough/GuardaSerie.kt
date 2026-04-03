@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
-import it.dogior.hadEnough.vixsrcestractor
+import it.dogior.hadEnough.VixSrcExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
@@ -21,18 +21,18 @@ class GuardaSerie : MainAPI() {
     override val hasQuickSearch = false
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "🔥 I titoli del momento",
-        "$mainUrl/archive?sort=vote" to "⭐ Top IMDB",
-        "$mainUrl/archive?genre_id=18&type=tv" to "🎭 Dramma",
-        "$mainUrl/archive?genre_id=35&type=tv" to "😄 Commedia",
-        "$mainUrl/archive?genre_id=80&type=tv" to "🔪 Crime",
-        "$mainUrl/archive?genre_id=10759&type=tv" to "⚔️ Action & Adventure",
-        "$mainUrl/archive?genre_id=16&type=tv" to "🎨 Animazione",
-        "$mainUrl/archive?genre_id=10765&type=tv" to "🚀 Sci-Fi & Fantasy",
-        "$mainUrl/archive?genre_id=9648&type=tv" to "🕵️ Mistero",
-        "$mainUrl/archive?genre_id=10768&type=tv" to "⚔️ War & Politics",
-        "$mainUrl/archive?genre_id=10766&type=tv" to "🧼 Soap",
-        "$mainUrl/archive?genre_id=37&type=tv" to "🤠 Western"
+        "$mainUrl/" to "I titoli del momento",
+        "$mainUrl/archive?sort=vote" to "Top IMDB",
+        "$mainUrl/archive?genre_id=18&type=tv" to "Dramma",
+        "$mainUrl/archive?genre_id=35&type=tv" to "Commedia",
+        "$mainUrl/archive?genre_id=80&type=tv" to "Crime",
+        "$mainUrl/archive?genre_id=10759&type=tv" to "Action & Adventure",
+        "$mainUrl/archive?genre_id=16&type=tv" to "Animazione",
+        "$mainUrl/archive?genre_id=10765&type=tv" to "Sci-Fi & Fantasy",
+        "$mainUrl/archive?genre_id=9648&type=tv" to "Mistero",
+        "$mainUrl/archive?genre_id=10768&type=tv" to "War & Politics",
+        "$mainUrl/archive?genre_id=10766&type=tv" to "Soap",
+        "$mainUrl/archive?genre_id=37&type=tv" to "Western"
     )
 
     data class EpisodeData(
