@@ -52,7 +52,7 @@ class GuardaSerie : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = request.data
+        val url = if (page == 1) request.data else "${request.data}&page=$page"
         val doc = app.get(url).document
         val items = mutableListOf<SearchResponse>()
         
@@ -214,60 +214,37 @@ class GuardaSerie : MainAPI() {
                         ?: episodeLink?.text()?.toIntOrNull()
                         ?: continue
                     
-                    // Titolo episodio dall'attributo data-title
-                    val episodeTitle = episodeLink?.attr("data-title")?.trim()
-                        ?: "Episodio $episodeNum"
+                    // Estrai titolo e descrizione dall'attributo data-title
+                    val dataTitle = episodeLink?.attr("data-title")?.trim() ?: ""
+                    var episodeTitle = "Episodio $episodeNum"
+                    var episodeDescription: String? = null
+                    
+                    if (dataTitle.isNotEmpty()) {
+                        // Formato: "Titolo: Descrizione" o solo "Titolo"
+                        if (dataTitle.contains(":")) {
+                            val parts = dataTitle.split(":", limit = 2)
+                            episodeTitle = parts[0].trim()
+                            episodeDescription = parts.getOrNull(1)?.trim()
+                        } else {
+                            episodeTitle = dataTitle
+                        }
+                    }
                     
                     // Costruisci l'URL del player
                     val playerUrl = "https://vixsrc.to/tv/$tmdbId/$seasonNumber/$episodeNum?lang=it"
                     
                     val mirrors = listOf(MirrorLink("VixSrc", playerUrl))
                     
-                    val episodeData = EpisodeData(seasonNumber, episodeNum, episodeTitle, null, mirrors)
+                    val episodeData = EpisodeData(seasonNumber, episodeNum, episodeTitle, episodeDescription, mirrors)
                     episodes.add(
                         newEpisode(episodeData.toJson()) {
                             this.name = episodeTitle
+                            this.description = episodeDescription
                             this.season = seasonNumber
                             this.episode = episodeNum
                             this.posterUrl = poster
                         }
                     )
-                }
-            }
-        }
-        
-        // Fallback: cerca episodi nello spoiler
-        if (episodes.isEmpty()) {
-            val spoilers = doc.select(".su-spoiler")
-            
-            for (spoiler in spoilers) {
-                val seasonTitle = spoiler.select(".su-spoiler-title").text()
-                val seasonNumber = Regex("\\d+").find(seasonTitle)?.value?.toIntOrNull() ?: continue
-                val content = spoiler.select(".su-spoiler-content")
-                
-                val lines = content.html().split("<br />")
-                for (line in lines) {
-                    val episodeMatch = Regex("(\\d+)x(\\d+)").find(line)
-                    if (episodeMatch != null) {
-                        val episodeNum = episodeMatch.groupValues[2].toInt()
-                        
-                        // Cerca titolo episodio nella riga
-                        val titleMatch = Regex("""\d+x\d+\s*-\s*([^<]+)""").find(line)
-                        val episodeTitle = titleMatch?.groupValues?.get(1)?.trim() ?: "Episodio $episodeNum"
-                        
-                        val playerUrl = "https://vixsrc.to/tv/$tmdbId/$seasonNumber/$episodeNum?lang=it"
-                        val mirrors = listOf(MirrorLink("VixSrc", playerUrl))
-                        
-                        val episodeData = EpisodeData(seasonNumber, episodeNum, episodeTitle, null, mirrors)
-                        episodes.add(
-                            newEpisode(episodeData.toJson()) {
-                                this.name = episodeTitle
-                                this.season = seasonNumber
-                                this.episode = episodeNum
-                                this.posterUrl = poster
-                            }
-                        )
-                    }
                 }
             }
         }
@@ -298,7 +275,12 @@ class GuardaSerie : MainAPI() {
             
             episodeData.mirrors.forEach { mirror ->
                 if (mirror.url.contains("vixsrc.to")) {
-                    VixSrcExtractor().getUrl(mirror.url, mainUrl, subtitleCallback, callback)
+                    try {
+                        VixSrcExtractor().getUrl(mirror.url, mainUrl, subtitleCallback, callback)
+                    } catch (e: Exception) {
+                        // Se vixsrc fallisce, prova con loadExtractor come fallback
+                        loadExtractor(mirror.url, mainUrl, subtitleCallback, callback)
+                    }
                 } else {
                     loadExtractor(mirror.url, mainUrl, subtitleCallback, callback)
                 }
