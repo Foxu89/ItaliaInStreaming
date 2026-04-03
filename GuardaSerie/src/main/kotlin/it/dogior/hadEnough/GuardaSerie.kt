@@ -182,8 +182,11 @@ class GuardaSerie : MainAPI() {
         // Stato
         val status = if (yearText.contains("Returning Series")) ShowStatus.Ongoing else ShowStatus.Completed
         
+        // Estrai TMDB ID dall'URL o dalla pagina
+        val tmdbId = extractTmdbId(url, doc)
+        
         // Episodi
-        val episodes = getEpisodes(doc, poster)
+        val episodes = getEpisodes(doc, poster, tmdbId)
         
         return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
             this.posterUrl = poster
@@ -194,10 +197,43 @@ class GuardaSerie : MainAPI() {
             addScore(ratingText)
         }
     }
+    
+    private fun extractTmdbId(url: String, doc: Document): String {
+        // Metodo 1: Dall'URL della pagina (formato /detail/tv-{ID}-nome-serie)
+        val urlMatch = Regex("""/detail/tv-(\d+)""").find(url)
+        if (urlMatch != null) {
+            return urlMatch.groupValues[1]
+        }
+        
+        // Metodo 2: Dallo script della pagina (var tmdbID)
+        val scripts = doc.select("script")
+        for (script in scripts) {
+            val data = script.data()
+            val match = Regex("""var tmdbID\s*=\s*(\d+);""").find(data)
+            if (match != null) {
+                return match.groupValues[1]
+            }
+        }
+        
+        // Metodo 3: Dai meta tag
+        val metaMatch = doc.select("meta[property=og:url]").attr("content")
+        val metaId = Regex("""tv-(\d+)""").find(metaMatch)
+        if (metaId != null) {
+            return metaId.groupValues[1]
+        }
+        
+        // Metodo 4: Dai link canonici
+        val canonicalMatch = doc.select("link[rel=canonical]").attr("href")
+        val canonicalId = Regex("""tv-(\d+)""").find(canonicalMatch)
+        if (canonicalId != null) {
+            return canonicalId.groupValues[1]
+        }
+        
+        return "0"
+    }
 
-    private fun getEpisodes(doc: Document, poster: String?): List<Episode> {
+    private fun getEpisodes(doc: Document, poster: String?, tmdbId: String): List<Episode> {
         val episodes = mutableListOf<Episode>()
-        val tmdbId = getTmdbIdFromDocument(doc)
         
         // Cerca i tab delle stagioni
         val seasonTabs = doc.select(".tt-season ul li a")
@@ -220,7 +256,6 @@ class GuardaSerie : MainAPI() {
                     var episodeDescription: String? = null
                     
                     if (dataTitle.isNotEmpty()) {
-                        // Formato: "Titolo: Descrizione" o solo "Titolo"
                         if (dataTitle.contains(":")) {
                             val parts = dataTitle.split(":", limit = 2)
                             episodeTitle = parts[0].trim()
@@ -230,7 +265,7 @@ class GuardaSerie : MainAPI() {
                         }
                     }
                     
-                    // Costruisci l'URL del player
+                    // Costruisci l'URL del player con il TMDB ID corretto
                     val playerUrl = "https://vixsrc.to/tv/$tmdbId/$seasonNumber/$episodeNum?lang=it"
                     
                     val mirrors = listOf(MirrorLink("VixSrc", playerUrl))
@@ -251,18 +286,6 @@ class GuardaSerie : MainAPI() {
         
         return episodes.sortedWith(compareBy({ it.season }, { it.episode }))
     }
-    
-    private fun getTmdbIdFromDocument(doc: Document): String {
-        val scripts = doc.select("script")
-        for (script in scripts) {
-            val data = script.data()
-            val match = Regex("""var tmdbID\s*=\s*(\d+);""").find(data)
-            if (match != null) {
-                return match.groupValues[1]
-            }
-        }
-        return "0"
-    }
 
     override suspend fun loadLinks(
         data: String,
@@ -278,7 +301,6 @@ class GuardaSerie : MainAPI() {
                     try {
                         VixSrcExtractor().getUrl(mirror.url, mainUrl, subtitleCallback, callback)
                     } catch (e: Exception) {
-                        // Se vixsrc fallisce, prova con loadExtractor come fallback
                         loadExtractor(mirror.url, mainUrl, subtitleCallback, callback)
                     }
                 } else {
