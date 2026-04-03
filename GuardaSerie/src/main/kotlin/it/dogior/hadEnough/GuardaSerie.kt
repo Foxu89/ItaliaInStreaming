@@ -8,13 +8,12 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
-import it.dogior.hadEnough.extractors.DroploadExtractor
-import it.dogior.hadEnough.extractors.SupervideoExtractor
+import it.dogior.hadEnough.vixsrcestractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class GuardaSerie : MainAPI() {
-    override var mainUrl = "https://guarda-serie.click"
+    override var mainUrl = "https://guarda-serie.ovh"
     override var name = "GuardaSerie"
     override val supportedTypes = setOf(TvType.TvSeries)
     override var lang = "it"
@@ -22,41 +21,18 @@ class GuardaSerie : MainAPI() {
     override val hasQuickSearch = false
 
     override val mainPage = mainPageOf(
-        "$mainUrl/serietv-popolari/" to "Popolari",
-        "$mainUrl/netflix-gratis/" to "Netflix",
-        "$mainUrl/top-imdb/" to "Top IMDb",
-        "$mainUrl/coming-soon/" to "In Arrivo...",
-        "$mainUrl/animazione/" to "Animazione",
-        "$mainUrl/avventura/" to "Avventura",
-        "$mainUrl/azione/" to "Azione",
-        "$mainUrl/commedia/" to "Commedia",
-        "$mainUrl/crime/" to "Crime",
-        "$mainUrl/documentario/" to "Documentario",
-        "$mainUrl/dramma/" to "Dramma",
-        "$mainUrl/drammatico/" to "Drammatico",
-        "$mainUrl/fantascienza/" to "Fantascienza",
-        "$mainUrl/fantastico/" to "Fantastico",
-        "$mainUrl/fantasy/" to "Fantasy",
-        "$mainUrl/famiglia/" to "Famiglia",
-        "$mainUrl/giallo/" to "Giallo",
-        "$mainUrl/guerra/" to "Guerra",
-        "$mainUrl/horror/" to "Horror",
-        "$mainUrl/intrattenimento/" to "Intrattenimento",
-        "$mainUrl/miniserie-tv/" to "Miniserie",
-        "$mainUrl/musicale/" to "Musicale",
-        "$mainUrl/mistero/" to "Mistero",
-        "$mainUrl/poliziesco/" to "Poliziesco",
-        "$mainUrl/reality/" to "Reality",
-        "$mainUrl/romantico/" to "Romantico",
-        "$mainUrl/sentimentale/" to "Sentimentale",
-        "$mainUrl/sitcom/" to "Sitcom",
-        "$mainUrl/soap-opera/" to "Soap Opera",
-        "$mainUrl/storico/" to "Storico",
-        "$mainUrl/talent-show/" to "Talent Show",
-        "$mainUrl/kids/" to "Kids",
-        "$mainUrl/talk-show/" to "Talk Show",
-        "$mainUrl/thriller/" to "Thriller",
-        "$mainUrl/tv-show/" to "Tv Show"
+        "$mainUrl/" to "🔥 I titoli del momento",
+        "$mainUrl/archive?sort=vote" to "⭐ Top IMDB",
+        "$mainUrl/archive?genre_id=18&type=tv" to "🎭 Dramma",
+        "$mainUrl/archive?genre_id=35&type=tv" to "😄 Commedia",
+        "$mainUrl/archive?genre_id=80&type=tv" to "🔪 Crime",
+        "$mainUrl/archive?genre_id=10759&type=tv" to "⚔️ Action & Adventure",
+        "$mainUrl/archive?genre_id=16&type=tv" to "🎨 Animazione",
+        "$mainUrl/archive?genre_id=10765&type=tv" to "🚀 Sci-Fi & Fantasy",
+        "$mainUrl/archive?genre_id=9648&type=tv" to "🕵️ Mistero",
+        "$mainUrl/archive?genre_id=10768&type=tv" to "⚔️ War & Politics",
+        "$mainUrl/archive?genre_id=10766&type=tv" to "🧼 Soap",
+        "$mainUrl/archive?genre_id=37&type=tv" to "🤠 Western"
     )
 
     data class EpisodeData(
@@ -72,85 +48,71 @@ class GuardaSerie : MainAPI() {
         val url: String
     )
 
-    private fun getOriginalPoster(thumbUrl: String): String {
-        return thumbUrl
-            .replace("/thumb/60x85-0-85", "/posts")
-            .replace(Regex("/thumb/\\d+x\\d+-\\d+-\\d+/"), "/posts/")
-            .replace("/thumb/", "/posts/")
+    private fun getImageUrl(link: String?, size: String = "w200"): String? {
+        if (link.isNullOrEmpty()) return null
+        return if (link.startsWith("/")) "https://guarda-serie.ovh$link" else link
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = if (request.data == mainUrl) {
-            mainUrl
-        } else {
-            request.data
-        }
-        
+        val url = request.data
         val doc = app.get(url).document
         val items = mutableListOf<SearchResponse>()
         
-        if (request.data == mainUrl) {
-            items.addAll(doc.select(".slider .item").mapNotNull { element ->
-                val link = element.select("a").attr("href")
+        // Slider items (I titoli del momento)
+        if (url == "$mainUrl/") {
+            doc.select(".slider-item").forEach { element ->
+                val link = element.select("a").first()?.attr("href") ?: return@forEach
                 val title = element.select("img").attr("alt")
-                val thumbUrl = element.select("img").attr("src")
-                val poster = getOriginalPoster(thumbUrl)
+                val poster = getImageUrl(element.select("img").attr("src"))
                 
                 if (link.isNotEmpty() && title.isNotEmpty()) {
-                    newTvSeriesSearchResponse(title, fixUrl(link)) {
-                        this.posterUrl = fixUrlNull(poster)
-                        this.posterHeaders = emptyMap()
-                        this.quality = null
-                    }
-                } else null
-            })
+                    items.add(
+                        newTvSeriesSearchResponse(title, fixUrl(link)) {
+                            this.posterUrl = poster
+                        }
+                    )
+                }
+            }
         }
         
-        if (request.data != mainUrl) {
-            items.addAll(doc.select(".mlnew").mapNotNull { element ->
-                val link = element.select(".mlnh-thumb a").attr("href")
-                val title = element.select("h2 a").text()
-                val thumbUrl = element.select("img").attr("src")
-                val poster = getOriginalPoster(thumbUrl)
+        // Archive items (categorie e top)
+        if (url.contains("/archive")) {
+            doc.select("#ranked-list ul li a.ranked-link, .mlnew").forEach { element ->
+                val link = element.attr("href")
+                val title = element.select(".rank-name").text()
+                    .ifEmpty { element.select("h2 a, .rank-title .rank-name").text() }
+                    .ifEmpty { element.ownText() }
                 
                 if (link.isNotEmpty() && title.isNotEmpty()) {
-                    newTvSeriesSearchResponse(title, fixUrl(link)) {
-                        this.posterUrl = fixUrlNull(poster)
-                        this.posterHeaders = emptyMap()
-                        this.quality = null
-                    }
-                } else null
-            })
+                    items.add(
+                        newTvSeriesSearchResponse(title, fixUrl(link)) {
+                            this.posterUrl = null
+                        }
+                    )
+                }
+            }
         }
         
         val hasNext = doc.select(".pagenavi a:contains(Next)").isNotEmpty()
         
         return newHomePageResponse(
-            HomePageList(request.name, items, isHorizontalImages = false),
+            HomePageList(request.name, items, isHorizontalImages = true),
             hasNext = hasNext
         )
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val doc = app.post(
-            "$mainUrl/index.php?do=search",
-            data = mapOf(
-                "do" to "search",
-                "subaction" to "search",
-                "story" to query
-            )
-        ).document
+        val doc = app.get("$mainUrl/search?q=${query.replace(" ", "+")}").document
         
-        return doc.select(".mlnew").mapNotNull { element ->
-            val link = element.select(".mlnh-thumb a").attr("href")
-            val title = element.select("h2 a").text()
-            val thumbUrl = element.select("img").attr("src")
-            val poster = getOriginalPoster(thumbUrl)
+        return doc.select(".mlnew, #ranked-list ul li a.ranked-link").mapNotNull { element ->
+            val link = element.attr("href")
+            val title = element.select(".rank-name").text()
+                .ifEmpty { element.select("h2 a").text() }
+                .ifEmpty { element.ownText() }
             
-            if (link.isNotEmpty() && title.isNotEmpty()) {
+            if (link.isNotEmpty() && title.isNotEmpty() && link.contains("/detail/tv-")) {
                 newTvSeriesSearchResponse(title, fixUrl(link)) {
-                    this.posterUrl = fixUrlNull(poster)
-                    this.posterHeaders = emptyMap()
+                    this.posterUrl = null
                 }
             } else null
         }
@@ -159,34 +121,38 @@ class GuardaSerie : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val doc = app.get(url).document
         
-        val title = doc.select("h1.front_title, .front_title").text()
+        // Titolo
+        val title = doc.select("h1.front-title, .gs-detail-title").text()
             .replace("streaming", "")
             .trim()
-        val poster = doc.select("#cover, .poster img, .tv_info_right img").attr("src")
         
-        val plot = doc.select(".tv_info_right").text()
+        // Poster
+        val poster = getImageUrl(doc.select("#tv-info-poster img").attr("src"), "w200")
+        
+        // Trama
+        val plot = doc.select(".tv-info-right").text()
             .substringAfter("Trama")
-            .substringBefore("!")
-            .replace("trama completa", "")
-            .replace("Trama completa", "")
-            .replace("clicca qui", "")
-            .replace(Regex("\\s+"), " ")
+            .substringBefore("Categoria")
             .trim()
         
-        val ratingText = doc.select(".post-ratings .rating-value, .entry-imdb").text()
-            .replace("IMDb", "")
-            .trim()
+        // Rating
+        val ratingText = doc.select(".entry-imdb").text().replace("★", "").trim()
         
-        val yearText = doc.select(".tv_info_list ul:contains(Anno) li:last-child").text()
+        // Anno
+        val yearText = doc.select(".tv-info-list ul:contains(Anno) li:last-child").text()
         val year = Regex("\\d{4}").find(yearText)?.value?.toIntOrNull()
         
-        val genres = doc.select(".tv_info_list ul:contains(Categoria) li:last-child a").map { it.text() }
-        val status = if (yearText.contains("In Lavorazione")) ShowStatus.Ongoing else ShowStatus.Completed
+        // Generi
+        val genres = doc.select(".tv-info-list ul:contains(Categoria) li:last-child a").map { it.text() }
         
+        // Stato
+        val status = if (yearText.contains("Returning Series")) ShowStatus.Ongoing else ShowStatus.Completed
+        
+        // Episodi
         val episodes = getEpisodes(doc, poster)
         
         return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-            this.posterUrl = fixUrlNull(poster)
+            this.posterUrl = poster
             this.plot = plot
             this.tags = genres
             this.year = year
@@ -198,7 +164,8 @@ class GuardaSerie : MainAPI() {
     private fun getEpisodes(doc: Document, poster: String?): List<Episode> {
         val episodes = mutableListOf<Episode>()
         
-        val seasonTabs = doc.select(".tt_season ul li a")
+        // Cerca i tab delle stagioni
+        val seasonTabs = doc.select(".tt-season ul li a")
         
         if (seasonTabs.isNotEmpty()) {
             for (seasonTab in seasonTabs) {
@@ -208,36 +175,33 @@ class GuardaSerie : MainAPI() {
                 
                 for (episodeItem in episodeContainer) {
                     val episodeLink = episodeItem.select("a").first()
-                    val episodeText = episodeLink?.text()?.toIntOrNull() ?: continue
+                    val episodeNum = episodeLink?.attr("data-episode")?.toIntOrNull() 
+                        ?: episodeLink?.text()?.toIntOrNull()
+                        ?: continue
                     
-                    val fullTitle = episodeLink?.attr("data-title") ?: ""
-                    val (episodeTitle, episodeDescription) = if (fullTitle.contains(":")) {
-                        val parts = fullTitle.split(":", limit = 2)
-                        parts[0].trim() to parts.getOrNull(1)?.trim()
-                    } else {
-                        fullTitle to null
-                    }
+                    val episodeTitle = episodeLink?.attr("data-title") ?: "Episodio $episodeNum"
                     
-                    val mirrors = episodeItem.select(".mirrors a.mr").map { 
-                        MirrorLink(it.text(), it.attr("data-link"))
-                    }.filter { it.url.isNotEmpty() }
+                    // Costruisci l'URL del player
+                    val playerUrl = "https://vixsrc.to/tv/${getTmdbIdFromUrl(doc)}/$seasonNumber/$episodeNum?lang=it"
                     
-                    if (mirrors.isNotEmpty()) {
-                        val episodeData = EpisodeData(seasonNumber, episodeText, episodeTitle, episodeDescription, mirrors)
-                        episodes.add(
-                            newEpisode(episodeData.toJson()) {
-                                this.name = episodeTitle
-                                this.description = episodeDescription
-                                this.season = seasonNumber
-                                this.episode = episodeText
-                                this.posterUrl = fixUrlNull(poster)
-                            }
-                        )
-                    }
+                    val mirrors = listOf(
+                        MirrorLink("VixSrc", playerUrl)
+                    )
+                    
+                    val episodeData = EpisodeData(seasonNumber, episodeNum, episodeTitle, null, mirrors)
+                    episodes.add(
+                        newEpisode(episodeData.toJson()) {
+                            this.name = episodeTitle
+                            this.season = seasonNumber
+                            this.episode = episodeNum
+                            this.posterUrl = poster
+                        }
+                    )
                 }
             }
         }
         
+        // Fallback: cerca episodi nello spoiler
         if (episodes.isEmpty()) {
             val spoilers = doc.select(".su-spoiler")
             
@@ -252,33 +216,36 @@ class GuardaSerie : MainAPI() {
                     if (episodeMatch != null) {
                         val episodeNum = episodeMatch.groupValues[2].toInt()
                         
-                        val mirrors = mutableListOf<MirrorLink>()
-                        val supervideoMatch = Regex("href=\"([^\"]+)\">([^<]+)").findAll(line)
+                        val playerUrl = "https://vixsrc.to/tv/${getTmdbIdFromUrl(doc)}/$seasonNumber/$episodeNum?lang=it"
+                        val mirrors = listOf(MirrorLink("VixSrc", playerUrl))
                         
-                        for (match in supervideoMatch) {
-                            val url = match.groupValues[1]
-                            val name = match.groupValues[2]
-                            if (url.isNotEmpty() && (url.contains("supervideo") || url.contains("dr0pstream"))) {
-                                mirrors.add(MirrorLink(name, url))
+                        val episodeData = EpisodeData(seasonNumber, episodeNum, "Episodio $episodeNum", null, mirrors)
+                        episodes.add(
+                            newEpisode(episodeData.toJson()) {
+                                this.season = seasonNumber
+                                this.episode = episodeNum
+                                this.posterUrl = poster
                             }
-                        }
-                        
-                        if (mirrors.isNotEmpty()) {
-                            val episodeData = EpisodeData(seasonNumber, episodeNum, "Episodio $episodeNum", null, mirrors)
-                            episodes.add(
-                                newEpisode(episodeData.toJson()) {
-                                    this.season = seasonNumber
-                                    this.episode = episodeNum
-                                    this.posterUrl = fixUrlNull(poster)
-                                }
-                            )
-                        }
+                        )
                     }
                 }
             }
         }
         
         return episodes.sortedWith(compareBy({ it.season }, { it.episode }))
+    }
+    
+    private fun getTmdbIdFromUrl(doc: Document): String {
+        // Cerca lo script che contiene tmdbID
+        val scripts = doc.select("script")
+        for (script in scripts) {
+            val data = script.data()
+            val match = Regex("""var tmdbID\s*=\s*(\d+);""").find(data)
+            if (match != null) {
+                return match.groupValues[1]
+            }
+        }
+        return "0"
     }
 
     override suspend fun loadLinks(
@@ -291,16 +258,12 @@ class GuardaSerie : MainAPI() {
             val episodeData = parseJson<EpisodeData>(data)
             
             episodeData.mirrors.forEach { mirror ->
-                when {
-                    mirror.url.contains("supervideo") -> {
-                        SupervideoExtractor().getUrl(mirror.url, mainUrl, subtitleCallback, callback)
-                    }
-                    mirror.url.contains("dr0pstream") || mirror.url.contains("dropload") -> {
-                        DroploadExtractor().getUrl(mirror.url, mainUrl, subtitleCallback, callback)
-                    }
-                    else -> {
-                        loadExtractor(mirror.url, mainUrl, subtitleCallback, callback)
-                    }
+                // Usa solo VixSrcExtractor
+                if (mirror.url.contains("vixsrc.to")) {
+                    VixSrcExtractor().getUrl(mirror.url, mainUrl, subtitleCallback, callback)
+                } else {
+                    // Fallback generico
+                    loadExtractor(mirror.url, mainUrl, subtitleCallback, callback)
                 }
             }
             
