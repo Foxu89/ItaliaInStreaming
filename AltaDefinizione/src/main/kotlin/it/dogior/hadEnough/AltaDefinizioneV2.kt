@@ -105,8 +105,7 @@ class AltaDefinizioneV2 : MainAPI() {
         return newMovieSearchResponse(title, href, type) {
             this.posterUrl = poster
             if (!ratingText.isNullOrEmpty()) {
-                val rating = ratingText.replace("★", "").trim().toFloatOrNull() ?: 0f
-                addScore(rating)
+                addScore(ratingText.replace("★", "").trim())
             }
         }
     }
@@ -197,8 +196,7 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.tags = genres
                 this.year = year
                 if (ratingText.isNotEmpty()) {
-                    val rating = ratingText.toFloatOrNull() ?: 0f
-                    addScore(rating)
+                    addScore(ratingText)
                 }
             }
         } else {
@@ -237,8 +235,7 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.tags = genres
                 this.year = year
                 if (ratingText.isNotEmpty()) {
-                    val rating = ratingText.toFloatOrNull() ?: 0f
-                    addScore(rating)
+                    addScore(ratingText)
                 }
             }
         }
