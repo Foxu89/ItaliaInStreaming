@@ -10,16 +10,18 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
+import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
+import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.app
 import it.dogior.hadEnough.extractors.DroploadExtractor
 import it.dogior.hadEnough.extractors.MySupervideoExtractor
 import org.jsoup.nodes.Document
@@ -32,33 +34,33 @@ class AltaDefinizioneV2 : MainAPI() {
     override var lang = "it"
     override val hasMainPage = true
 
-    override val mainPage = listOf(
-        "$mainUrl/" to "I titoli del momento",
-        "$mainUrl/cinema/" to "Al Cinema",
-        "$mainUrl/serie-tv/" to "Serie TV",
-        "$mainUrl/netflix-streaming/" to "Netflix",
-        "$mainUrl/animazione/" to "Animazione",
-        "$mainUrl/avventura/" to "Avventura",
-        "$mainUrl/azione/" to "Azione",
-        "$mainUrl/biografico/" to "Biografico",
-        "$mainUrl/commedia/" to "Commedia",
-        "$mainUrl/crime/" to "Crime",
-        "$mainUrl/documentario/" to "Documentario",
-        "$mainUrl/drammatico/" to "Drammatico",
-        "$mainUrl/erotico/" to "Erotico",
-        "$mainUrl/famiglia/" to "Famiglia",
-        "$mainUrl/fantascienza/" to "Fantascienza",
-        "$mainUrl/fantasy/" to "Fantasy",
-        "$mainUrl/giallo/" to "Giallo",
-        "$mainUrl/guerra/" to "Guerra",
-        "$mainUrl/horror/" to "Horror",
-        "$mainUrl/musical/" to "Musical",
-        "$mainUrl/poliziesco/" to "Poliziesco",
-        "$mainUrl/romantico/" to "Romantico",
-        "$mainUrl/sportivo/" to "Sportivo",
-        "$mainUrl/storico-streaming/" to "Storico",
-        "$mainUrl/thriller/" to "Thriller",
-        "$mainUrl/western/" to "Western"
+    override val mainPage = mainPageOf(
+        Pair("$mainUrl/", "I titoli del momento"),
+        Pair("$mainUrl/cinema/", "Al Cinema"),
+        Pair("$mainUrl/serie-tv/", "Serie TV"),
+        Pair("$mainUrl/netflix-streaming/", "Netflix"),
+        Pair("$mainUrl/animazione/", "Animazione"),
+        Pair("$mainUrl/avventura/", "Avventura"),
+        Pair("$mainUrl/azione/", "Azione"),
+        Pair("$mainUrl/biografico/", "Biografico"),
+        Pair("$mainUrl/commedia/", "Commedia"),
+        Pair("$mainUrl/crime/", "Crime"),
+        Pair("$mainUrl/documentario/", "Documentario"),
+        Pair("$mainUrl/drammatico/", "Drammatico"),
+        Pair("$mainUrl/erotico/", "Erotico"),
+        Pair("$mainUrl/famiglia/", "Famiglia"),
+        Pair("$mainUrl/fantascienza/", "Fantascienza"),
+        Pair("$mainUrl/fantasy/", "Fantasy"),
+        Pair("$mainUrl/giallo/", "Giallo"),
+        Pair("$mainUrl/guerra/", "Guerra"),
+        Pair("$mainUrl/horror/", "Horror"),
+        Pair("$mainUrl/musical/", "Musical"),
+        Pair("$mainUrl/poliziesco/", "Poliziesco"),
+        Pair("$mainUrl/romantico/", "Romantico"),
+        Pair("$mainUrl/sportivo/", "Sportivo"),
+        Pair("$mainUrl/storico-streaming/", "Storico"),
+        Pair("$mainUrl/thriller/", "Thriller"),
+        Pair("$mainUrl/western/", "Western")
     )
 
     data class EpisodeData(
@@ -69,8 +71,8 @@ class AltaDefinizioneV2 : MainAPI() {
         val description: String?
     )
 
-    private fun fixUrl(url: String?): String {
-        if (url.isNullOrEmpty()) return ""
+    private fun fixUrl(url: String?): String? {
+        if (url.isNullOrEmpty()) return null
         return if (url.startsWith("//")) "https:$url" else url
     }
 
@@ -96,14 +98,15 @@ class AltaDefinizioneV2 : MainAPI() {
         } else {
             fixUrl(img?.attr("src"))
         }
-        val rating = this.selectFirst("div.imdb-rate")?.ownText()
+        val ratingText = this.selectFirst("div.imdb-rate")?.ownText()
         
         val type = if (href.contains("/serie-tv/")) TvType.TvSeries else TvType.Movie
         
         return newMovieSearchResponse(title, href, type) {
             this.posterUrl = poster
-            if (!rating.isNullOrEmpty()) {
-                this.rating = rating.replace("★", "").trim().toFloatOrNull() ?: 0f
+            if (!ratingText.isNullOrEmpty()) {
+                val rating = ratingText.replace("★", "").trim().toFloatOrNull() ?: 0f
+                addScore(rating)
             }
         }
     }
@@ -165,7 +168,7 @@ class AltaDefinizioneV2 : MainAPI() {
             .substringBefore("Fonte")
             .trim()
         
-        val rating = content.select("span.rateIMDB, .imdb_r .dato b, .entry-imdb").text()
+        val ratingText = content.select("span.rateIMDB, .imdb_r .dato b, .entry-imdb").text()
             .replace("★", "")
             .replace("IMDB:", "")
             .trim()
@@ -193,7 +196,8 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.plot = plot
                 this.tags = genres
                 this.year = year
-                if (rating.isNotEmpty()) {
+                if (ratingText.isNotEmpty()) {
+                    val rating = ratingText.toFloatOrNull() ?: 0f
                     addScore(rating)
                 }
             }
@@ -203,13 +207,13 @@ class AltaDefinizioneV2 : MainAPI() {
             doc.select("iframe").forEach { iframe ->
                 val src = iframe.attr("src")
                 if (src.isNotEmpty() && !src.contains("facebook") && !src.contains("youtube")) {
-                    mirrors.add(fixUrl(src))
+                    fixUrl(src)?.let { mirrors.add(it) }
                 }
             }
             
             val playerFrame = doc.select("#mirrorFrame, .player-container iframe").attr("src")
             if (playerFrame.isNotEmpty()) {
-                mirrors.add(fixUrl(playerFrame))
+                fixUrl(playerFrame)?.let { mirrors.add(it) }
             }
             
             val mostraGuardaLink = doc.select("iframe[src*='mostraguarda']").attr("src")
@@ -219,7 +223,7 @@ class AltaDefinizioneV2 : MainAPI() {
                     mostraGuarda.select("ul._player-mirrors > li, .mirrors a.mr").forEach { mirror ->
                         val link = mirror.attr("data-link")
                         if (link.isNotEmpty() && !link.contains("mostraguarda")) {
-                            mirrors.add(fixUrl(link))
+                            fixUrl(link)?.let { mirrors.add(it) }
                         }
                     }
                 } catch (e: Exception) {
@@ -232,7 +236,8 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.plot = plot
                 this.tags = genres
                 this.year = year
-                if (rating.isNotEmpty()) {
+                if (ratingText.isNotEmpty()) {
+                    val rating = ratingText.toFloatOrNull() ?: 0f
                     addScore(rating)
                 }
             }
@@ -274,21 +279,20 @@ class AltaDefinizioneV2 : MainAPI() {
                     episodeItem.select(".mirrors a.mr, .mirrors a").forEach { mirror ->
                         val link = mirror.attr("data-link")
                         if (link.isNotEmpty()) {
-                            mirrors.add(fixUrl(link))
+                            fixUrl(link)?.let { mirrors.add(it) }
                         }
                     }
                     
                     if (mirrors.isNotEmpty()) {
                         val episodeData = EpisodeData(mirrors, seasonNumber, episodeNum, episodeTitle, episodeDescription)
                         episodes.add(
-                            Episode(
-                                data = episodeData.toJson(),
-                                name = episodeTitle,
-                                description = episodeDescription,
-                                season = seasonNumber,
-                                episode = episodeNum,
-                                posterUrl = poster
-                            )
+                            newEpisode(episodeData.toJson()) {
+                                this.name = episodeTitle
+                                this.description = episodeDescription
+                                this.season = seasonNumber
+                                this.episode = episodeNum
+                                this.posterUrl = poster
+                            }
                         )
                     }
                 }
