@@ -71,7 +71,7 @@ class AltaDefinizioneV2 : MainAPI() {
         val description: String?
     )
 
-    private fun fixUrl(url: String?): String? {
+    private fun fixUrlNull(url: String?): String? {
         if (url.isNullOrEmpty()) return null
         return if (url.startsWith("//")) "https:$url" else url
     }
@@ -80,7 +80,7 @@ class AltaDefinizioneV2 : MainAPI() {
         // Formato slider home
         val sliderLink = this.select("a").first()?.attr("href")
         val sliderTitle = this.select("img").attr("alt")
-        val sliderPoster = fixUrl(this.select("img").attr("src"))
+        val sliderPoster = fixUrlNull(this.select("img").attr("src"))
         
         if (!sliderLink.isNullOrEmpty() && sliderTitle.isNotEmpty()) {
             return newMovieSearchResponse(sliderTitle, sliderLink, TvType.Movie) {
@@ -94,19 +94,17 @@ class AltaDefinizioneV2 : MainAPI() {
         val href = box.selectFirst("a")?.attr("href") ?: return null
         val title = box.select("h2.titleFilm > a").text().trim()
         val poster = if (!img?.attr("data-src").isNullOrEmpty()) {
-            fixUrl(img?.attr("data-src"))
+            fixUrlNull(img?.attr("data-src"))
         } else {
-            fixUrl(img?.attr("src"))
+            fixUrlNull(img?.attr("src"))
         }
-        val ratingText = this.selectFirst("div.imdb-rate")?.ownText()
+        val rating = this.selectFirst("div.imdb-rate")?.ownText()
         
         val type = if (href.contains("/serie-tv/")) TvType.TvSeries else TvType.Movie
         
         return newMovieSearchResponse(title, href, type) {
             this.posterUrl = poster
-            if (!ratingText.isNullOrEmpty()) {
-                addScore(ratingText.replace("★", "").trim())
-            }
+            this.score = Score.from(rating, 10)
         }
     }
 
@@ -160,14 +158,14 @@ class AltaDefinizioneV2 : MainAPI() {
             .trim()
             .ifEmpty { "Sconosciuto" }
         
-        val poster = fixUrl(content.select("img.wp-post-image, .imagen img, .fix img").attr("src"))
+        val poster = fixUrlNull(content.select("img.wp-post-image, .imagen img, .fix img").attr("src"))
         
         val plot = content.select("#sfull, .entry-content p, .full-text").text()
             .substringAfter("Trama")
             .substringBefore("Fonte")
             .trim()
         
-        val ratingText = content.select("span.rateIMDB, .imdb_r .dato b, .entry-imdb").text()
+        val rating = content.select("span.rateIMDB, .imdb_r .dato b, .entry-imdb").text()
             .replace("★", "")
             .replace("IMDB:", "")
             .trim()
@@ -195,9 +193,7 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.plot = plot
                 this.tags = genres
                 this.year = year
-                if (ratingText.isNotEmpty()) {
-                    addScore(ratingText)
-                }
+                addScore(rating)
             }
         } else {
             val mirrors = mutableListOf<String>()
@@ -205,13 +201,13 @@ class AltaDefinizioneV2 : MainAPI() {
             doc.select("iframe").forEach { iframe ->
                 val src = iframe.attr("src")
                 if (src.isNotEmpty() && !src.contains("facebook") && !src.contains("youtube")) {
-                    fixUrl(src)?.let { mirrors.add(it) }
+                    fixUrlNull(src)?.let { mirrors.add(it) }
                 }
             }
             
             val playerFrame = doc.select("#mirrorFrame, .player-container iframe").attr("src")
             if (playerFrame.isNotEmpty()) {
-                fixUrl(playerFrame)?.let { mirrors.add(it) }
+                fixUrlNull(playerFrame)?.let { mirrors.add(it) }
             }
             
             val mostraGuardaLink = doc.select("iframe[src*='mostraguarda']").attr("src")
@@ -221,7 +217,7 @@ class AltaDefinizioneV2 : MainAPI() {
                     mostraGuarda.select("ul._player-mirrors > li, .mirrors a.mr").forEach { mirror ->
                         val link = mirror.attr("data-link")
                         if (link.isNotEmpty() && !link.contains("mostraguarda")) {
-                            fixUrl(link)?.let { mirrors.add(it) }
+                            fixUrlNull(link)?.let { mirrors.add(it) }
                         }
                     }
                 } catch (e: Exception) {
@@ -234,16 +230,14 @@ class AltaDefinizioneV2 : MainAPI() {
                 this.plot = plot
                 this.tags = genres
                 this.year = year
-                if (ratingText.isNotEmpty()) {
-                    addScore(ratingText)
-                }
+                addScore(rating)
             }
         }
     }
 
     private fun getEpisodes(doc: Document): List<Episode> {
         val episodes = mutableListOf<Episode>()
-        val poster = fixUrl(doc.selectFirst("img.wp-post-image, .imagen img, .fix img")?.attr("src"))
+        val seriesPoster = fixUrlNull(doc.selectFirst("img.wp-post-image, .imagen img, .fix img")?.attr("src"))
         
         val seasonTabs = doc.select(".tt_season ul li a, .tt-season ul li a")
         
@@ -276,7 +270,7 @@ class AltaDefinizioneV2 : MainAPI() {
                     episodeItem.select(".mirrors a.mr, .mirrors a").forEach { mirror ->
                         val link = mirror.attr("data-link")
                         if (link.isNotEmpty()) {
-                            fixUrl(link)?.let { mirrors.add(it) }
+                            fixUrlNull(link)?.let { mirrors.add(it) }
                         }
                     }
                     
@@ -288,7 +282,7 @@ class AltaDefinizioneV2 : MainAPI() {
                                 this.description = episodeDescription
                                 this.season = seasonNumber
                                 this.episode = episodeNum
-                                this.posterUrl = poster
+                                this.posterUrl = seriesPoster
                             }
                         )
                     }
