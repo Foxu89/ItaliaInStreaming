@@ -104,7 +104,6 @@ class AltaDefinizioneV2 : MainAPI() {
         
         return newMovieSearchResponse(title, href, type) {
             this.posterUrl = poster
-            this.score = Score.from(rating, 10)
         }
     }
 
