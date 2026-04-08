@@ -7,7 +7,6 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import okhttp3.Headers
 import java.util.regex.Pattern
 
 class MixDropExtractor : ExtractorApi() {
@@ -17,20 +16,6 @@ class MixDropExtractor : ExtractorApi() {
 
     companion object {
         private const val TAG = "MixDropExtractor"
-        
-        // Headers completi per simulare un browser reale
-        private fun getVideoHeaders(): Map<String, String> = mapOf(
-            "Referer" to "https://m1xdrop.net/",
-            "Origin" to "https://m1xdrop.net",
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept" to "*/*",
-            "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding" to "gzip, deflate, br",
-            "Connection" to "keep-alive",
-            "Sec-Fetch-Dest" to "empty",
-            "Sec-Fetch-Mode" to "cors",
-            "Sec-Fetch-Site" to "cross-site"
-        )
     }
 
     override suspend fun getUrl(
@@ -42,23 +27,70 @@ class MixDropExtractor : ExtractorApi() {
         Log.d(TAG, "Getting video from: $url")
         
         try {
-            // 1. Ottieni la pagina HTML con headers appropriati
-            val pageHeaders = mapOf(
+            // Headers per simulare un browser
+            val headers = mapOf(
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
+                "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer" to "https://mixdrop.top/"
             )
             
-            val pageDoc = app.get(url, headers = pageHeaders).document
-            val html = pageDoc.html()
+            // Ottieni la pagina HTML
+            val response = app.get(url, headers = headers)
+            val html = response.body.string()
             
-            // 2. Deoffusca lo script e ottieni l'URL del video
+            Log.d(TAG, "HTML length: ${html.length}")
+            
+            // Estrai l'URL del video direttamente dall'HTML (senza deoffuscare)
+            // Cerca pattern come: "source": "https://...", o file: "https://..."
+            val patterns = listOf(
+                Regex(""""file"\s*:\s*"([^"]+\.mp4[^"]*)""""),
+                Regex(""""source"\s*:\s*"([^"]+\.mp4[^"]*)""""),
+                Regex(""""url"\s*:\s*"([^"]+\.mp4[^"]*)""""),
+                Regex("""https?://[^"'\s]+\.mp4[^"'\s]*"""),
+                Regex("""https?://[^"'\s]+\.m3u8[^"'\s]*""")
+            )
+            
+            for (pattern in patterns) {
+                val match = pattern.find(html)
+                if (match != null) {
+                    val videoUrl = match.groupValues[1]
+                    Log.d(TAG, "Found video URL: $videoUrl")
+                    
+                    val videoHeaders = mapOf(
+                        "Referer" to "https://mixdrop.top/",
+                        "Origin" to "https://mixdrop.top",
+                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    )
+                    
+                    callback.invoke(
+                        newExtractorLink(
+                            source = name,
+                            name = "MixDrop",
+                            url = videoUrl,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            this.headers = videoHeaders
+                            this.referer = "https://mixdrop.top/"
+                        }
+                    )
+                    return
+                }
+            }
+            
+            // Se non trova l'URL diretto, prova a deoffuscare lo script
+            Log.d(TAG, "Trying to deobfuscate...")
             val videoUrl = deobfuscateAndGetVideoUrl(html)
             
             if (videoUrl != null) {
-                Log.d(TAG, "Final video URL: $videoUrl")
+                Log.d(TAG, "Deobfuscated video URL: $videoUrl")
                 
-                // 3. Invia il link con gli headers corretti
+                val videoHeaders = mapOf(
+                    "Referer" to "https://mixdrop.top/",
+                    "Origin" to "https://mixdrop.top",
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+                
                 callback.invoke(
                     newExtractorLink(
                         source = name,
@@ -66,8 +98,8 @@ class MixDropExtractor : ExtractorApi() {
                         url = videoUrl,
                         type = ExtractorLinkType.M3U8
                     ) {
-                        this.headers = getVideoHeaders()
-                        this.referer = "https://m1xdrop.net/"
+                        this.headers = videoHeaders
+                        this.referer = "https://mixdrop.top/"
                     }
                 )
             } else {
@@ -81,7 +113,7 @@ class MixDropExtractor : ExtractorApi() {
     
     private fun deobfuscateAndGetVideoUrl(html: String): String? {
         try {
-            // Pattern per catturare l'eval
+            // Pattern per l'eval offuscato
             val evalPattern = Pattern.compile(
                 """\}\('(.*?)',\d+,\d+,'(.*?)'\.split\('\|'\)""",
                 Pattern.DOTALL
@@ -93,9 +125,7 @@ class MixDropExtractor : ExtractorApi() {
                 val wordsStr = matcher.group(2)
                 val words = wordsStr.split("|")
                 
-                Log.d(TAG, "Words count: ${words.size}")
-                
-                // Deoffusca il payload sostituendo i numeri con le parole
+                // Deoffusca il payload
                 val resolved = StringBuilder()
                 var i = 0
                 while (i < payload.length) {
@@ -118,42 +148,26 @@ class MixDropExtractor : ExtractorApi() {
                 }
                 
                 val unpacked = resolved.toString()
-                Log.d(TAG, "Unpacked: $unpacked")
+                Log.d(TAG, "Unpacked: ${unpacked.take(500)}")
                 
-                // Estrai i parametri con regex
+                // Estrai parametri
                 val vserver = Regex("""vserver\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)
                 val vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)
                 val tokenS = Regex("""s=([^&"]+)""").find(unpacked)?.groupValues?.get(1)
                 val tokenE = Regex("""e=([^&"]+)""").find(unpacked)?.groupValues?.get(1)
                 val tokenT = Regex("""_t=([^&"]+)""").find(unpacked)?.groupValues?.get(1)
                 
-                Log.d(TAG, "vserver=$vserver, vfile=$vfile, s=$tokenS, e=$tokenE, _t=$tokenT")
+                Log.d(TAG, "vserver=$vserver, vfile=$vfile")
                 
-                if (!vserver.isNullOrEmpty() && !vfile.isNullOrEmpty() && 
-                    !tokenS.isNullOrEmpty() && !tokenE.isNullOrEmpty() && !tokenT.isNullOrEmpty()) {
+                if (!vserver.isNullOrEmpty() && !vfile.isNullOrEmpty()) {
+                    // Prova a costruire l'URL con i token trovati
+                    var url = "https://${vserver}.mxcontent.net/v2/${vfile}.mp4"
                     
-                    return "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
-                }
-            } else {
-                Log.d(TAG, "Eval pattern not found, trying alternative method...")
-                
-                // Metodo alternativo: cerca direttamente i valori
-                val refMatch = Regex("""MDCore\.ref\s*=\s*"([^"]+)";""").find(html)
-                if (refMatch != null) {
-                    val videoId = refMatch.groupValues[1]
-                    Log.d(TAG, "Found video ID: $videoId")
+                    if (!tokenS.isNullOrEmpty()) url += "?s=$tokenS"
+                    if (!tokenE.isNullOrEmpty()) url += "&e=$tokenE"
+                    if (!tokenT.isNullOrEmpty()) url += "&_t=$tokenT"
                     
-                    // Cerca i token nello script
-                    val scriptMatch = Regex("""s=([^&]+)&e=([^&]+)&_t=([^&"]+)""").find(html)
-                    if (scriptMatch != null) {
-                        val tokenS = scriptMatch.groupValues[1]
-                        val tokenE = scriptMatch.groupValues[2]
-                        val tokenT = scriptMatch.groupValues[3]
-                        val serverMatch = Regex("""(?:https?:)?//([^.]+)\.mxcontent\.net""").find(html)
-                        val vserver = serverMatch?.groupValues?.get(1) ?: "usx2f826m"
-                        
-                        return "https://${vserver}.mxcontent.net/v2/${videoId}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
-                    }
+                    return url
                 }
             }
         } catch (e: Exception) {
