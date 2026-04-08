@@ -27,6 +27,7 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
+import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ShortLink
 import it.dogior.hadEnough.extractors.MaxStreamExtractor
@@ -364,10 +365,10 @@ class CB01 : MainAPI() {
                 var realUrl = json.getJSONObject("data").getString("value")
                 Log.d("CB01:StayOnline", "Real URL: $realUrl")
                 
-                // CONVERSIONE CORRETTA PER MIXDROP
+                // Converti m1xdrop.net/f/xxx → mixdrop.top/e/xxx
                 if (realUrl.contains("m1xdrop.net/f/")) {
                     val videoId = realUrl.substringAfterLast("/")
-                    realUrl = "https://mixdrop.ps/e/$videoId"
+                    realUrl = "https://mixdrop.top/e/$videoId"
                     Log.d("CB01:StayOnline", "Converted to: $realUrl")
                 }
                 realUrl
