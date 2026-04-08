@@ -7,7 +7,6 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.utils.Qualities
 import java.util.regex.Pattern
 
 class MixDropExtractor : ExtractorApi() {
@@ -52,8 +51,7 @@ class MixDropExtractor : ExtractorApi() {
                         source = name,
                         name = "MixDrop",
                         url = videoUrl,
-                        type = ExtractorLinkType.MP4,
-                        quality = Qualities.P720.value
+                        type = ExtractorLinkType.M3U8
                     ) {
                         this.headers = VIDEO_HEADERS
                         this.referer = "https://m1xdrop.net/"
