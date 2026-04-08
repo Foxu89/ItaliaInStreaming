@@ -37,20 +37,12 @@ class MixDropExtractor : ExtractorApi() {
             val pageDoc = app.get(url, headers = pageHeaders).document
             val html = pageDoc.html()
             
-            // Deoffusca e ottieni l'URL del video
-            val rawUrl = deobfuscateAndGetVideoUrl(html)
+            // Cerca direttamente i token nel codice deoffuscato
+            val videoUrl = extractVideoUrlFromHtml(html)
             
-            if (rawUrl != null) {
-                // PULISCI L'URL: rimuovi spazi e doppie estensioni
-                var videoUrl = rawUrl
-                    .replace(" ", "")                           // Rimuovi tutti gli spazi
-                    .replace(".mp4.mp4", ".mp4")                // Fix doppia estensione
-                    .replace("/v2/", "/v2/")                    // Assicura che non ci siano spazi
-                    .trim()
+            if (videoUrl != null) {
+                Log.d(TAG, "Final video URL: $videoUrl")
                 
-                Log.d(TAG, "Cleaned video URL: $videoUrl")
-                
-                // Headers OBBLIGATORI per il video
                 val videoHeaders = mapOf(
                     "Referer" to "https://m1xdrop.net/",
                     "Origin" to "https://m1xdrop.net",
@@ -77,9 +69,38 @@ class MixDropExtractor : ExtractorApi() {
         }
     }
     
-    private fun deobfuscateAndGetVideoUrl(html: String): String? {
+    private fun extractVideoUrlFromHtml(html: String): String? {
         try {
-            // Pattern per l'eval offuscato
+            // Metodo 1: Cerca lo script MDCore
+            val mdCorePattern = Pattern.compile(
+                """MDCore\.ref\s*=\s*"([^"]+)";[^>]*?vserver\s*=\s*"([^"]+)";[^>]*?vfile\s*=\s*"([^"]+)";""",
+                Pattern.DOTALL
+            )
+            val mdMatcher = mdCorePattern.matcher(html)
+            
+            if (mdMatcher.find()) {
+                val videoId = mdMatcher.group(1)
+                val vserver = mdMatcher.group(2)
+                val vfile = mdMatcher.group(3)
+                
+                Log.d(TAG, "Found via MDCore: vserver=$vserver, vfile=$vfile, id=$videoId")
+                
+                // Ora cerca i token s, e, _t
+                val tokenPattern = Pattern.compile("""s=([^&]+)&e=([^&]+)&_t=([^&"]+)""")
+                val tokenMatcher = tokenPattern.matcher(html)
+                
+                if (tokenMatcher.find()) {
+                    val tokenS = tokenMatcher.group(1).trim()
+                    val tokenE = tokenMatcher.group(2).trim()
+                    val tokenT = tokenMatcher.group(3).trim()
+                    
+                    Log.d(TAG, "Tokens: s=$tokenS, e=$tokenE, _t=$tokenT")
+                    
+                    return "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
+                }
+            }
+            
+            // Metodo 2: Deoffusca l'eval
             val evalPattern = Pattern.compile(
                 """\}\('(.*?)',\d+,\d+,'(.*?)'\.split\('\|'\)""",
                 Pattern.DOTALL
@@ -116,14 +137,14 @@ class MixDropExtractor : ExtractorApi() {
                 val unpacked = resolved.toString()
                 Log.d(TAG, "Unpacked: $unpacked")
                 
-                // Estrai parametri
-                val vserver = Regex("""vserver\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)
-                val vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)
-                val tokenS = Regex("""s=([^&"]+)""").find(unpacked)?.groupValues?.get(1)
-                val tokenE = Regex("""e=([^&"]+)""").find(unpacked)?.groupValues?.get(1)
-                val tokenT = Regex("""_t=([^&"]+)""").find(unpacked)?.groupValues?.get(1)
+                // Estrai parametri PULITI (rimuovendo spazi)
+                val vserver = Regex("""vserver\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)?.trim()
+                val vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)?.trim()
+                val tokenS = Regex("""s\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
+                val tokenE = Regex("""e\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
+                val tokenT = Regex("""_t\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
                 
-                Log.d(TAG, "vserver=$vserver, vfile=$vfile, s=$tokenS, e=$tokenE, _t=$tokenT")
+                Log.d(TAG, "Extracted: vserver=$vserver, vfile=$vfile, s=$tokenS, e=$tokenE, _t=$tokenT")
                 
                 if (!vserver.isNullOrEmpty() && !vfile.isNullOrEmpty() && 
                     !tokenS.isNullOrEmpty() && !tokenE.isNullOrEmpty() && !tokenT.isNullOrEmpty()) {
@@ -131,8 +152,20 @@ class MixDropExtractor : ExtractorApi() {
                     return "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
                 }
             }
+            
+            // Metodo 3: Cerca direttamente i pattern nell'HTML non offuscato
+            val directPattern = Pattern.compile("""(https?://[a-z0-9]+\.mxcontent\.net/v2/[a-f0-9]+\.mp4\?s=[^&]+&e=[^&]+&_t=[^&"]+)""")
+            val directMatcher = directPattern.matcher(html)
+            if (directMatcher.find()) {
+                var directUrl = directMatcher.group(1)
+                // Pulisci l'URL da eventuali spazi
+                directUrl = directUrl.replace(" ", "")
+                Log.d(TAG, "Found direct URL: $directUrl")
+                return directUrl
+            }
+            
         } catch (e: Exception) {
-            Log.e(TAG, "Deobfuscation error: ${e.message}")
+            Log.e(TAG, "Extraction error: ${e.message}")
         }
         return null
     }
