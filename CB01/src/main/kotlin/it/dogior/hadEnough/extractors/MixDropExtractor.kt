@@ -38,10 +38,17 @@ class MixDropExtractor : ExtractorApi() {
             val html = pageDoc.html()
             
             // Deoffusca e ottieni l'URL del video
-            val videoUrl = deobfuscateAndGetVideoUrl(html)
+            val rawUrl = deobfuscateAndGetVideoUrl(html)
             
-            if (videoUrl != null) {
-                Log.d(TAG, "Final video URL: $videoUrl")
+            if (rawUrl != null) {
+                // PULISCI L'URL: rimuovi spazi e doppie estensioni
+                var videoUrl = rawUrl
+                    .replace(" ", "")                           // Rimuovi tutti gli spazi
+                    .replace(".mp4.mp4", ".mp4")                // Fix doppia estensione
+                    .replace("/v2/", "/v2/")                    // Assicura che non ci siano spazi
+                    .trim()
+                
+                Log.d(TAG, "Cleaned video URL: $videoUrl")
                 
                 // Headers OBBLIGATORI per il video
                 val videoHeaders = mapOf(
@@ -50,7 +57,6 @@ class MixDropExtractor : ExtractorApi() {
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 )
                 
-                // Usiamo M3U8 invece di MP4 (esiste nel tipo)
                 callback.invoke(
                     newExtractorLink(
                         source = name,
