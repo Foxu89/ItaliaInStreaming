@@ -37,12 +37,13 @@ class MixDropExtractor : ExtractorApi() {
             val pageDoc = app.get(url, headers = pageHeaders).document
             val html = pageDoc.html()
             
-            // Cerca direttamente i token nel codice deoffuscato
+            // Estrai l'URL del video
             val videoUrl = extractVideoUrlFromHtml(html)
             
             if (videoUrl != null) {
                 Log.d(TAG, "Final video URL: $videoUrl")
                 
+                // Headers OBBLIGATORI per il video
                 val videoHeaders = mapOf(
                     "Referer" to "https://m1xdrop.net/",
                     "Origin" to "https://m1xdrop.net",
@@ -79,13 +80,15 @@ class MixDropExtractor : ExtractorApi() {
             val mdMatcher = mdCorePattern.matcher(html)
             
             if (mdMatcher.find()) {
-                val videoId = mdMatcher.group(1)
-                val vserver = mdMatcher.group(2)
-                val vfile = mdMatcher.group(3)
+                val vserver = mdMatcher.group(2).trim()
+                var vfile = mdMatcher.group(3).trim()
                 
-                Log.d(TAG, "Found via MDCore: vserver=$vserver, vfile=$vfile, id=$videoId")
+                Log.d(TAG, "Found via MDCore: vserver=$vserver, vfile=$vfile")
                 
-                // Ora cerca i token s, e, _t
+                // Rimuovi .mp4 da vfile se presente (per evitare doppio .mp4)
+                vfile = vfile.replace(Regex("\\.mp4$"), "")
+                
+                // Cerca i token s, e, _t
                 val tokenPattern = Pattern.compile("""s=([^&]+)&e=([^&]+)&_t=([^&"]+)""")
                 val tokenMatcher = tokenPattern.matcher(html)
                 
@@ -137,9 +140,9 @@ class MixDropExtractor : ExtractorApi() {
                 val unpacked = resolved.toString()
                 Log.d(TAG, "Unpacked: $unpacked")
                 
-                // Estrai parametri PULITI (rimuovendo spazi)
+                // Estrai parametri
                 val vserver = Regex("""vserver\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)?.trim()
-                val vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)?.trim()
+                var vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)?.trim()
                 val tokenS = Regex("""s\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
                 val tokenE = Regex("""e\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
                 val tokenT = Regex("""_t\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
@@ -149,17 +152,21 @@ class MixDropExtractor : ExtractorApi() {
                 if (!vserver.isNullOrEmpty() && !vfile.isNullOrEmpty() && 
                     !tokenS.isNullOrEmpty() && !tokenE.isNullOrEmpty() && !tokenT.isNullOrEmpty()) {
                     
+                    // Rimuovi .mp4 da vfile se presente (per evitare doppio .mp4)
+                    vfile = vfile.replace(Regex("\\.mp4$"), "")
+                    
                     return "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
                 }
             }
             
             // Metodo 3: Cerca direttamente i pattern nell'HTML non offuscato
-            val directPattern = Pattern.compile("""(https?://[a-z0-9]+\.mxcontent\.net/v2/[a-f0-9]+\.mp4\?s=[^&]+&e=[^&]+&_t=[^&"]+)""")
+            val directPattern = Pattern.compile("""(https?://[a-z0-9]+\.mxcontent\.net/v2/[a-f0-9]+(?:\.mp4)?\?s=[^&]+&e=[^&]+&_t=[^&"]+)""")
             val directMatcher = directPattern.matcher(html)
             if (directMatcher.find()) {
                 var directUrl = directMatcher.group(1)
-                // Pulisci l'URL da eventuali spazi
+                // Pulisci l'URL: rimuovi spazi e fix doppio .mp4
                 directUrl = directUrl.replace(" ", "")
+                directUrl = directUrl.replace(".mp4.mp4", ".mp4")
                 Log.d(TAG, "Found direct URL: $directUrl")
                 return directUrl
             }
