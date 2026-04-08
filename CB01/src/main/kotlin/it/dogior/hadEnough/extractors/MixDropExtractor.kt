@@ -60,8 +60,8 @@ class MixDropExtractor : ExtractorApi() {
             
             if (videoUrl != null) {
                 // STEP 3: Headers per il video - Referer = pageUrl (coerente!)
-                val videoHeaders = mutableMapOf(
-                    "Referer" to pageUrl,  // ← FIX! Usa pageUrl, non m1xdrop.net!
+                val videoHeaders = mapOf(
+                    "Referer" to pageUrl,
                     "Origin" to "https://mixdrop.top",
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
                     "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
@@ -73,12 +73,16 @@ class MixDropExtractor : ExtractorApi() {
                 Log.d(TAG, "Video headers: $videoHeaders")
                 Log.d(TAG, "Final URL: $videoUrl")
                 
-                // Usa lo stesso client per mantenere i cookie
-                val videoRequest = Request.Builder()
+                // Usa il modo corretto per costruire la request con headers
+                val videoRequestBuilder = Request.Builder()
                     .url(videoUrl)
-                    .headers(okhttp3.Headers.of(videoHeaders))
-                    .build()
                 
+                // Aggiungi headers uno per uno (evita il metodo deprecato)
+                videoHeaders.forEach { (key, value) ->
+                    videoRequestBuilder.addHeader(key, value)
+                }
+                
+                val videoRequest = videoRequestBuilder.build()
                 val videoResponse = client.newCall(videoRequest).execute()
                 Log.d(TAG, "Video response code: ${videoResponse.code}")
                 
@@ -97,7 +101,7 @@ class MixDropExtractor : ExtractorApi() {
                         type = ExtractorLinkType.VIDEO
                     ) {
                         this.headers = videoHeaders
-                        this.referer = pageUrl  // ← FIX! Referer coerente!
+                        this.referer = pageUrl
                     }
                 )
             } else {
