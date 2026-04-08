@@ -64,7 +64,7 @@ class MixDropExtractor : ExtractorApi() {
                         source = name,
                         name = "MixDrop",
                         url = videoUrl,
-                        type = ExtractorLinkType.MP4
+                        type = ExtractorLinkType.M3U8
                     ) {
                         this.headers = getVideoHeaders()
                         this.referer = "https://m1xdrop.net/"
