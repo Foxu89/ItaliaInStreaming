@@ -10,10 +10,10 @@ include(
     "AnimeUnity",
     "AnimeWorld",
     "Arte",
-    "CalcioStreaming",
+    "CalcioStreaming",**/
     "CB01",
-    "CorsaroNero",
-//    "DaddyLive",**/
+//    "CorsaroNero",
+//    "DaddyLive",
     "GuardaSerie",
 //    "Huhu",
  /**   "IlGenioDelloStreaming",
