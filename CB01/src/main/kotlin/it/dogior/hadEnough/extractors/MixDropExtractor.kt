@@ -47,40 +47,31 @@ class MixDropExtractor : ExtractorApi() {
             if (videoUrl != null) {
                 Log.d(TAG, "Video URL extracted: $videoUrl")
                 
-                val testHeaders = mutableMapOf(
-                    "Referer" to "https://mixdrop.top/e/$videoId",
-                    "Origin" to "https://mixdrop.top",
-                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Accept" to "*/*",
+                val videoHeaders = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+                    "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
                     "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Range" to "bytes=0-",
+                    "Origin" to "https://m1xdrop.net",
+                    "Referer" to "https://m1xdrop.net/",
+                    "Sec-Fetch-Dest" to "video",
+                    "Sec-Fetch-Mode" to "cors",
+                    "Sec-Fetch-Site" to "cross-site",
+                    "Accept-Encoding" to "identity",
                     "Connection" to "keep-alive"
                 )
                 
-                try {
-                    Log.d(TAG, "Testing direct request to video URL...")
-                    val testResponse = app.get(videoUrl, headers = testHeaders, timeout = 10000)
-                    Log.d(TAG, "✅ DIRECT TEST - Status code: ${testResponse.code}")
-                    
-                    if (testResponse.code == 200 || testResponse.code == 206) {
-                        Log.d(TAG, "✅ Direct request SUCCESS! Link works. Passing to player.")
-                        
-                        callback.invoke(
-                            newExtractorLink(
-                                source = name,
-                                name = "MixDrop",
-                                url = videoUrl,
-                                type = ExtractorLinkType.VIDEO
-                            ) {
-                                this.headers = testHeaders
-                                this.referer = "https://mixdrop.top/e/$videoId"
-                            }
-                        )
-                    } else {
-                        Log.e(TAG, "❌ Direct request failed with status: ${testResponse.code}")
+                callback.invoke(
+                    newExtractorLink(
+                        source = name,
+                        name = "MixDrop",
+                        url = videoUrl,
+                        type = ExtractorLinkType.VIDEO
+                    ) {
+                        this.headers = videoHeaders
+                        this.referer = "https://m1xdrop.net/"
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Direct request exception: ${e.message}")
-                }
+                )
             } else {
                 Log.e(TAG, "Failed to extract video URL from HTML")
             }
