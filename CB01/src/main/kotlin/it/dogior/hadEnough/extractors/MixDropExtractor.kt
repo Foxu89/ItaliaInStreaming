@@ -11,7 +11,7 @@ import java.util.regex.Pattern
 
 class MixDropExtractor : ExtractorApi() {
     override val name = "MixDrop"
-    override val mainUrl = "mixdrop.top"
+    override val mainUrl = "mixdrop.ag"
     override val requiresReferer = false
 
     companion object {
@@ -31,8 +31,8 @@ class MixDropExtractor : ExtractorApi() {
             val videoId = url.substringAfterLast("/")
             Log.d(TAG, "Video ID: $videoId")
             
-            // STEP 1: Visita la pagina per ottenere il cookie di sessione
-            val pageUrl = "https://mixdrop.top/e/$videoId"
+            // STEP 1: Visita la pagina per ottenere il cookie di sessione (USA mixdrop.ag)
+            val pageUrl = "https://mixdrop.ag/e/$videoId"
             Log.d(TAG, "Fetching page for cookie: $pageUrl")
             
             val pageHeaders = mapOf(
@@ -58,10 +58,10 @@ class MixDropExtractor : ExtractorApi() {
             if (videoUrl != null) {
                 Log.d(TAG, "Video URL extracted: $videoUrl")
                 
-                // STEP 3: Richiedi il video con gli headers e il cookie
+                // STEP 3: Richiedi il video con gli headers e il cookie (USA mixdrop.ag)
                 val videoHeaders = mutableMapOf(
-                    "Referer" to "https://m1xdrop.net/",
-                    "Origin" to "https://m1xdrop.net",
+                    "Referer" to "https://mixdrop.ag/",
+                    "Origin" to "https://mixdrop.ag",
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept" to "*/*",
                     "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -81,7 +81,7 @@ class MixDropExtractor : ExtractorApi() {
                         type = ExtractorLinkType.VIDEO
                     ) {
                         this.headers = videoHeaders
-                        this.referer = "https://m1xdrop.net/"
+                        this.referer = "https://mixdrop.ag/"
                     }
                 )
             } else {
