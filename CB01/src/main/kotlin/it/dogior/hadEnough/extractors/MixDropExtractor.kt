@@ -3,10 +3,14 @@ package it.dogior.hadEnough.extractors
 import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 class MixDropExtractor : ExtractorApi() {
@@ -16,6 +20,17 @@ class MixDropExtractor : ExtractorApi() {
 
     companion object {
         private const val TAG = "MixDropExtractor"
+        
+        // Client con CloudflareKiller per superare l'anti-bot
+        private val cloudflareClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .addInterceptor(CloudflareKiller())
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .build()
+        }
     }
 
     override suspend fun getUrl(
@@ -33,55 +48,77 @@ class MixDropExtractor : ExtractorApi() {
             val pageUrl = "https://mixdrop.top/e/$videoId"
             Log.d(TAG, "Fetching page: $pageUrl")
             
-            val pageHeaders = mapOf(
-                "User-Agent" to "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Accept-Encoding" to "gzip, deflate, br",
-                "Connection" to "keep-alive",
-                "Upgrade-Insecure-Requests" to "1",
-                "Sec-Fetch-Dest" to "document",
-                "Sec-Fetch-Mode" to "navigate",
-                "Sec-Fetch-Site" to "none",
-                "Sec-Fetch-User" to "?1",
-                "Cache-Control" to "max-age=0"
-            )
+            // Richiesta alla pagina HTML per estrarre l'URL del video
+            val pageRequest = Request.Builder()
+                .url(pageUrl)
+                .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+                .addHeader("Accept-Language", "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7")
+                .build()
             
-            val pageResponse = app.get(pageUrl, headers = pageHeaders)
-            val html = pageResponse.body.string()
+            val pageResponse = cloudflareClient.newCall(pageRequest).execute()
+            val html = pageResponse.body?.string() ?: ""
+            pageResponse.close()
             
             val videoUrl = extractVideoUrlFromHtml(html)
             
             if (videoUrl != null) {
                 Log.d(TAG, "Video URL extracted: $videoUrl")
                 
+                // Headers per la richiesta del video (come nel test curl che funziona)
                 val videoHeaders = mapOf(
-                    "User-Agent" to "Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                    "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
                     "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
                     "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Accept-Encoding" to "identity",
                     "Range" to "bytes=0-",
-                    "Origin" to "https://mixdrop.top",
-                    "Referer" to "https://mixdrop.top/e/$videoId",
+                    "Origin" to "https://m1xdrop.net",
+                    "Referer" to "https://m1xdrop.net/",
                     "Sec-Fetch-Dest" to "video",
                     "Sec-Fetch-Mode" to "cors",
-                    "Sec-Fetch-Site" to "same-origin",
-                    "Connection" to "keep-alive",
-                    "Cache-Control" to "no-cache",
-                    "Pragma" to "no-cache"
+                    "Sec-Fetch-Site" to "cross-site",
+                    "Accept-Encoding" to "identity",
+                    "Connection" to "keep-alive"
                 )
                 
-                callback.invoke(
-                    newExtractorLink(
-                        source = name,
-                        name = "MixDrop",
-                        url = videoUrl,
-                        type = ExtractorLinkType.VIDEO
-                    ) {
-                        this.headers = videoHeaders
-                        this.referer = "https://mixdrop.top/e/$videoId"
+                // RICHIESTA AL VIDEO CON CLOUDFLAREKILLER
+                // Questo è il punto critico: CloudflareKiller intercetta il 403,
+                // apre una WebView per risolvere il challenge,
+                // salva i cookie e ritenta la richiesta automaticamente
+                Log.d(TAG, "Requesting video URL with CloudflareKiller...")
+                
+                val videoRequest = Request.Builder()
+                    .url(videoUrl)
+                    .apply {
+                        videoHeaders.forEach { (key, value) ->
+                            addHeader(key, value)
+                        }
                     }
-                )
+                    .build()
+                
+                val videoResponse = cloudflareClient.newCall(videoRequest).execute()
+                
+                Log.d(TAG, "Video response status: ${videoResponse.code}")
+                
+                if (videoResponse.code == 200 || videoResponse.code == 206) {
+                    Log.d(TAG, "✅ Video access granted! Passing to player.")
+                    videoResponse.close()
+                    
+                    // Ora passiamo il link al player (CloudflareKiller ha già salvato i cookie)
+                    callback.invoke(
+                        newExtractorLink(
+                            source = name,
+                            name = "MixDrop",
+                            url = videoUrl,
+                            type = ExtractorLinkType.VIDEO
+                        ) {
+                            this.headers = videoHeaders
+                            this.referer = "https://m1xdrop.net/"
+                        }
+                    )
+                } else {
+                    Log.e(TAG, "❌ Video request failed with status: ${videoResponse.code}")
+                    videoResponse.close()
+                }
             } else {
                 Log.e(TAG, "Failed to extract video URL from HTML")
             }
@@ -93,6 +130,7 @@ class MixDropExtractor : ExtractorApi() {
     
     private fun extractVideoUrlFromHtml(html: String): String? {
         try {
+            // Pattern per URL diretto
             val urlPattern = Regex("""(https?://[a-z0-9]+\.mxcontent\.net/v2/[a-f0-9]+\.mp4\?s=[^&]+&e=[^&]+&_t=[^&"]+)""")
             val urlMatch = urlPattern.find(html)
             if (urlMatch != null) {
@@ -102,6 +140,7 @@ class MixDropExtractor : ExtractorApi() {
                 return videoUrl
             }
             
+            // Pattern per parametri separati
             val vserver = Regex("""vserver\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)?.trim()
             var vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)?.trim()
             val tokenS = Regex("""s\s*=\s*([^&\s"]+)""").find(html)?.groupValues?.get(1)?.trim()
@@ -116,6 +155,7 @@ class MixDropExtractor : ExtractorApi() {
                 return "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
             }
             
+            // Deoffuscazione eval (metodo alternativo)
             val evalPattern = Pattern.compile(
                 """\}\('(.*?)',\d+,\d+,'(.*?)'\.split\('\|'\)""",
                 Pattern.DOTALL
