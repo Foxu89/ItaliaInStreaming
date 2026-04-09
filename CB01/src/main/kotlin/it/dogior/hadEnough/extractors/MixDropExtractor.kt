@@ -7,6 +7,10 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 class MixDropExtractor : ExtractorApi() {
@@ -16,6 +20,25 @@ class MixDropExtractor : ExtractorApi() {
 
     companion object {
         private const val TAG = "MixDropExtractor"
+        
+        // Client OkHttp con configurazione anti-bot
+        private val okHttpClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .addInterceptor { chain ->
+                    val original = chain.request()
+                    val requestBuilder = original.newBuilder()
+                        .header("Connection", "keep-alive")
+                        .header("Accept-Encoding", "gzip, deflate, br")
+                    chain.proceed(requestBuilder.build())
+                }
+                .build()
+        }
     }
 
     override suspend fun getUrl(
@@ -33,10 +56,19 @@ class MixDropExtractor : ExtractorApi() {
             val pageUrl = "https://mixdrop.top/e/$videoId"
             Log.d(TAG, "Fetching page: $pageUrl")
             
+            // Headers realistici per la pagina
             val pageHeaders = mapOf(
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
+                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept-Encoding" to "gzip, deflate, br",
+                "Connection" to "keep-alive",
+                "Upgrade-Insecure-Requests" to "1",
+                "Sec-Fetch-Dest" to "document",
+                "Sec-Fetch-Mode" to "navigate",
+                "Sec-Fetch-Site" to "none",
+                "Sec-Fetch-User" to "?1",
+                "Cache-Control" to "max-age=0"
             )
             
             val pageResponse = app.get(pageUrl, headers = pageHeaders)
@@ -47,20 +79,24 @@ class MixDropExtractor : ExtractorApi() {
             if (videoUrl != null) {
                 Log.d(TAG, "Video URL extracted: $videoUrl")
                 
+                // Headers completi come un vero browser
                 val videoHeaders = mapOf(
-                    "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0",
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept" to "video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5",
                     "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Accept-Encoding" to "identity",
                     "Range" to "bytes=0-",
-                    "Origin" to "https://m1xdrop.net",
-                    "Referer" to "https://m1xdrop.net/",
+                    "Origin" to "https://mixdrop.top",
+                    "Referer" to "https://mixdrop.top/e/$videoId",
                     "Sec-Fetch-Dest" to "video",
                     "Sec-Fetch-Mode" to "cors",
-                    "Sec-Fetch-Site" to "cross-site",
-                    "Accept-Encoding" to "identity",
-                    "Connection" to "keep-alive"
+                    "Sec-Fetch-Site" to "same-origin",
+                    "Connection" to "keep-alive",
+                    "Cache-Control" to "no-cache",
+                    "Pragma" to "no-cache"
                 )
                 
+                // Opzione 1: Passare direttamente il link (CloudStream gestirà la richiesta)
                 callback.invoke(
                     newExtractorLink(
                         source = name,
@@ -69,9 +105,10 @@ class MixDropExtractor : ExtractorApi() {
                         type = ExtractorLinkType.VIDEO
                     ) {
                         this.headers = videoHeaders
-                        this.referer = "https://m1xdrop.net/"
+                        this.referer = "https://mixdrop.top/e/$videoId"
                     }
                 )
+                
             } else {
                 Log.e(TAG, "Failed to extract video URL from HTML")
             }
@@ -83,6 +120,7 @@ class MixDropExtractor : ExtractorApi() {
     
     private fun extractVideoUrlFromHtml(html: String): String? {
         try {
+            // Pattern per URL diretto
             val urlPattern = Regex("""(https?://[a-z0-9]+\.mxcontent\.net/v2/[a-f0-9]+\.mp4\?s=[^&]+&e=[^&]+&_t=[^&"]+)""")
             val urlMatch = urlPattern.find(html)
             if (urlMatch != null) {
@@ -92,6 +130,7 @@ class MixDropExtractor : ExtractorApi() {
                 return videoUrl
             }
             
+            // Pattern per parametri separati
             val vserver = Regex("""vserver\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)?.trim()
             var vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)?.trim()
             val tokenS = Regex("""s\s*=\s*([^&\s"]+)""").find(html)?.groupValues?.get(1)?.trim()
@@ -102,10 +141,12 @@ class MixDropExtractor : ExtractorApi() {
                 !tokenS.isNullOrEmpty() && !tokenE.isNullOrEmpty() && !tokenT.isNullOrEmpty()) {
                 
                 vfile = vfile.replace(Regex("\\.mp4$"), "")
-                
-                return "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
+                val url = "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
+                Log.d(TAG, "Built URL from params: $url")
+                return url
             }
             
+            // Deoffuscazione eval
             val evalPattern = Pattern.compile(
                 """\}\('(.*?)',\d+,\d+,'(.*?)'\.split\('\|'\)""",
                 Pattern.DOTALL
@@ -150,8 +191,9 @@ class MixDropExtractor : ExtractorApi() {
                     !tokenSEval.isNullOrEmpty() && !tokenEEval.isNullOrEmpty() && !tokenTEval.isNullOrEmpty()) {
                     
                     vfileEval = vfileEval.replace(Regex("\\.mp4$"), "")
-                    
-                    return "https://${vserverEval}.mxcontent.net/v2/${vfileEval}.mp4?s=$tokenSEval&e=$tokenEEval&_t=$tokenTEval"
+                    val url = "https://${vserverEval}.mxcontent.net/v2/${vfileEval}.mp4?s=$tokenSEval&e=$tokenEEval&_t=$tokenTEval"
+                    Log.d(TAG, "Built URL from eval: $url")
+                    return url
                 }
             }
             
