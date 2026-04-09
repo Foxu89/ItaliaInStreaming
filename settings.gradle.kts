@@ -16,8 +16,8 @@ include(
 //    "DaddyLive",
     "GuardaSerie",
 //    "Huhu",
- /**   "IlGenioDelloStreaming",
-//    "OnlineSerieTV",
+    "IlGenioDelloStreaming",
+/**    "OnlineSerieTV",
     "SectionOrganizer",
     "StreamingCommunity",
     "Stremio",**/
