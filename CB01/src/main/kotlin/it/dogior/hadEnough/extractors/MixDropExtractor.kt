@@ -31,7 +31,7 @@ class MixDropExtractor : ExtractorApi() {
             Log.d(TAG, "Video ID: $videoId")
             
             val pageUrl = "https://mixdrop.top/e/$videoId"
-            Log.d(TAG, "Fetching page for cookie: $pageUrl")
+            Log.d(TAG, "Fetching page: $pageUrl")
             
             val pageHeaders = mapOf(
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -42,33 +42,20 @@ class MixDropExtractor : ExtractorApi() {
             val pageResponse = app.get(pageUrl, headers = pageHeaders)
             val html = pageResponse.body.string()
             
-            val cookieHeader = pageResponse.headers["set-cookie"]
-            var cookie = ""
-            if (cookieHeader != null) {
-                cookie = cookieHeader.split(";").firstOrNull() ?: ""
-                Log.d(TAG, "Cookie obtained: $cookie")
-            }
-            
             val videoUrl = extractVideoUrlFromHtml(html)
             
             if (videoUrl != null) {
                 Log.d(TAG, "Video URL extracted: $videoUrl")
                 
-                // Headers per il test diretto
                 val testHeaders = mutableMapOf(
-                    "Referer" to "https://m1xdrop.net/",
-                    "Origin" to "https://m1xdrop.net",
+                    "Referer" to "https://mixdrop.top/e/$videoId",
+                    "Origin" to "https://mixdrop.top",
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept" to "*/*",
                     "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
                     "Connection" to "keep-alive"
                 )
                 
-                if (cookie.isNotEmpty()) {
-                    testHeaders["Cookie"] = cookie
-                }
-                
-                // TEST: Richiesta diretta per verificare se il link funziona
                 try {
                     Log.d(TAG, "Testing direct request to video URL...")
                     val testResponse = app.get(videoUrl, headers = testHeaders, timeout = 10000)
@@ -77,7 +64,6 @@ class MixDropExtractor : ExtractorApi() {
                     if (testResponse.code == 200 || testResponse.code == 206) {
                         Log.d(TAG, "✅ Direct request SUCCESS! Link works. Passing to player.")
                         
-                        // Il link funziona direttamente, passalo al player
                         callback.invoke(
                             newExtractorLink(
                                 source = name,
@@ -86,16 +72,14 @@ class MixDropExtractor : ExtractorApi() {
                                 type = ExtractorLinkType.VIDEO
                             ) {
                                 this.headers = testHeaders
-                                this.referer = "https://m1xdrop.net/"
+                                this.referer = "https://mixdrop.top/e/$videoId"
                             }
                         )
                     } else {
                         Log.e(TAG, "❌ Direct request failed with status: ${testResponse.code}")
-                        Log.e(TAG, "Problem is with the link itself, not the player")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Direct request exception: ${e.message}")
-                    Log.e(TAG, "Problem is with the link itself, not the player")
                 }
             } else {
                 Log.e(TAG, "Failed to extract video URL from HTML")
