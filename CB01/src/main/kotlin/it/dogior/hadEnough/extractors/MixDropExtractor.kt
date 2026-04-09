@@ -11,7 +11,7 @@ import java.util.regex.Pattern
 
 class MixDropExtractor : ExtractorApi() {
     override val name = "MixDrop"
-    override val mainUrl = "mixdrop.ag"
+    override val mainUrl = "mixdrop.top"
     override val requiresReferer = false
 
     companion object {
@@ -27,12 +27,10 @@ class MixDropExtractor : ExtractorApi() {
         Log.d(TAG, "Getting video from: $url")
         
         try {
-            // Estrai l'ID del video dall'URL
             val videoId = url.substringAfterLast("/")
             Log.d(TAG, "Video ID: $videoId")
             
-            // STEP 1: Visita la pagina per ottenere il cookie di sessione e il dominio
-            val pageUrl = "https://mixdrop.ag/e/$videoId"
+            val pageUrl = "https://mixdrop.top/e/$videoId"
             Log.d(TAG, "Fetching page for cookie: $pageUrl")
             
             val pageHeaders = mapOf(
@@ -44,7 +42,6 @@ class MixDropExtractor : ExtractorApi() {
             val pageResponse = app.get(pageUrl, headers = pageHeaders)
             val html = pageResponse.body.string()
             
-            // Estrai i cookie dalla risposta
             val cookieHeader = pageResponse.headers["set-cookie"]
             var cookie = ""
             if (cookieHeader != null) {
@@ -52,32 +49,20 @@ class MixDropExtractor : ExtractorApi() {
                 Log.d(TAG, "Cookie obtained: $cookie")
             }
             
-            // STEP 2: Estrai il dominio dalla pagina HTML (per Referer e Origin)
-            val domain = extractDomainFromHtml(html)
-            Log.d(TAG, "Extracted domain: $domain")
-            
-            val finalReferer = "https://$domain/"
-            val finalOrigin = "https://$domain"
-            Log.d(TAG, "Using Referer: $finalReferer")
-            Log.d(TAG, "Using Origin: $finalOrigin")
-            
-            // STEP 3: Estrai i parametri del video dall'HTML
             val videoUrl = extractVideoUrlFromHtml(html)
             
             if (videoUrl != null) {
                 Log.d(TAG, "Video URL extracted: $videoUrl")
                 
-                // STEP 4: Richiedi il video con gli headers e il cookie
                 val videoHeaders = mutableMapOf(
-                    "Referer" to finalReferer,
-                    "Origin" to finalOrigin,
+                    "Referer" to "https://m1xdrop.net/",
+                    "Origin" to "https://m1xdrop.net",
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept" to "*/*",
                     "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
                     "Connection" to "keep-alive"
                 )
                 
-                // Aggiungi il cookie se presente
                 if (cookie.isNotEmpty()) {
                     videoHeaders["Cookie"] = cookie
                 }
@@ -90,7 +75,7 @@ class MixDropExtractor : ExtractorApi() {
                         type = ExtractorLinkType.VIDEO
                     ) {
                         this.headers = videoHeaders
-                        this.referer = finalReferer
+                        this.referer = "https://m1xdrop.net/"
                     }
                 )
             } else {
@@ -102,66 +87,17 @@ class MixDropExtractor : ExtractorApi() {
         }
     }
     
-    private fun extractDomainFromHtml(html: String): String {
-        try {
-            // Pattern per cercare il dominio nella pagina
-            val domainPatterns = listOf(
-                // Cerca nel JavaScript
-                Regex("""window\.location\.hostname\s*=\s*"([^"]+)""""),
-                Regex("""MDCore\.domain\s*=\s*"([^"]+)""""),
-                Regex("""this\.domain\s*=\s*"([^"]+)""""),
-                // Cerca negli URL della pagina
-                Regex("""https?://([a-z0-9.-]+\.(?:ag|top|net|bz|ps))/"""),
-                // Cerca nei meta tag
-                Regex("""<meta\s+property="og:url"\s+content="https?://([^"/]+)""""),
-                Regex("""<link\s+rel="canonical"\s+href="https?://([^"/]+)""""),
-                // Cerca in qualsiasi URL
-                Regex("""https?://([a-z0-9.-]+\.(?:ag|top|net|bz|ps))""")
-            )
-            
-            for (pattern in domainPatterns) {
-                val match = pattern.find(html)
-                if (match != null) {
-                    val domain = match.groupValues[1].trim()
-                    if (domain.isNotEmpty() && (domain.contains("mixdrop") || domain.contains("m1xdrop"))) {
-                        Log.d(TAG, "Found domain via pattern: $domain")
-                        return domain
-                    }
-                }
-            }
-            
-            // Se non trova nulla, prova a cercare il dominio base nell'URL della pagina
-            val urlPattern = Regex("""https?://([a-z0-9.-]+\.(?:ag|top|net|bz|ps))""")
-            val urlMatch = urlPattern.find(html)
-            if (urlMatch != null) {
-                val domain = urlMatch.groupValues[1]
-                Log.d(TAG, "Found domain via URL: $domain")
-                return domain
-            }
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Domain extraction error: ${e.message}")
-        }
-        
-        // Fallback
-        Log.d(TAG, "Using fallback domain: mixdrop.ag")
-        return "mixdrop.ag"
-    }
-    
     private fun extractVideoUrlFromHtml(html: String): String? {
         try {
-            // Pattern per l'URL completo del video
             val urlPattern = Regex("""(https?://[a-z0-9]+\.mxcontent\.net/v2/[a-f0-9]+\.mp4\?s=[^&]+&e=[^&]+&_t=[^&"]+)""")
             val urlMatch = urlPattern.find(html)
             if (urlMatch != null) {
                 var videoUrl = urlMatch.groupValues[1]
-                // Pulisci l'URL
                 videoUrl = videoUrl.replace(Regex("[\\s\\n\\r]"), "")
                 Log.d(TAG, "Found direct URL: $videoUrl")
                 return videoUrl
             }
             
-            // Pattern per i token separati
             val vserver = Regex("""vserver\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)?.trim()
             var vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)?.trim()
             val tokenS = Regex("""s\s*=\s*([^&\s"]+)""").find(html)?.groupValues?.get(1)?.trim()
@@ -171,15 +107,11 @@ class MixDropExtractor : ExtractorApi() {
             if (!vserver.isNullOrEmpty() && !vfile.isNullOrEmpty() && 
                 !tokenS.isNullOrEmpty() && !tokenE.isNullOrEmpty() && !tokenT.isNullOrEmpty()) {
                 
-                // Rimuovi .mp4 da vfile se presente (evita doppio .mp4)
                 vfile = vfile.replace(Regex("\\.mp4$"), "")
                 
-                val constructedUrl = "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
-                Log.d(TAG, "Constructed URL from tokens: $constructedUrl")
-                return constructedUrl
+                return "https://${vserver}.mxcontent.net/v2/${vfile}.mp4?s=$tokenS&e=$tokenE&_t=$tokenT"
             }
             
-            // Metodo alternativo: deoffusca l'eval
             val evalPattern = Pattern.compile(
                 """\}\('(.*?)',\d+,\d+,'(.*?)'\.split\('\|'\)""",
                 Pattern.DOTALL
@@ -225,9 +157,7 @@ class MixDropExtractor : ExtractorApi() {
                     
                     vfileEval = vfileEval.replace(Regex("\\.mp4$"), "")
                     
-                    val evalUrl = "https://${vserverEval}.mxcontent.net/v2/${vfileEval}.mp4?s=$tokenSEval&e=$tokenEEval&_t=$tokenTEval"
-                    Log.d(TAG, "Constructed URL from eval: $evalUrl")
-                    return evalUrl
+                    return "https://${vserverEval}.mxcontent.net/v2/${vfileEval}.mp4?s=$tokenSEval&e=$tokenEEval&_t=$tokenTEval"
                 }
             }
             
