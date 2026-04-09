@@ -13,7 +13,7 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class IlGenioDelloStreaming : MainAPI() {
-    override var mainUrl = "https://il-geniodellostreaming.pics"
+    override var mainUrl = "https://il-geniodellostreaming.homes"
     override var name = "IlGenioDelloStreaming"
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries, TvType.Documentary)
     override var lang = "it"
