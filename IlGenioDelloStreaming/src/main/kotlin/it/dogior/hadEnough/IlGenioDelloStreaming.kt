@@ -1,6 +1,5 @@
 package it.dogior.hadEnough
 
-import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
@@ -67,7 +66,7 @@ class IlGenioDelloStreaming : MainAPI() {
         }
         
         val doc = app.get(url).document
-        val items = doc.select("#dt-insala .item, .items .item, #slider-movies-tvshows .item").mapNotNull { element ->
+        val items = doc.select("#dt-insala .item, .items .item, #slider-movies-tvshows .item, .module .item").mapNotNull { element ->
             element.toSearchResponse()
         }.distinctBy { it.url }
 
@@ -82,8 +81,13 @@ class IlGenioDelloStreaming : MainAPI() {
         val title = select("h3 a, .data h3 a, .title a").text().ifEmpty { 
             select("img").attr("alt").ifEmpty { "Sconosciuto" }
         }
-        val poster = select("img").attr("src").ifEmpty { 
-            select("img").attr("data-src") 
+        
+        var poster = select("img").attr("src")
+        if (poster.isEmpty() || poster.startsWith("data:")) {
+            poster = select("img").attr("data-src")
+        }
+        if (poster.isEmpty()) {
+            poster = select("img").attr("data-lazy-src")
         }
         
         val isSeries = select(".se_num").isNotEmpty() || link.contains("/serie-tv/")
@@ -119,7 +123,12 @@ class IlGenioDelloStreaming : MainAPI() {
     override suspend fun load(url: String): LoadResponse? {
         val doc = app.get(url).document
         val title = doc.select("h1").text().replace(" streaming", "").trim()
-        val poster = doc.select(".poster img, .sheader .poster img").attr("src")
+        
+        var poster = doc.select(".poster img, .sheader .poster img").attr("src")
+        if (poster.isEmpty()) {
+            poster = doc.select(".poster img, .sheader .poster img").attr("data-src")
+        }
+        
         val plot = doc.select(".wp-content p").text().ifEmpty { 
             doc.select("[itemprop=description]").attr("content")
         }
@@ -159,9 +168,7 @@ class IlGenioDelloStreaming : MainAPI() {
             match?.groupValues?.get(1) ?: ""
         }
 
-        
         val mirrors = mutableListOf<String>()
-        
         
         val scripts = doc.select("script")
         scripts.forEach { script ->
@@ -174,7 +181,6 @@ class IlGenioDelloStreaming : MainAPI() {
                 }
             }
             
-            
             Regex("(https?://(?:dropload|supervideo|mixdrop|streamhg|guardahd)\\.[^\"'\\s]+)").findAll(scriptData).forEach {
                 val link = it.groupValues[1]
                 if (link.isNotEmpty()) {
@@ -183,7 +189,6 @@ class IlGenioDelloStreaming : MainAPI() {
             }
         }
 
-        
         doc.select("[data-link]").forEach { element ->
             val link = element.attr("data-link")
             if (link.isNotEmpty() && !link.contains("#") && !link.contains("youtube")) {
@@ -191,7 +196,6 @@ class IlGenioDelloStreaming : MainAPI() {
             }
         }
 
-        
         doc.select("script[type*='json']").forEach { script ->
             try {
                 val jsonText = script.data()
@@ -230,7 +234,6 @@ class IlGenioDelloStreaming : MainAPI() {
     ): LoadResponse {
         val episodes = mutableListOf<Episode>()
         
-        
         val seasonTabs = doc.select("#tv_tabs .tt_season ul li a, .tt_season ul li a")
         if (seasonTabs.isNotEmpty()) {
             for (seasonTab in seasonTabs) {
@@ -244,19 +247,18 @@ class IlGenioDelloStreaming : MainAPI() {
                                         episodeItem.select("a").text().toIntOrNull()
                     
                     val episodeTitle = episodeLink?.attr("data-title")
-                    val episodeDesc = episodeLink?.attr("data-title") ?: "" // La descrizione è nel titolo
                     
                     val mirrors = episodeItem.select(".mirrors a[data-link]").map { 
                         it.attr("data-link") 
                     }.filter { it.isNotEmpty() }
                     
                     if (episodeNumber != null && mirrors.isNotEmpty()) {
-                        
                         val cleanTitle = episodeTitle?.takeIf { it.length < 50 } ?: "Episodio $episodeNumber"
                         val cleanDesc = if (episodeTitle?.length ?: 0 > 50) episodeTitle else ""
                         
+                        val mirrorData = MirrorData(seasonNumber, episodeNumber, mirrors)
                         episodes.add(
-                            newEpisode(MirrorData(seasonNumber, episodeNumber, mirrors).toJson()) {
+                            newEpisode(mirrorData.toJson()) {
                                 this.name = cleanTitle
                                 this.description = cleanDesc
                                 this.season = seasonNumber
