@@ -16,8 +16,6 @@ class MixDropExtractor : ExtractorApi() {
 
     companion object {
         private const val TAG = "MixDropExtractor"
-        // Usiamo uno User-Agent fisso e moderno per evitare discrepanze
-        private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
     }
 
     override suspend fun getUrl(
@@ -26,16 +24,18 @@ class MixDropExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ) {
+        Log.d(TAG, "Getting video from: $url")
+        
         try {
             val videoId = url.substringAfterLast("/")
-            // Usiamo il dominio dell'URL passato per essere dinamici (.top, .co, .ch, ecc)
-            val domain = url.substringAfter("://").substringBefore("/")
-            val pageUrl = "https://$domain/e/$videoId"
+            Log.d(TAG, "Video ID: $videoId")
+            
+            val pageUrl = "https://mixdrop.top/e/$videoId"
+            Log.d(TAG, "Fetching page: $pageUrl")
             
             val pageHeaders = mapOf(
-                "User-Agent" to UA,
-                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language" to "it-IT,it;q=0.9"
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                "Referer" to "https://m1xdrop.net/"
             )
             
             val pageResponse = app.get(pageUrl, headers = pageHeaders)
@@ -46,19 +46,9 @@ class MixDropExtractor : ExtractorApi() {
             if (videoUrl != null) {
                 Log.d(TAG, "Video URL extracted: $videoUrl")
                 
-                // Questi headers devono essere IDENTICI a quelli usati dal browser
-                // Il segreto del 403 di MixDrop è spesso nel Referer della pagina /e/
-                val videoHeaders = mutableMapOf(
-                    "User-Agent" to UA,
-                    "Accept" to "*/*",
-                    "Accept-Language" to "it-IT,it;q=0.9",
-                    "Range" to "bytes=0-",
-                    "Referer" to pageUrl, // IL REFERER DEVE ESSERE IL LINK DEL PLAYER
-                    "Origin" to "https://$domain",
-                    "Connection" to "keep-alive",
-                    "Sec-Fetch-Dest" to "video",
-                    "Sec-Fetch-Mode" to "cors",
-                    "Sec-Fetch-Site" to "cross-site"
+                val videoHeaders = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                    "Referer" to "https://m1xdrop.net/"
                 )
                 
                 callback.invoke(
@@ -69,77 +59,104 @@ class MixDropExtractor : ExtractorApi() {
                         type = ExtractorLinkType.VIDEO
                     ) {
                         this.headers = videoHeaders
+                        this.referer = "https://m1xdrop.net/"
                     }
                 )
             } else {
-                Log.e(TAG, "Failed to extract video URL")
+                Log.e(TAG, "Failed to extract video URL from HTML")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error: ${e.message}")
+            e.printStackTrace()
         }
     }
     
     private fun extractVideoUrlFromHtml(html: String): String? {
         try {
-            // Ripristiniamo la tua logica originale che funzionava nell'estrazione
+            // 1. Prima cerca il pattern MDCore (il più affidabile)
+            val mdcoreRegex = Regex("""MDCore\.[a-zA-Z0-9]+\s*=\s*["'](//[^"']+\.mp4[^"']*)["']""")
+            val mdcoreMatch = mdcoreRegex.find(html)
+            if (mdcoreMatch != null) {
+                var videoUrl = mdcoreMatch.groupValues[1]
+                if (videoUrl.startsWith("//")) videoUrl = "https:$videoUrl"
+                Log.d(TAG, "Found MDCore URL: $videoUrl")
+                return videoUrl
+            }
+            
+            // 2. Pattern standard con URL completo
             val urlPattern = Regex("""(https?://[a-z0-9]+\.mxcontent\.net/v2/[a-f0-9]+\.mp4\?s=[^&]+&e=[^&]+&_t=[^&"]+)""")
             val urlMatch = urlPattern.find(html)
             if (urlMatch != null) {
-                return urlMatch.groupValues[1].replace(Regex("[\\s\\n\\r]"), "")
+                var videoUrl = urlMatch.groupValues[1]
+                videoUrl = videoUrl.replace(Regex("[\\s\\n\\r]"), "")
+                Log.d(TAG, "Found direct URL: $videoUrl")
+                return videoUrl
             }
             
-            // Logica fallback variabili MDCore
-            val vserver = Regex("""vserver\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)
-            val vfile = Regex("""vfile\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)
-            val s = Regex("""s\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)
-            val e = Regex("""e\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)
-            val t = Regex("""_t\s*=\s*"([^"]+)"""").find(html)?.groupValues?.get(1)
-            
-            if (vserver != null && vfile != null && s != null) {
-                val cleanFile = vfile.replace(".mp4", "")
-                return "https://$vserver.mxcontent.net/v2/$cleanFile.mp4?s=$s&e=$e&_t=$t"
-            }
-            
-            // Se arriviamo qui, proviamo il tuo unpacker originale
-            val evalPattern = Pattern.compile("""\}\('(.*?)',\s*\d+,\s*\d+,\s*'(.*?)'\.split\('\|'\)""", Pattern.DOTALL)
+            // 3. Cerca il pattern packer (eval) e de-offusca
+            val evalPattern = Pattern.compile(
+                """\}\('(.*?)',\d+,\d+,'(.*?)'\.split\('\|'\)""",
+                Pattern.DOTALL
+            )
             val matcher = evalPattern.matcher(html)
+            
             if (matcher.find()) {
                 val payload = matcher.group(1)
-                val words = matcher.group(2).split("|")
-                val unpacked = StringBuilder()
+                val wordsStr = matcher.group(2)
+                val words = wordsStr.split("|")
+                
+                val resolved = StringBuilder()
                 var i = 0
                 while (i < payload.length) {
-                    if (payload[i].isLetterOrDigit()) {
+                    if (payload[i].isDigit()) {
                         var numStr = ""
-                        while (i < payload.length && payload[i].isLetterOrDigit()) {
+                        while (i < payload.length && payload[i].isDigit()) {
                             numStr += payload[i]
                             i++
                         }
-                        val idx = numStr.toIntOrNull(36)
-                        if (idx != null && idx < words.size && words[idx].isNotEmpty()) {
-                            unpacked.append(words[idx])
+                        val idx = numStr.toIntOrNull()
+                        if (idx != null && idx < words.size) {
+                            resolved.append(words[idx])
                         } else {
-                            unpacked.append(numStr)
+                            resolved.append(numStr)
                         }
                     } else {
-                        unpacked.append(payload[i])
+                        resolved.append(payload[i])
                         i++
                     }
                 }
                 
-                val res = unpacked.toString()
-                val vserverE = Regex("""vserver\s*=\s*"([^"]+)"""").find(res)?.groupValues?.get(1)
-                val vfileE = Regex("""vfile\s*=\s*"([^"]+)"""").find(res)?.groupValues?.get(1)
-                val sE = Regex("""s\s*=\s*"([^"]+)"""").find(res)?.groupValues?.get(1)
-                val eE = Regex("""e\s*=\s*"([^"]+)"""").find(res)?.groupValues?.get(1)
-                val tE = Regex("""_t\s*=\s*"([^"]+)"""").find(res)?.groupValues?.get(1)
+                val unpacked = resolved.toString()
                 
-                if (vserverE != null && vfileE != null) {
-                    return "https://$vserverE.mxcontent.net/v2/${vfileE.replace(".mp4", "")}.mp4?s=$sE&e=$eE&_t=$tE"
+                // Cerca MDCore anche nel codice de-offuscato
+                val mdcoreInUnpacked = Regex("""MDCore\.[a-zA-Z0-9]+\s*=\s*["'](//[^"']+\.mp4[^"']*)["']""").find(unpacked)
+                if (mdcoreInUnpacked != null) {
+                    var videoUrl = mdcoreInUnpacked.groupValues[1]
+                    if (videoUrl.startsWith("//")) videoUrl = "https:$videoUrl"
+                    Log.d(TAG, "Found MDCore URL in unpacked: $videoUrl")
+                    return videoUrl
+                }
+                
+                // Pattern standard nel codice de-offuscato
+                val vserverEval = Regex("""vserver\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)?.trim()
+                var vfileEval = Regex("""vfile\s*=\s*"([^"]+)"""").find(unpacked)?.groupValues?.get(1)?.trim()
+                val tokenSEval = Regex("""s\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
+                val tokenEEval = Regex("""e\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
+                val tokenTEval = Regex("""_t\s*=\s*([^&\s"]+)""").find(unpacked)?.groupValues?.get(1)?.trim()
+                
+                if (!vserverEval.isNullOrEmpty() && !vfileEval.isNullOrEmpty() && 
+                    !tokenSEval.isNullOrEmpty() && !tokenEEval.isNullOrEmpty() && !tokenTEval.isNullOrEmpty()) {
+                    
+                    vfileEval = vfileEval.replace(Regex("\\.mp4$"), "")
+                    
+                    return "https://${vserverEval}.mxcontent.net/v2/${vfileEval}.mp4?s=$tokenSEval&e=$tokenEEval&_t=$tokenTEval"
                 }
             }
-        } catch (e: Exception) { }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Extraction error: ${e.message}")
+        }
         return null
     }
 }
-                               
+                                      
