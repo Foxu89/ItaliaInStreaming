@@ -9,7 +9,7 @@ import it.dogior.hadEnough.extractors.VOEExtractor
 class ToonItaliaPlugin: Plugin() {
     override fun load(context: Context) {
         // Registra il main API
-        registerMainAPI(ToonItalia())
+        registerMainAPI(Toonitalia())
         
         // Registra l'estrattore VOE
         registerExtractorAPI(VOEExtractor())
