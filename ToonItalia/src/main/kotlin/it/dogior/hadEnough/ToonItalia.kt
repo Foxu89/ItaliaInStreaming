@@ -1,216 +1,281 @@
 package it.dogior.hadEnough
 
-import android.util.Log
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
-import com.lagradost.cloudstream3.LoadResponse.Companion.addRating
-import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SeasonData
 import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.amap
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.addPoster
+import com.lagradost.cloudstream3.addSeasonNames
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.mainPageOf
-import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
+import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+import com.lagradost.cloudstream3.utils.AppUtils.toJson
+import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
+import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import it.dogior.hadEnough.extractors.MaxStreamExtractor
-import it.dogior.hadEnough.extractors.StreamTapeExtractor
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import org.jsoup.Jsoup
+import com.lagradost.cloudstream3.utils.Qualities
+import it.dogior.hadEnough.extractors.VOEExtractor
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-class ToonItalia :
-    MainAPI() { // all providers must be an intstance of MainAPI
-    override var mainUrl = "https://toonitalia.green/"
-    override var name = "ToonItalia"
+class Toonitalia : MainAPI() {
+    override var mainUrl = "https://toonitalia.xyz"
+    override var name = "Toonitalia"
+    override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries, TvType.Cartoon)
     override var lang = "it"
-    override val supportedTypes =
-        setOf(TvType.TvSeries, TvType.Movie, TvType.Anime, TvType.AnimeMovie, TvType.Cartoon)
     override val hasMainPage = true
-
+    override var sequentialMainPage = true
 
     override val mainPage = mainPageOf(
-        mainUrl to "Ultimi Aggiunti",
-        "${mainUrl}category/kids/" to "Serie Tv",
-        "${mainUrl}category/anime/" to "Anime",
-        "${mainUrl}film-anime/" to "Film",
+        "$mainUrl/anime-ita/" to "Anime ITA",
+        "$mainUrl/serie-tv/" to "Serie TV",
+        "$mainUrl/film-animazione/" to "Film Animazione"
     )
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = if (page == 1) {
-            request.data
-        } else {
-            request.data + "page/$page"
-        }
-        val response = app.get(url)
-        val document = response.document
-
-        val mainSection = document.select("#main").first()?.children()
-        val list: List<SearchResponse> = mainSection?.mapNotNull {
-            if (it.tagName() == "article") {
-                it.toSearchResponse(false)
-            } else {
-                null
+    companion object {
+        // Converte chuckle-tube.com/ID in jessicaclearout.com/ID
+        fun convertToVoeUrl(url: String): String {
+            if (url.contains("chuckle-tube.com")) {
+                val videoId = url.substringAfterLast("/")
+                return "https://jessicaclearout.com/$videoId"
             }
-        } ?: emptyList()
-
-        val pageNumbersIndex = if (page == 1) 1 else 3
-
-        val pageNumbers = try {
-            document.select("div.nav-links > a.page-numbers")[pageNumbersIndex].text().toInt()
-        } catch (e: IndexOutOfBoundsException) {
-            0
+            return url
         }
+        
+        // Estrae il poster da un elemento card
+        private fun extractPoster(card: Element): String? {
+            // Cerca img normale
+            var poster = card.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, img")?.attr("src")
+            if (!poster.isNullOrEmpty()) return poster
+            
+            // Cerca img con data-src (lazy loading)
+            poster = card.selectFirst("img[data-src]")?.attr("data-src")
+            if (!poster.isNullOrEmpty()) return poster
+            
+            // Cerca nell'attributo style (background-image)
+            val style = card.selectFirst(".post-thumbnail, .cover-header")?.attr("style")
+            if (style != null) {
+                val regex = Regex("""background-image:\s*url\(['\"]?([^'\")]+)['\"]?\)""")
+                poster = regex.find(style)?.groupValues?.get(1)
+                if (!poster.isNullOrEmpty()) return poster
+            }
+            
+            return null
+        }
+        
+        // Estrae il titolo da un elemento card
+        private fun extractTitle(card: Element): String? {
+            return card.selectFirst("h2.entry-title, h1.entry-title, h2 a, h1 a, .entry-title a")?.text()?.trim()
+                ?: card.selectFirst("a[href]")?.text()?.trim()
+        }
+        
+        // Estrae il link da un elemento card
+        private fun extractLink(card: Element): String? {
+            return card.selectFirst("h2.entry-title a, h1.entry-title a, .entry-title a, a[href]")?.attr("href")
+        }
+    }
 
-        val hasNext = page < pageNumbers
-
-        return newHomePageResponse(
-            HomePageList(request.name, list, false),
-            hasNext
-        )
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
+        val url = if (page > 1) "${request.data}page/$page/" else request.data
+        val document = app.get(url).document
+        
+        // Cerca gli articoli/posts
+        val items = document.select("article.post, div.post, div.entry-content article, div.rpwwt-widget li")
+        
+        if (items.isEmpty()) {
+            // Prova con i widget recent posts
+            val widgetItems = document.select(".rpwwt-widget li, .recent-posts-widget-with-thumbnails li")
+            if (widgetItems.isNotEmpty()) {
+                return buildHomePageFromWidgets(widgetItems, request, page, url)
+            }
+            return null
+        }
+        
+        val posts = items.mapNotNull { card ->
+            val title = extractTitle(card) ?: return@mapNotNull null
+            val link = extractLink(card) ?: return@mapNotNull null
+            val poster = extractPoster(card)
+            
+            val isSeries = link.contains("serie") || link.contains("anime") || request.data.contains("serie-tv")
+            
+            if (isSeries) {
+                newTvSeriesSearchResponse(title, link, TvType.TvSeries) {
+                    addPoster(poster)
+                }
+            } else {
+                newMovieSearchResponse(title, link, TvType.Movie) {
+                    addPoster(poster)
+                }
+            }
+        }
+        
+        // Controlla se esiste una pagina successiva
+        val hasNext = document.select("a.next.page-numbers, .next, .nav-links .next, .pagination .next").isNotEmpty()
+        
+        val section = HomePageList(request.name, posts, false)
+        return newHomePageResponse(section, hasNext)
+    }
+    
+    private suspend fun buildHomePageFromWidgets(
+        items: org.jsoup.select.Elements,
+        request: MainPageRequest,
+        page: Int,
+        url: String
+    ): HomePageResponse? {
+        val posts = items.mapNotNull { card ->
+            val title = card.selectFirst("a")?.text()?.trim() ?: return@mapNotNull null
+            val link = card.selectFirst("a")?.attr("href") ?: return@mapNotNull null
+            val poster = card.selectFirst("img")?.attr("src") ?: card.selectFirst("img[data-src]")?.attr("data-src")
+            
+            val isSeries = link.contains("serie") || link.contains("anime") || request.data.contains("serie-tv")
+            
+            if (isSeries) {
+                newTvSeriesSearchResponse(title, link, TvType.TvSeries) {
+                    addPoster(poster)
+                }
+            } else {
+                newMovieSearchResponse(title, link, TvType.Movie) {
+                    addPoster(poster)
+                }
+            }
+        }
+        
+        val hasNext = false // Nei widget non c'è paginazione
+        val section = HomePageList(request.name, posts, false)
+        return newHomePageResponse(section, hasNext)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-//        val response = app.get("$mainUrl?s=$query", interceptor = WebViewResolver("""\?s=lupin""".toRegex()))
-//        val document = response.document
-//        Log.d("ToonItalia:search", document.toString())
-//        val list = document.select("article").mapNotNull {
-//            if (it.tagName() == "article") {
-//                it.toSearchResponse(true)
-//            } else {
-//                null
-//            }
-//        }
-        return braveSearch(query)
-    }
-
-    private suspend fun braveSearch(query: String): List<SearchResponse> {
-        val response = app.get("https://search.brave.com/search?q=${query}+site%3A${mainUrl.toHttpUrl().host}")
-        val document = response.document
-        val resultList = document.select("#results")
-        val results = resultList.select(".snippet[data-type=\"web\"]").map { it.selectFirst("a")?.attr("href") }
-
-        val excludedUrls = listOf(
-            mainUrl + "category/anime/",
-            mainUrl + "category/kids/",
-            mainUrl + "film-anime/",
-            mainUrl + "lista-anime-e-cartoni/",
-            mainUrl + "lista-film-anime/",
-            mainUrl + "lista-serietv-ragazzi/")
-
-        val searchResponseList = results.amap{ url ->
-            if (url != null && excludedUrls.all { !it.contains(url) }){
-                val r = app.get(url).document
-                val title = r.select(".entry-title").text().trim()
-                val poster = r.select(".attachment-post-thumbnail").attr("src")
-                val typeFooter = r.select(".cat-links > a:nth-child(1)").text()
-
-                val type = if (typeFooter == "") {
-                    TvType.Movie
-                } else {
-                    TvType.TvSeries
+        val url = "$mainUrl/?s=${query.replace(" ", "+")}"
+        val document = app.get(url).document
+        
+        val items = document.select("article.post, div.post, div.search-results article, .rpwwt-widget li")
+        
+        return items.mapNotNull { card ->
+            val title = extractTitle(card) ?: return@mapNotNull null
+            val link = extractLink(card) ?: return@mapNotNull null
+            val poster = extractPoster(card)
+            
+            val isSeries = link.contains("serie") || link.contains("anime")
+            
+            if (isSeries) {
+                newTvSeriesSearchResponse(title, link, TvType.TvSeries) {
+                    addPoster(poster)
                 }
-
-                if (type == TvType.TvSeries) {
-                    newTvSeriesSearchResponse(title, url, type) {
-                        this.posterUrl = poster
-                    }
-                } else {
-                    newMovieSearchResponse(title, url, type) {
-                        this.posterUrl = poster
-                    }
-                }
-            }else{
-                null
-            }
-        }.filterNotNull()
-        return searchResponseList
-    }
-
-    override suspend fun load(url: String): LoadResponse {
-        val response = app.get(url).document
-        var title = response.select(".entry-title").text().trim()
-        var year: Int? = null
-        if (title.takeLast(4).all { it.isDigit() }) {
-            year = title.takeLast(4).toInt()
-            title = title.replace(Regex(""" ?[-–]? ?\d{4}$"""), "")
-        }
-        val plot = response.select(".entry-content > p:nth-child(2)").text().trim()
-        val poster = response.select(".attachment-post-thumbnail").attr("src")
-        val typeFooter = response.select(".cat-links > a:nth-child(1)").text()
-        val type = if (typeFooter == "") {
-            TvType.Movie
-        } else {
-            TvType.TvSeries
-        }
-        return if (type == TvType.TvSeries) {
-            val episodes: List<Episode> = getEpisodes(url)
-            year =
-                response.select(".no-border > tbody:nth-child(2) > tr:nth-child(3) > td:nth-child(1)")
-                    .text().takeLast(4).toIntOrNull()
-            val genres =
-                response.select(".no-border > tbody:nth-child(2) > tr:nth-child(1) > td:nth-child(2)")
-                    .text().substringAfterLast("Genere: ").split(',')
-            val rating =
-                response.select(".no-border > tbody:nth-child(2) > tr:nth-child(4) > td:nth-child(1)")
-                    .text().substringAfterLast("Voto: ")
-            newTvSeriesLoadResponse(
-                title,
-                url,
-                type,
-                episodes
-            ) {
-                this.plot = plot
-                this.year = year
-                this.posterUrl = poster
-                this.tags = genres
-                addRating(rating)
-            }
-        } else {
-            newMovieLoadResponse(
-                title,
-                url,
-                type,
-                dataUrl = "$url€${response.select(".entry-content > table:nth-child(5) > tbody:nth-child(2) > tr:nth-child(1) > td > a")}"
-            ) {
-                this.plot = plot
-                this.year = year
-                this.posterUrl = poster
-            }
-        }
-    }
-
-    private suspend fun getEpisodes(url: String): List<Episode> {
-        val response = app.get(url)
-        val table = response.document.select(".table_link > thead:nth-child(2)")
-        var season: Int? = 1
-        val rows = table.select("tr")
-        val episodes: List<Episode> = rows.mapNotNull {
-            if (it.childrenSize() == 0) {
-                null
-            } else if (it.childrenSize() == 1) {
-                val seasonText = it.select("td:nth-child(1)").text()
-                season = Regex("""\d+""").find(seasonText)?.value?.toInt()
-                null
             } else {
-                val title = it.select("td:nth-child(1)").text()
-                newEpisode("$url€${it.select("a")}") {
-                    name = title
-                    this.season = season
+                newMovieSearchResponse(title, link, TvType.Movie) {
+                    addPoster(poster)
                 }
             }
         }
+    }
 
-        return episodes
+    override suspend fun load(url: String): LoadResponse? {
+        val document = app.get(url).document
+        
+        val title = document.selectFirst("h1.entry-title, h1")?.text()?.trim() ?: return null
+        
+        // Poster dalla pagina (banner o immagine principale)
+        var poster = document.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, .post-thumbnail img")?.attr("src")
+        if (poster.isNullOrEmpty()) {
+            poster = document.selectFirst(".cover-header")?.attr("style")?.let { style ->
+                Regex("""background-image:\s*url\(['\"]?([^'\")]+)['\"]?\)""").find(style)?.groupValues?.get(1)
+            }
+        }
+        
+        val banner = poster
+        
+        val plot = document.selectFirst(".entry-content p, .post-content p")?.text()?.trim()
+        
+        // Determina se è una serie (ha episodi)
+        val isSeries = document.selectFirst(".entry-content h3, .entry-content h2")?.text()?.contains("Episodi") == true
+            || url.contains("serie") || url.contains("anime")
+            || document.select("a[href*='chuckle-tube.com']").isNotEmpty()
+        
+        val type = if (isSeries) TvType.TvSeries else TvType.Movie
+        
+        return if (isSeries) {
+            val episodes = getEpisodes(document)
+            newTvSeriesLoadResponse(title, url, type, episodes) {
+                addPoster(poster)
+                this.plot = plot
+                this.backgroundPosterUrl = banner
+            }
+        } else {
+            newMovieLoadResponse(title, url, type) {
+                addPoster(poster)
+                this.plot = plot
+                this.backgroundPosterUrl = banner
+            }
+        }
+    }
+
+    private suspend fun getEpisodes(document: Document): List<Episode> {
+        val episodes = mutableListOf<Episode>()
+        
+        // Cerca i link VOE nel contenuto
+        val content = document.selectFirst(".entry-content")?.html() ?: return episodes
+        
+        // Pattern per trovare i link VOE: https://chuckle-tube.com/ID
+        val voePattern = Regex("""(?:https?://)?(?:chuckle-tube\.com|jessicaclearout\.com)/([a-zA-Z0-9]+)""")
+        val matches = voePattern.findAll(content).toList()
+        
+        // Cerca anche i numeri degli episodi
+        val episodePattern = Regex("""(?:Ep|Episodio|E|×)\s*(\d+)""", RegexOption.IGNORE_CASE)
+        val episodePattern2 = Regex("""(\d+)×(\d+)""") // Formato "5x01"
+        
+        matches.forEachIndexed { index, match ->
+            val videoUrl = convertToVoeUrl("https://jessicaclearout.com/${match.groupValues[1]}")
+            
+            // Cerca il numero dell'episodio intorno alla posizione del match
+            val contextStart = maxOf(0, match.range.first - 200)
+            val contextEnd = minOf(content.length, match.range.last + 200)
+            val context = content.substring(contextStart, contextEnd)
+            
+            var episodeNum: Int? = null
+            
+            // Prova pattern 5x01
+            val seasonEpMatch = episodePattern2.find(context)
+            if (seasonEpMatch != null) {
+                episodeNum = seasonEpMatch.groupValues[2].toIntOrNull()
+            }
+            
+            // Prova pattern Ep 01
+            if (episodeNum == null) {
+                val epMatch = episodePattern.find(context)
+                if (epMatch != null) {
+                    episodeNum = epMatch.groupValues[1].toIntOrNull()
+                }
+            }
+            
+            if (episodeNum == null) {
+                episodeNum = index + 1
+            }
+            
+            val episodeName = "Episodio $episodeNum"
+            
+            episodes.add(
+                newEpisode(videoUrl) {
+                    name = episodeName
+                    episode = episodeNum
+                }
+            )
+        }
+        
+        return episodes.sortedBy { it.episode }
     }
 
     override suspend fun loadLinks(
@@ -219,92 +284,13 @@ class ToonItalia :
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val linkData = data.split("€")
-//        val pageUrl = linkData[0]
-        // The a tags with the links from the different servers
-        val episodeLinks = linkData[1]
-        val soup = Jsoup.parse(episodeLinks)
-        soup.select("a").forEach {
-            val link = it.attr("href")
-//            val url = if (link.contains("uprot")) bypassUprot(link) else link
-            if (link.contains("uprot")) {
-                val url = bypassUprot(link)
-                if (url != null) {
-                    if (url.contains("streamtape")) {
-                        StreamTapeExtractor().getUrl(url, null, subtitleCallback, callback)
-                    } else {
-                        MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
-//                            loadExtractor(url, subtitleCallback, callback)
-                    }
-                }
-            }
+        // data contiene l'URL del video (jessicaclearout.com/ID o chuckle-tube.com/ID)
+        val videoUrl = convertToVoeUrl(data)
+        
+        if (videoUrl.contains("jessicaclearout.com")) {
+            VOEExtractor().getUrl(videoUrl, null, subtitleCallback, callback)
         }
+        
         return true
     }
-
-    private suspend fun bypassUprot(link: String): String? {
-        val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
-
-
-        // Generate headers (replace with your own method to generate fake headers)
-        val headers = mapOf(
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-        )
-
-//        Log.d("CB01:Uprot", updatedLink)
-
-        // Make the HTTP request
-        val response = app.get(updatedLink, headers = headers, timeout = 10_000)
-
-        val responseBody = response.body.string()
-
-        // Parse the HTML using Jsoup
-        val document = Jsoup.parse(responseBody)
-        Log.d("CB01:Uprot", document.select("a").toString())
-        val maxstreamUrl = document.selectFirst("a")?.attr("href")
-
-        return maxstreamUrl
-    }
-
-    private fun Element.toSearchResponse(fromSearch: Boolean): SearchResponse {
-        val title = this.select("h2 > a").text().trim().replace(Regex(""" ?[-–]? ?\d{4}$"""), "")
-
-        val url = this.select("h2 > a").attr("href")
-        val footer = this.select("footer > span > a").text()
-
-        val type = if (fromSearch) {
-            try {
-                this.select(".cat-links > a:nth-child(1)").text()
-                TvType.TvSeries
-            } catch (e: Exception) {
-                TvType.Movie
-            }
-        } else {
-            if (footer != "") {
-                TvType.TvSeries
-            } else {
-                TvType.Movie
-            }
-        }
-
-        val posterUrl = if (fromSearch) {
-            this.select("header:nth-child(1) > div:nth-child(2) > p:nth-child(1) > a:nth-child(1) > img:nth-child(1)")
-                .attr("src")
-        } else {
-            this.select("header:nth-child(1) > p:nth-child(2) > a:nth-child(1) > img:nth-child(1)")
-                .attr("src")
-        }
-
-        return if (type == TvType.TvSeries) {
-            newTvSeriesSearchResponse(title, url, type) {
-                this.posterUrl = posterUrl
-            }
-        } else {
-            newMovieSearchResponse(title, url, type) {
-                this.posterUrl = posterUrl
-            }
-        }
-    }
-
-
 }
