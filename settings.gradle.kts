@@ -11,19 +11,19 @@ include(
     "AnimeWorld",
     "Arte",
     "CalcioStreaming",**/
-    "CB01",
+ //   "CB01",
 //    "CorsaroNero",
 //    "DaddyLive",
-    "GuardaSerie",
+//    "GuardaSerie",
 //    "Huhu",
-    "IlGenioDelloStreaming",
+//    "IlGenioDelloStreaming",
 /**    "OnlineSerieTV",
     "SectionOrganizer",
     "StreamingCommunity",
     "Stremio",**/
  //   "SyncStream",
 //    "TV",
-//    "ToonItalia",
-    "Torrentio"
+    "ToonItalia",
+//    "Torrentio"
 //    "YouTube"
 )
