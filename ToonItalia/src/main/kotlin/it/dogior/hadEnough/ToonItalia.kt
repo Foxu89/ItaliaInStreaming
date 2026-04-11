@@ -137,14 +137,28 @@ class Toonitalia : MainAPI() {
         
         return document.select("article.post").mapNotNull { item ->
             val link = item.selectFirst("a[href]") ?: return@mapNotNull null
-            val title = item.selectFirst(".entry-title, h2")?.text()?.trim() ?: link.text().trim()
+            val titleElement = item.selectFirst(".entry-title, h2, h3")
+            val title = titleElement?.text()?.trim() ?: link.text().trim()
             val itemUrl = link.attr("href")
-            val poster = item.selectFirst("img")?.attr("src") 
-                ?: item.selectFirst("img")?.attr("data-src")
+            
+            val dateElement = item.selectFirst("time[datetime], .post-date, .date, .published")
+            var date = dateElement?.attr("datetime")
+            if (date.isNullOrEmpty()) date = dateElement?.text()
+            
+            var poster = buildPosterUrl(title, date)
+            if (poster.isNullOrEmpty()) {
+                poster = item.selectFirst("img")?.attr("src") 
+                    ?: item.selectFirst("img")?.attr("data-src")
+            }
             
             if (title.isBlank() || itemUrl.isBlank()) return@mapNotNull null
             
-            val type = if (itemUrl.contains("film-animazione")) TvType.Movie else TvType.TvSeries
+            val type = if (itemUrl.contains("film-animazione") || 
+                          (title.contains("film", ignoreCase = true) && !title.contains("serie", ignoreCase = true))) {
+                TvType.Movie
+            } else {
+                TvType.TvSeries
+            }
             
             if (type == TvType.TvSeries) {
                 newTvSeriesSearchResponse(title, itemUrl, type) { addPoster(poster) }
@@ -176,16 +190,29 @@ class Toonitalia : MainAPI() {
         val plot = document.select(".entry-content p").firstOrNull()?.text()?.trim()
         
         val voeLinks = document.select("a[href*='chuckle-tube.com']")
-        val isSeries = voeLinks.size > 1 || document.text().contains("Episodio") || url.contains("serie-tv")
+        
+        val isSeries = voeLinks.size > 1 || 
+                       document.text().contains("Episodio") || 
+                       document.text().contains("Stagione") ||
+                       url.contains("serie-tv") ||
+                       (url.contains("anime") && !url.contains("film"))
         
         return if (isSeries) {
             val episodes = getEpisodes(document)
-            newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
-                addPoster(poster)
-                this.plot = plot
+            if (episodes.isEmpty()) {
+                val dataUrl = voeLinks.firstOrNull()?.attr("href") ?: return null
+                newMovieLoadResponse(title, url, TvType.Movie, convertToVoeUrl(dataUrl)) {
+                    addPoster(poster)
+                    this.plot = plot
+                }
+            } else {
+                newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
+                    addPoster(poster)
+                    this.plot = plot
+                }
             }
         } else {
-            val dataUrl = voeLinks.firstOrNull()?.attr("href") ?: url
+            val dataUrl = voeLinks.firstOrNull()?.attr("href") ?: return null
             newMovieLoadResponse(title, url, TvType.Movie, convertToVoeUrl(dataUrl)) {
                 addPoster(poster)
                 this.plot = plot
