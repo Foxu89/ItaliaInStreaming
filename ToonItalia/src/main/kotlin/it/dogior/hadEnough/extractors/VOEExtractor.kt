@@ -10,7 +10,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.URLEncoder
 
 class VOEExtractor : ExtractorApi() {
     override val name = "VOE"
@@ -58,25 +57,13 @@ class VOEExtractor : ExtractorApi() {
                 if (arr.length() == 0) return null
                 val obf = arr.getString(0)
                 
-                // 1. ROT13
                 val step1 = rot13(obf)
-                
-                // 2. Rimuovi pattern
                 val step2 = removePatterns(step1)
-                
-                // 3. Base64 decode
                 val step3 = safeBase64Decode(step2)
-                
-                // 4. Shift caratteri (-3)
                 val step4 = shiftChars(step3, 3)
-                
-                // 5. Reverse
                 val step5 = step4.reversed()
-                
-                // 6. Base64 decode finale
                 val step6 = safeBase64Decode(step5)
                 
-                // 7. Parse JSON
                 JSONObject(step6)
             } catch (e: Exception) {
                 Log.e(TAG, "Deobfuscation error: ${e.message}")
@@ -105,7 +92,7 @@ class VOEExtractor : ExtractorApi() {
             val html = response.body.string()
             
             // Cerca il JSON offuscato
-            val jsonPattern = Regex("""<script type="application/json">(.*?)</script>""", RegexOption.DOTALL)
+            val jsonPattern = Regex("""<script type="application/json">(.*?)</script>""", setOf(RegexOption.DOTALL))
             val jsonMatch = jsonPattern.find(html)
             
             if (jsonMatch == null) {
@@ -131,7 +118,6 @@ class VOEExtractor : ExtractorApi() {
             }
             
             if (videoUrl.isEmpty()) {
-                // Cerca nel fallback array
                 val fallback = decoded.optJSONArray("fallback")
                 if (fallback != null && fallback.length() > 0) {
                     val firstFallback = fallback.getJSONObject(0)
@@ -157,8 +143,7 @@ class VOEExtractor : ExtractorApi() {
                     source = name,
                     name = "VOE",
                     url = videoUrl,
-                    type = ExtractorLinkType.VIDEO,
-                    quality = Qualities.P1080.value
+                    type = ExtractorLinkType.VIDEO
                 ) {
                     this.headers = videoHeaders
                     this.referer = "https://jessicaclearout.com/"
