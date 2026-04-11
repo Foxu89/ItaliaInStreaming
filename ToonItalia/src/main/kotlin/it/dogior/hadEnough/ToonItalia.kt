@@ -1,6 +1,5 @@
 package it.dogior.hadEnough
 
-import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
@@ -8,11 +7,8 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.SeasonData
-import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.addPoster
-import com.lagradost.cloudstream3.addSeasonNames
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newEpisode
@@ -21,14 +17,7 @@ import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
-import com.lagradost.cloudstream3.utils.AppUtils.parseJson
-import com.lagradost.cloudstream3.utils.AppUtils.toJson
-import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
-import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
-import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.Qualities
 import it.dogior.hadEnough.extractors.VOEExtractor
-import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class Toonitalia : MainAPI() {
@@ -46,7 +35,6 @@ class Toonitalia : MainAPI() {
     )
 
     companion object {
-        // Converte chuckle-tube.com/ID in jessicaclearout.com/ID
         fun convertToVoeUrl(url: String): String {
             if (url.contains("chuckle-tube.com")) {
                 val videoId = url.substringAfterLast("/")
@@ -54,107 +42,64 @@ class Toonitalia : MainAPI() {
             }
             return url
         }
-        
-        // Estrae il poster da un elemento card
-        private fun extractPoster(card: Element): String? {
-            // Cerca img normale
-            var poster = card.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, img")?.attr("src")
-            if (!poster.isNullOrEmpty()) return poster
-            
-            // Cerca img con data-src (lazy loading)
-            poster = card.selectFirst("img[data-src]")?.attr("data-src")
-            if (!poster.isNullOrEmpty()) return poster
-            
-            // Cerca nell'attributo style (background-image)
-            val style = card.selectFirst(".post-thumbnail, .cover-header")?.attr("style")
-            if (style != null) {
-                val regex = Regex("""background-image:\s*url\(['\"]?([^'\")]+)['\"]?\)""")
-                poster = regex.find(style)?.groupValues?.get(1)
-                if (!poster.isNullOrEmpty()) return poster
-            }
-            
-            return null
-        }
-        
-        // Estrae il titolo da un elemento card
-        private fun extractTitle(card: Element): String? {
-            return card.selectFirst("h2.entry-title, h1.entry-title, h2 a, h1 a, .entry-title a")?.text()?.trim()
-                ?: card.selectFirst("a[href]")?.text()?.trim()
-        }
-        
-        // Estrae il link da un elemento card
-        private fun extractLink(card: Element): String? {
-            return card.selectFirst("h2.entry-title a, h1.entry-title a, .entry-title a, a[href]")?.attr("href")
-        }
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
         val url = if (page > 1) "${request.data}page/$page/" else request.data
         val document = app.get(url).document
         
-        // Cerca gli articoli/posts
-        val items = document.select("article.post, div.post, div.entry-content article, div.rpwwt-widget li")
+        // CERCA I WIDGET CON I POSTER (rpwwt-widget)
+        val widgets = document.select(".rpwwt-widget")
         
-        if (items.isEmpty()) {
-            // Prova con i widget recent posts
-            val widgetItems = document.select(".rpwwt-widget li, .recent-posts-widget-with-thumbnails li")
-            if (widgetItems.isNotEmpty()) {
-                return buildHomePageFromWidgets(widgetItems, request, page, url)
+        val allItems = mutableListOf<SearchResponse>()
+        
+        for (widget in widgets) {
+            val items = widget.select("li")
+            for (item in items) {
+                val link = item.selectFirst("a[href]") ?: continue
+                val posterUrl = item.selectFirst("img")?.attr("src")
+                val title = link.selectFirst(".rpwwt-post-title")?.text()?.trim() 
+                    ?: link.text().trim()
+                val itemUrl = link.attr("href")
+                
+                if (title.isBlank() || itemUrl.isBlank()) continue
+                
+                val isSeries = itemUrl.contains("serie") || request.data.contains("serie-tv")
+                
+                val searchResponse = if (isSeries) {
+                    newTvSeriesSearchResponse(title, itemUrl, TvType.TvSeries) {
+                        addPoster(posterUrl)
+                    }
+                } else {
+                    newMovieSearchResponse(title, itemUrl, TvType.Movie) {
+                        addPoster(posterUrl)
+                    }
+                }
+                allItems.add(searchResponse)
             }
-            return null
         }
         
-        val posts = items.mapNotNull { card ->
-            val title = extractTitle(card) ?: return@mapNotNull null
-            val link = extractLink(card) ?: return@mapNotNull null
-            val poster = extractPoster(card)
-            
-            val isSeries = link.contains("serie") || link.contains("anime") || request.data.contains("serie-tv")
-            
-            if (isSeries) {
-                newTvSeriesSearchResponse(title, link, TvType.TvSeries) {
-                    addPoster(poster)
+        // Se non troviamo widget, cerchiamo la lista testuale (fallback)
+        if (allItems.isEmpty()) {
+            val textLinks = document.select("ul.lcp_catlist li a")
+            for (link in textLinks) {
+                val title = link.text().trim()
+                val itemUrl = link.attr("href")
+                if (title.isBlank() || itemUrl.isBlank()) continue
+                
+                val isSeries = itemUrl.contains("serie") || request.data.contains("serie-tv")
+                
+                val searchResponse = if (isSeries) {
+                    newTvSeriesSearchResponse(title, itemUrl, TvType.TvSeries)
+                } else {
+                    newMovieSearchResponse(title, itemUrl, TvType.Movie)
                 }
-            } else {
-                newMovieSearchResponse(title, link, TvType.Movie) {
-                    addPoster(poster)
-                }
+                allItems.add(searchResponse)
             }
         }
         
-        // Controlla se esiste una pagina successiva
         val hasNext = document.select("a.next.page-numbers, .next, .nav-links .next, .pagination .next").isNotEmpty()
-        
-        val section = HomePageList(request.name, posts, false)
-        return newHomePageResponse(section, hasNext)
-    }
-    
-    private suspend fun buildHomePageFromWidgets(
-        items: org.jsoup.select.Elements,
-        request: MainPageRequest,
-        page: Int,
-        url: String
-    ): HomePageResponse? {
-        val posts = items.mapNotNull { card ->
-            val title = card.selectFirst("a")?.text()?.trim() ?: return@mapNotNull null
-            val link = card.selectFirst("a")?.attr("href") ?: return@mapNotNull null
-            val poster = card.selectFirst("img")?.attr("src") ?: card.selectFirst("img[data-src]")?.attr("data-src")
-            
-            val isSeries = link.contains("serie") || link.contains("anime") || request.data.contains("serie-tv")
-            
-            if (isSeries) {
-                newTvSeriesSearchResponse(title, link, TvType.TvSeries) {
-                    addPoster(poster)
-                }
-            } else {
-                newMovieSearchResponse(title, link, TvType.Movie) {
-                    addPoster(poster)
-                }
-            }
-        }
-        
-        val hasNext = false // Nei widget non c'è paginazione
-        val section = HomePageList(request.name, posts, false)
+        val section = HomePageList(request.name, allItems, false)
         return newHomePageResponse(section, hasNext)
     }
 
@@ -162,25 +107,32 @@ class Toonitalia : MainAPI() {
         val url = "$mainUrl/?s=${query.replace(" ", "+")}"
         val document = app.get(url).document
         
-        val items = document.select("article.post, div.post, div.search-results article, .rpwwt-widget li")
+        val results = mutableListOf<SearchResponse>()
         
-        return items.mapNotNull { card ->
-            val title = extractTitle(card) ?: return@mapNotNull null
-            val link = extractLink(card) ?: return@mapNotNull null
-            val poster = extractPoster(card)
+        // Cerca nei risultati di ricerca (di solito sono articoli)
+        val searchResults = document.select("article.post, div.post, .search-results article")
+        
+        for (article in searchResults) {
+            val titleElement = article.selectFirst("h2.entry-title a, h1.entry-title a, .entry-title a")
+            val title = titleElement?.text()?.trim() ?: continue
+            val itemUrl = titleElement.attr("href") ?: continue
+            val poster = article.selectFirst("img")?.attr("src") 
+                ?: article.selectFirst("img[data-src]")?.attr("data-src")
             
-            val isSeries = link.contains("serie") || link.contains("anime")
+            val isSeries = itemUrl.contains("serie") || itemUrl.contains("anime")
             
             if (isSeries) {
-                newTvSeriesSearchResponse(title, link, TvType.TvSeries) {
+                results.add(newTvSeriesSearchResponse(title, itemUrl, TvType.TvSeries) {
                     addPoster(poster)
-                }
+                })
             } else {
-                newMovieSearchResponse(title, link, TvType.Movie) {
+                results.add(newMovieSearchResponse(title, itemUrl, TvType.Movie) {
                     addPoster(poster)
-                }
+                })
             }
         }
+        
+        return results
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -189,7 +141,7 @@ class Toonitalia : MainAPI() {
         val title = document.selectFirst("h1.entry-title, h1")?.text()?.trim() ?: return null
         
         // Poster dalla pagina (banner o immagine principale)
-        var poster = document.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, .post-thumbnail img")?.attr("src")
+        var poster = document.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, .cover-header img")?.attr("src")
         if (poster.isNullOrEmpty()) {
             poster = document.selectFirst(".cover-header")?.attr("style")?.let { style ->
                 Regex("""background-image:\s*url\(['\"]?([^'\")]+)['\"]?\)""").find(style)?.groupValues?.get(1)
@@ -197,13 +149,11 @@ class Toonitalia : MainAPI() {
         }
         
         val banner = poster
+        val plot = document.selectFirst(".entry-content p")?.text()?.trim()
         
-        val plot = document.selectFirst(".entry-content p, .post-content p")?.text()?.trim()
-        
-        // Determina se è una serie (ha episodi)
-        val isSeries = document.selectFirst(".entry-content h3, .entry-content h2")?.text()?.contains("Episodi") == true
-            || url.contains("serie") || url.contains("anime")
-            || document.select("a[href*='chuckle-tube.com']").isNotEmpty()
+        // Determina se è una serie (ha episodi con link VOE)
+        val voeLinks = document.select("a[href*='chuckle-tube.com'], a[href*='jessicaclearout.com']")
+        val isSeries = voeLinks.size > 1 || document.text().contains("Episodio")
         
         val type = if (isSeries) TvType.TvSeries else TvType.Movie
         
@@ -223,46 +173,23 @@ class Toonitalia : MainAPI() {
         }
     }
 
-    private suspend fun getEpisodes(document: Document): List<Episode> {
+    private suspend fun getEpisodes(document: org.jsoup.nodes.Document): List<Episode> {
         val episodes = mutableListOf<Episode>()
         
-        // Cerca i link VOE nel contenuto
-        val content = document.selectFirst(".entry-content")?.html() ?: return episodes
+        val voeLinks = document.select("a[href*='chuckle-tube.com'], a[href*='jessicaclearout.com']")
         
-        // Pattern per trovare i link VOE: https://chuckle-tube.com/ID
-        val voePattern = Regex("""(?:https?://)?(?:chuckle-tube\.com|jessicaclearout\.com)/([a-zA-Z0-9]+)""")
-        val matches = voePattern.findAll(content).toList()
-        
-        // Cerca anche i numeri degli episodi
-        val episodePattern = Regex("""(?:Ep|Episodio|E|×)\s*(\d+)""", RegexOption.IGNORE_CASE)
-        val episodePattern2 = Regex("""(\d+)×(\d+)""") // Formato "5x01"
-        
-        matches.forEachIndexed { index, match ->
-            val videoUrl = convertToVoeUrl("https://jessicaclearout.com/${match.groupValues[1]}")
+        voeLinks.forEachIndexed { index, link ->
+            val videoUrl = convertToVoeUrl(link.attr("href"))
             
-            // Cerca il numero dell'episodio intorno alla posizione del match
-            val contextStart = maxOf(0, match.range.first - 200)
-            val contextEnd = minOf(content.length, match.range.last + 200)
-            val context = content.substring(contextStart, contextEnd)
+            // Cerca il numero dell'episodio nel testo circostante
+            val parentText = link.parent()?.text() ?: ""
+            val episodePattern = Regex("""(\d+)×(\d+)""")
+            val seasonEpMatch = episodePattern.find(parentText)
             
-            var episodeNum: Int? = null
-            
-            // Prova pattern 5x01
-            val seasonEpMatch = episodePattern2.find(context)
-            if (seasonEpMatch != null) {
-                episodeNum = seasonEpMatch.groupValues[2].toIntOrNull()
-            }
-            
-            // Prova pattern Ep 01
-            if (episodeNum == null) {
-                val epMatch = episodePattern.find(context)
-                if (epMatch != null) {
-                    episodeNum = epMatch.groupValues[1].toIntOrNull()
-                }
-            }
-            
-            if (episodeNum == null) {
-                episodeNum = index + 1
+            val episodeNum = if (seasonEpMatch != null) {
+                seasonEpMatch.groupValues[2].toIntOrNull() ?: (index + 1)
+            } else {
+                index + 1
             }
             
             val episodeName = "Episodio $episodeNum"
@@ -284,7 +211,6 @@ class Toonitalia : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        // data contiene l'URL del video (jessicaclearout.com/ID o chuckle-tube.com/ID)
         val videoUrl = convertToVoeUrl(data)
         
         if (videoUrl.contains("jessicaclearout.com")) {
