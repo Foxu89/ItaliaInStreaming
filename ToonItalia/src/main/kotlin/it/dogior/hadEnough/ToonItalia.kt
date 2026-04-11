@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.addPoster
 import com.lagradost.cloudstream3.app
@@ -18,7 +19,6 @@ import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.SubtitleFile
 import it.dogior.hadEnough.extractors.VOEExtractor
 
 class Toonitalia : MainAPI() {
@@ -49,7 +49,6 @@ class Toonitalia : MainAPI() {
         val url = if (page > 1) "${request.data}page/$page/" else request.data
         val document = app.get(url).document
         
-        // CERCA I WIDGET CON I POSTER (rpwwt-widget)
         val widgets = document.select(".rpwwt-widget")
         
         val allItems = mutableListOf<SearchResponse>()
@@ -80,7 +79,6 @@ class Toonitalia : MainAPI() {
             }
         }
         
-        // Se non troviamo widget, cerchiamo la lista testuale (fallback)
         if (allItems.isEmpty()) {
             val textLinks = document.select("ul.lcp_catlist li a")
             for (link in textLinks) {
@@ -110,7 +108,6 @@ class Toonitalia : MainAPI() {
         
         val results = mutableListOf<SearchResponse>()
         
-        // Cerca nei risultati di ricerca
         val searchResults = document.select("article.post, div.post, .search-results article, .rpwwt-widget li")
         
         for (item in searchResults) {
@@ -144,7 +141,6 @@ class Toonitalia : MainAPI() {
         
         val title = document.selectFirst("h1.entry-title, h1")?.text()?.trim() ?: return null
         
-        // Poster dalla pagina
         var poster = document.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, .cover-header img")?.attr("src")
         if (poster.isNullOrEmpty()) {
             poster = document.selectFirst(".cover-header")?.attr("style")?.let { style ->
@@ -155,7 +151,6 @@ class Toonitalia : MainAPI() {
         val banner = poster
         val plot = document.selectFirst(".entry-content p")?.text()?.trim()
         
-        // Determina se è una serie
         val voeLinks = document.select("a[href*='chuckle-tube.com'], a[href*='jessicaclearout.com']")
         val isSeries = voeLinks.size > 1 || document.text().contains("Episodio")
         
@@ -185,7 +180,6 @@ class Toonitalia : MainAPI() {
         voeLinks.forEachIndexed { index, link ->
             val videoUrl = convertToVoeUrl(link.attr("href"))
             
-            // Cerca il numero dell'episodio nel testo circostante
             val parentText = link.parent()?.text() ?: ""
             val episodePattern = Regex("""(\d+)×(\d+)""")
             val seasonEpMatch = episodePattern.find(parentText)
