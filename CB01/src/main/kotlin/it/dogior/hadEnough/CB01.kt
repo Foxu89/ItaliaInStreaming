@@ -40,7 +40,6 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
-
 class CB01 : MainAPI() {
     override var mainUrl = "https://cb01uno.today"
     override var name = "CB01"
@@ -158,7 +157,6 @@ class CB01 : MainAPI() {
                 ?.removePrefix("DURATA")
                 ?.removeSuffix("′")?.trim()?.toIntOrNull()
 
-            // Per i film, prendi SOLO il link Mixdrop (il secondo link)
             val mixdropLink = mainContainer.selectFirst("a[href*='stayonline.pro']")?.attr("href")
             
             newMovieLoadResponse(fixTitle(title, true), url, TvType.Movie, mixdropLink ?: "null") {
@@ -188,13 +186,12 @@ class CB01 : MainAPI() {
         }
     }
     
-    // ========== NUOVA FUNZIONE PER ESTRAZIONE EPISODI ==========
+    // ========== ESTRAZIONE EPISODI CORRETTA ==========
     private fun extractEpisodes(document: org.jsoup.nodes.Document): Pair<List<Episode>, MutableList<SeasonData>> {
         val episodes = mutableListOf<Episode>()
         val seasonsData = mutableListOf<SeasonData>()
         val seasons = mutableMapOf<Int, String>()
         
-        // Trova tutti i dropdown delle stagioni (.sp-wrap)
         val seasonWraps = document.select(".sp-wrap")
         
         seasonWraps.forEachIndexed { index, wrap ->
@@ -205,8 +202,8 @@ class CB01 : MainAPI() {
             val seasonName = seasonHeader.replace("- ITA", "").replace("- HD", "").trim()
             seasons[seasonNumber] = seasonName
             
-            // Estrai episodi da questa stagione
-            val episodeElements = wrap.select(".sp-body p")
+            // Cerca gli episodi in tutto il wrap (anche se la tendina è chiusa)
+            val episodeElements = wrap.select("p")
             
             episodeElements.forEach { epElement ->
                 val epText = epElement.text()
@@ -217,7 +214,6 @@ class CB01 : MainAPI() {
                     val epNumber = epMatch.groupValues[2].toIntOrNull() ?: return@forEach
                     val epName = epText.substringBefore("–").trim()
                     
-                    // PRENDI SOLO IL LINK MIXDROP (il secondo link, quello con "Mixdrop")
                     val mixdropLink = epElement.select("a[href*='stayonline.pro']").lastOrNull()?.attr("href")
                     
                     if (mixdropLink != null) {
@@ -233,7 +229,6 @@ class CB01 : MainAPI() {
             }
         }
         
-        // Crea SeasonData per ogni stagione trovata
         seasons.forEach { (num, name) ->
             seasonsData.add(SeasonData(num, name))
         }
@@ -249,21 +244,15 @@ class CB01 : MainAPI() {
     ): Boolean {
         if (data == "null") return false
         
-        Log.d("CB01", "loadLinks data: $data")
-        
-        // Ora data è un singolo link Mixdrop (o array di link)
         val links = try {
-            // Prova a parsare come array
             parseJson<List<String>>(data)
         } catch (e: Exception) {
-            // Se fallisce, prova come stringa singola
             listOf(data)
         }
         
         links.forEach { link ->
             var finalUrl: String? = link
             
-            // Se è stayonline.pro, bisogna fare il bypass
             if (link.contains("stayonline.pro")) {
                 finalUrl = bypassStayOnline(link)
             }
@@ -284,8 +273,6 @@ class CB01 : MainAPI() {
 
     // ========== BYPASS STAYONLINE ==========
     private suspend fun bypassStayOnline(link: String): String? {
-        Log.d("CB01:StayOnline", "Processing: $link")
-        
         val pageResponse = app.get(link)
         val pageHtml = pageResponse.body.string()
         
