@@ -17,8 +17,9 @@ import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.SubtitleFile
 import it.dogior.hadEnough.extractors.VOEExtractor
-import org.jsoup.nodes.Element
 
 class Toonitalia : MainAPI() {
     override var mainUrl = "https://toonitalia.xyz"
@@ -109,15 +110,18 @@ class Toonitalia : MainAPI() {
         
         val results = mutableListOf<SearchResponse>()
         
-        // Cerca nei risultati di ricerca (di solito sono articoli)
-        val searchResults = document.select("article.post, div.post, .search-results article")
+        // Cerca nei risultati di ricerca
+        val searchResults = document.select("article.post, div.post, .search-results article, .rpwwt-widget li")
         
-        for (article in searchResults) {
-            val titleElement = article.selectFirst("h2.entry-title a, h1.entry-title a, .entry-title a")
-            val title = titleElement?.text()?.trim() ?: continue
-            val itemUrl = titleElement.attr("href") ?: continue
-            val poster = article.selectFirst("img")?.attr("src") 
-                ?: article.selectFirst("img[data-src]")?.attr("data-src")
+        for (item in searchResults) {
+            val link = item.selectFirst("a[href]") ?: continue
+            val title = link.selectFirst(".rpwwt-post-title")?.text()?.trim() 
+                ?: link.text().trim()
+            val itemUrl = link.attr("href")
+            val poster = item.selectFirst("img")?.attr("src") 
+                ?: item.selectFirst("img[data-src]")?.attr("data-src")
+            
+            if (title.isBlank() || itemUrl.isBlank()) continue
             
             val isSeries = itemUrl.contains("serie") || itemUrl.contains("anime")
             
@@ -140,7 +144,7 @@ class Toonitalia : MainAPI() {
         
         val title = document.selectFirst("h1.entry-title, h1")?.text()?.trim() ?: return null
         
-        // Poster dalla pagina (banner o immagine principale)
+        // Poster dalla pagina
         var poster = document.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, .cover-header img")?.attr("src")
         if (poster.isNullOrEmpty()) {
             poster = document.selectFirst(".cover-header")?.attr("style")?.let { style ->
@@ -151,7 +155,7 @@ class Toonitalia : MainAPI() {
         val banner = poster
         val plot = document.selectFirst(".entry-content p")?.text()?.trim()
         
-        // Determina se è una serie (ha episodi con link VOE)
+        // Determina se è una serie
         val voeLinks = document.select("a[href*='chuckle-tube.com'], a[href*='jessicaclearout.com']")
         val isSeries = voeLinks.size > 1 || document.text().contains("Episodio")
         
