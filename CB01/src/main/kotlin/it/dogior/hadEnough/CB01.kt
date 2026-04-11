@@ -59,13 +59,15 @@ class CB01 : MainAPI() {
     }
 
     private fun fixTitle(title: String, isMovie: Boolean): String {
-        if (isMovie) {
-            return title.replace(Regex("""(\[HD] )*\(\d{4}\)${'$'}"""), "")
+        return if (isMovie) {
+            title.replace(Regex("""(\[HD] )?\(\d{4}\)${'$'}"""), "").trim()
+        } else {
+            title.replace(Regex("""[-–] Stagione \d+.*${'$'}"""), "")
+                .replace(Regex("""[-–] \d+[x×]\d+.*${'$'}"""), "")
+                .replace(Regex("""[-–] ITA.*${'$'}"""), "")
+                .replace(Regex("""[-–] COMPLETA.*${'$'}"""), "")
+                .trim()
         }
-        return title.replace(Regex("""[-–] Stagione \d+"""), "")
-            .replace(Regex("""[-–] ITA"""), "")
-            .replace(Regex("""[-–] *\d+[x×]\d*(/?\d*)*"""), "")
-            .replace(Regex("""[-–] COMPLETA"""), "").trim()
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
@@ -73,15 +75,12 @@ class CB01 : MainAPI() {
         val response = app.get(url)
 
         if (actualMainUrl.isEmpty()) {
-            actualMainUrl = response.okhttpResponse.request.url.toString().substringBeforeLast('/')
+            actualMainUrl = response.url.substringBeforeLast('/')
         }
 
         val document = response.document
-        val items = document.selectFirst(".sequex-one-columns")?.select(".post")
-        if (items == null){
-            Log.d("CB01 Page Response", document.toString())
-            return null
-        }
+        val items = document.selectFirst(".sequex-one-columns")?.select(".post") ?: return null
+        
         val posts = items.mapNotNull { card ->
             val poster = card.selectFirst("img")?.attr("src")
             val data = card.selectFirst("script")?.data()
@@ -90,220 +89,283 @@ class CB01 : MainAPI() {
             post?.let { it.poster = poster }
             post
         }
-        val pagination = document.selectFirst(".pagination")?.select(".page-item")!!
-        val lastPage = pagination[pagination.size - 2].text().replace(".", "").toInt()
+        
+        val pagination = document.selectFirst(".pagination")?.select(".page-item") ?: return null
+        val lastPage = pagination[pagination.size - 2].text().replace(".", "").toIntOrNull() ?: 1
         val hasNext = page < lastPage
 
-        val searchResponses = posts.map {
+        val searchResponses = posts.map { post ->
             if (request.data.contains("serietv")) {
-                val title = fixTitle(it.title, false)
-                newTvSeriesSearchResponse(title, it.permalink, TvType.TvSeries) {
-                    addPoster(it.poster)
+                newTvSeriesSearchResponse(fixTitle(post.title, false), post.permalink, TvType.TvSeries) {
+                    addPoster(post.poster)
                 }
             } else {
-                val quality = if (it.title.contains("HD")) SearchQuality.HD else null
-                newMovieSearchResponse(
-                    fixTitle(it.title, true),
-                    it.permalink,
-                    TvType.Movie
-                ) {
-                    addPoster(it.poster)
+                val quality = if (post.title.contains("HD")) SearchQuality.HD else null
+                newMovieSearchResponse(fixTitle(post.title, true), post.permalink, TvType.Movie) {
+                    addPoster(post.poster)
                     this.quality = quality
                 }
             }
         }
-        val section = HomePageList(request.name, searchResponses, false)
-        return newHomePageResponse(section, hasNext)
+        
+        return newHomePageResponse(HomePageList(request.name, searchResponses, false), hasNext)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         val searchLinks = listOf("$mainUrl/?s=$query", "$mainUrl/serietv/?s=$query")
-        val results = searchLinks.amap { link ->
-            val response = app.get(link)
-            val document = response.document
-            val itemColumn = document.selectFirst(".sequex-one-columns")
-            val items = itemColumn?.select(".post")
-            val posts = items?.mapNotNull { card ->
+        return searchLinks.amap { link ->
+            val document = app.get(link).document
+            val items = document.selectFirst(".sequex-one-columns")?.select(".post") ?: return@amap emptyList()
+            
+            items.mapNotNull { card ->
                 val poster = card.selectFirst("img")?.attr("src")
                 val data = card.selectFirst("script")?.data()
                 val fixedData = data?.substringAfter("=")?.substringBefore(";")
                 val post = tryParseJson<Post>(fixedData)
                 post?.let { it.poster = poster }
                 post
-            }
-            posts?.map {
+            }.map { post ->
                 if (link.contains("serietv")) {
-                    newTvSeriesSearchResponse(
-                        fixTitle(it.title, false),
-                        it.permalink,
-                        TvType.TvSeries
-                    ) {
-                        addPoster(it.poster)
+                    newTvSeriesSearchResponse(fixTitle(post.title, false), post.permalink, TvType.TvSeries) {
+                        addPoster(post.poster)
                     }
                 } else {
-                    val quality = if (it.title.contains("HD")) SearchQuality.HD else null
-                    newMovieSearchResponse(
-                        fixTitle(it.title, true),
-                        it.permalink,
-                        TvType.Movie
-                    ) {
-                        addPoster(it.poster)
+                    val quality = if (post.title.contains("HD")) SearchQuality.HD else null
+                    newMovieSearchResponse(fixTitle(post.title, true), post.permalink, TvType.Movie) {
+                        addPoster(post.poster)
                         this.quality = quality
                     }
                 }
             }
-        }.filterNotNull().flatten()
-        return results
+        }.flatten()
     }
 
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
-        val mainContainer = document.selectFirst(".sequex-main-container")
-        if (mainContainer == null){
-            Log.d("CB01", document.toString())
-            return null
-        }
+        val mainContainer = document.selectFirst(".sequex-main-container") ?: return null
+        
         val poster = mainContainer.selectFirst("img.responsive-locandina")?.attr("src")
         val banner = mainContainer.selectFirst("#sequex-page-title-img")?.attr("data-img")
-        val title = mainContainer.selectFirst("h1")?.text()!!
+        val title = mainContainer.selectFirst("h1")?.text() ?: return null
         val isMovie = !url.contains("serietv")
-        val type = if (isMovie) TvType.Movie else TvType.TvSeries
         
         return if (isMovie) {
-            val year = Regex("\\d{4}").find(title)?.value?.toIntOrNull()
-            val plot = mainContainer.selectFirst(".ignore-css > p:nth-child(2)")?.text()
-                ?.replace("+Info »", "")
-            val tags = mainContainer.selectFirst(".ignore-css > p:nth-child(1) > strong:nth-child(1)")
-                ?.text()?.split('–')
-            val runtime = tags?.find { it.contains("DURATA") }?.trim()
-                ?.removePrefix("DURATA")
-                ?.removeSuffix("′")?.trim()?.toInt()
-
-            val table = mainContainer.selectFirst("table.cbtable > tbody:nth-child(1) > tr:nth-child(1) > td:nth-child(1)")
-            val links = table?.select("a")?.mapNotNull {
-                if (it.text() == "Maxstream" || it.text() == "Mixdrop") {
-                    it.attr("href")
-                } else {
-                    null
-                }
-            }
-            val data = links?.let {
-                it.subList(links.size - 2, it.size)
-            }?.toJson() ?: "null"
-
-            newMovieLoadResponse(fixTitle(title, true), url, type, data) {
-                addPoster(poster)
-                this.plot = plot
-                this.backgroundPosterUrl = banner
-                this.tags = tags?.mapNotNull {
-                    if (it.contains("DURATA")) null else it.trim()
-                }
-                this.duration = runtime
-                this.year = year
-            }
+            loadMovieResponse(mainContainer, title, url, poster, banner)
         } else {
-            val description = mainContainer.selectFirst(".ignore-css > p:nth-child(1)")?.text()
-                ?.split(Regex("""\(\d{4}-(\d{4})?\)"""))
-            val plot = description?.last()?.trim()
-            val tags = description?.first()?.split('/')
-            val (episodes, seasons) = getEpisodes(document)
-            newTvSeriesLoadResponse(fixTitle(title, false), url, type, episodes) {
-                addPoster(poster)
-                addSeasonNames(seasons)
-                this.plot = plot
-                this.backgroundPosterUrl = banner
-                this.tags = tags?.map { it.trim() }
-            }
+            loadTvSeriesResponse(mainContainer, document, title, url, poster, banner)
         }
     }
+    
+    private fun loadMovieResponse(
+        mainContainer: org.jsoup.nodes.Element,
+        title: String,
+        url: String,
+        poster: String?,
+        banner: String?
+    ): LoadResponse {
+        val year = Regex("\\d{4}").find(title)?.value?.toIntOrNull()
+        val plot = mainContainer.selectFirst(".ignore-css > p:nth-child(2)")?.text()
+            ?.replace("+Info »", "")
+        val tags = mainContainer.selectFirst(".ignore-css > p:nth-child(1) > strong:nth-child(1)")
+            ?.text()?.split("–")
+        val runtime = tags?.find { it.contains("DURATA") }?.trim()
+            ?.removePrefix("DURATA")
+            ?.removeSuffix("′")?.trim()?.toIntOrNull()
 
-    private suspend fun getEpisodes(page: Document): Pair<List<Episode>, MutableList<SeasonData>> {
+        // Per i film, prendi i link dalla tabella
+        val links = mutableListOf<String>()
+        mainContainer.select("table.cbtable a[href*='stayonline.pro']").forEach { a ->
+            links.add(a.attr("href"))
+        }
+
+        return newMovieLoadResponse(fixTitle(title, true), url, TvType.Movie, links.toJson()) {
+            addPoster(poster)
+            this.plot = plot
+            this.backgroundPosterUrl = banner
+            this.tags = tags?.mapNotNull { if (it.contains("DURATA")) null else it.trim() }
+            this.duration = runtime
+            this.year = year
+        }
+    }
+    
+    private fun loadTvSeriesResponse(
+        mainContainer: org.jsoup.nodes.Element,
+        document: org.jsoup.nodes.Document,
+        title: String,
+        url: String,
+        poster: String?,
+        banner: String?
+    ): LoadResponse {
+        val description = mainContainer.selectFirst(".ignore-css > p:nth-child(1)")?.text()
+            ?.split(Regex("""\(\d{4}-\d{4}\)"""))
+        val plot = description?.lastOrNull()?.trim()
+        val tags = description?.firstOrNull()?.split('/')?.map { it.trim() }
+        
+        val (episodes, seasons) = extractEpisodes(document)
+        
+        return newTvSeriesLoadResponse(fixTitle(title, false), url, TvType.TvSeries, episodes) {
+            addPoster(poster)
+            addSeasonNames(seasons)
+            this.plot = plot
+            this.backgroundPosterUrl = banner
+            this.tags = tags
+        }
+    }
+    
+    private fun extractEpisodes(document: org.jsoup.nodes.Document): Pair<List<Episode>, MutableList<SeasonData>> {
+        val episodes = mutableListOf<Episode>()
         val seasonsData = mutableListOf<SeasonData>()
-        val nestedEps = mutableListOf<Episode>()
-
-        val seasonDropdowns = page.select(".sp-wrap ")
-
-        val episodes = seasonDropdowns.mapIndexedNotNull { index, dropdown ->
-            val seasonName = dropdown.select("div.sp-head").text()
-            val regex = "\\d+".toRegex()
-            val seasonNumber = regex.find(seasonName)?.value?.toIntOrNull() ?: index
-
-            val episodesData = dropdown.select("div.sp-body").select("strong").select("p")
-            episodesData.amap {
-                val epName = it.text().substringBefore('–').trim()
-                val epNumber = regex.find(epName.substringAfter('×'))?.value?.toIntOrNull()
-                val links = it.select("a").map { a -> a.attr("href") }
+        val seasons = mutableMapOf<Int, String>()
+        
+        // Trova tutti i dropdown delle stagioni
+        val seasonWraps = document.select(".sp-wrap")
+        
+        seasonWraps.forEachIndexed { index, wrap ->
+            val seasonHeader = wrap.selectFirst(".sp-head")?.text() ?: return@forEachIndexed
+            val seasonNumber = Regex("""STAGIONE\s*(\d+)""").find(seasonHeader)?.groupValues?.get(1)?.toIntOrNull() 
+                ?: (index + 1)
+            
+            val seasonName = seasonHeader.replace("- ITA", "").replace("- HD", "").trim()
+            seasons[seasonNumber] = seasonName
+            
+            // Estrai episodi da questa stagione
+            val episodeElements = wrap.select(".sp-body p")
+            
+            episodeElements.forEach { epElement ->
+                val epText = epElement.text()
+                val epMatch = Regex("""(\d+)×(\d+)""").find(epText)
                 
-                if (links.any { l -> l.contains("uprot") || l.contains("stayonline") }) {
-                    seasonsData.add(
-                        SeasonData(
-                            seasonNumber,
-                            seasonName.replace("- ITA", "")
-                                .replace("- HD", "").trim()
+                if (epMatch != null) {
+                    val epSeason = epMatch.groupValues[1].toIntOrNull() ?: seasonNumber
+                    val epNumber = epMatch.groupValues[2].toIntOrNull() ?: return@forEachIndexed
+                    val epName = epText.substringBefore("–").trim()
+                    
+                    // Trova i link per questo episodio
+                    val links = epElement.select("a[href*='stayonline.pro']").map { it.attr("href") }
+                    
+                    if (links.isNotEmpty()) {
+                        episodes.add(
+                            newEpisode(links.toJson()) {
+                                name = epName
+                                season = epSeason
+                                episode = epNumber
+                            }
                         )
-                    )
-                    val uprotLink = try {
-                        links.first { l -> l.contains("uprot") }
-                    } catch (e: NoSuchElementException) {
-                        null
+                    }
+                }
+            }
+        }
+        
+        // Crea SeasonData per ogni stagione trovata
+        seasons.forEach { (num, name) ->
+            seasonsData.add(SeasonData(num, name))
+        }
+        
+        return episodes to seasonsData
+    }
+
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit,
+    ): Boolean {
+        if (data == "null" || data == "[]") return false
+        
+        val links = try {
+            parseJson<List<String>>(data)
+        } catch (e: Exception) {
+            Log.e("CB01", "Failed to parse links: ${e.message}")
+            return false
+        }
+        
+        Log.d("CB01", "Processing links: $links")
+        
+        links.forEach { link ->
+            ioSafe {
+                try {
+                    val finalUrl = when {
+                        link.contains("stayonline.pro") -> bypassStayOnline(link)
+                        link.contains("uprot.net") -> bypassUprot(link)
+                        else -> link
                     }
                     
-                    val eps = if (uprotLink != null) {
-                        getNestedEpisodes(uprotLink, seasonNumber)
-                    } else {
-                        null
-                    }
-
-                    if (eps.isNullOrEmpty()) {
-                        newEpisode(links.toJson()) {
-                            name = epName
-                            season = seasonNumber
-                            episode = epNumber
+                    if (finalUrl != null) {
+                        Log.d("CB01", "Final URL: $finalUrl")
+                        
+                        when {
+                            finalUrl.contains("maxstream") || finalUrl.contains("uprot.stream") -> {
+                                MaxStreamExtractor().getUrl(finalUrl, null, subtitleCallback, callback)
+                            }
+                            finalUrl.contains("mixdrop") || finalUrl.contains("m1xdrop") -> {
+                                MixDropExtractor().getUrl(finalUrl, null, subtitleCallback, callback)
+                            }
                         }
-                    } else {
-                        nestedEps.addAll(eps)
-                        null
                     }
-                } else {
-                    null
-                }
-            }.filterNotNull()
-        }?.flatten()
-
-        if (nestedEps.isNotEmpty()) {
-            val eps = nestedEps.toMutableList()
-            eps.addAll(episodes ?: emptyList())
-            return eps to seasonsData
-        }
-
-        return (episodes ?: emptyList()) to seasonsData
-    }
-
-    private suspend fun getNestedEpisodes(
-        uprotLink: String,
-        season: Int?,
-    ): List<Episode> {
-        val link = unshortenUprot(uprotLink)
-        if (link.toHttpUrlOrNull() != null) {
-            val response = app.get(link)
-            val trs = response.document.select("tr")
-            var epNum = 0
-            val episodes = trs.map {
-                val tds = it.select("td")
-                val epLink = tds[1].select("a").attr("href")
-                val name = tds.first()?.text()
-                epNum++
-                newEpisode(listOf(epLink).toJson()) {
-                    this.name = name
-                    this.season = season
-                    this.episode = epNum
+                } catch (e: Exception) {
+                    Log.e("CB01", "Error processing link $link: ${e.message}")
                 }
             }
-            return episodes
         }
-        return emptyList()
+        
+        return true
     }
 
+    private suspend fun bypassStayOnline(link: String): String? {
+        Log.d("CB01:StayOnline", "Processing: $link")
+        
+        val pageResponse = app.get(link)
+        val pageHtml = pageResponse.body.string()
+        
+        var linkId = link.substringAfterLast("/")
+        val idPattern = Regex("""var linkId\s*=\s*"([^"]+)";""")
+        val idMatch = idPattern.find(pageHtml)
+        if (idMatch != null) {
+            linkId = idMatch.groupValues[1]
+        }
+        
+        val headers = mapOf(
+            "Origin" to "https://stayonline.pro",
+            "Referer" to link,
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+            "X-Requested-With" to "XMLHttpRequest",
+            "Accept" to "application/json, text/javascript, */*; q=0.01",
+            "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8"
+        )
+        
+        val data = "id=$linkId&ref="
+        val response = app.post(
+            "https://stayonline.pro/ajax/linkView.php",
+            headers = headers,
+            requestBody = data.toRequestBody("application/x-www-form-urlencoded; charset=UTF-8".toMediaTypeOrNull())
+        )
+
+        val jsonResponse = response.body.string()
+        
+        return try {
+            val json = JSONObject(jsonResponse)
+            if (json.optString("status") == "success") {
+                var realUrl = json.getJSONObject("data").getString("value")
+                
+                // Converti m1xdrop.net/f/xxx → mixdrop.top/e/xxx
+                if (realUrl.contains("m1xdrop.net/f/")) {
+                    val videoId = realUrl.substringAfterLast("/")
+                    realUrl = "https://mixdrop.top/e/$videoId"
+                }
+                // Converti uprot.stream → link diretto
+                if (realUrl.contains("uprot.net")) {
+                    realUrl = unshortenUprot(realUrl)
+                }
+                realUrl
+            } else {
+                null
+            }
+        } catch (e: JSONException) {
+            Log.e("CB01:StayOnline", "JSON error: ${e.message}")
+            null
+        }
+    }
+    
     private suspend fun unshortenUprot(url: String): String {
         var currentUrl = url
         val visited = mutableSetOf<String>()
@@ -322,121 +384,13 @@ class CB01 : MainAPI() {
         return currentUrl
     }
 
-    private suspend fun bypassStayOnline(link: String): String? {
-        Log.d("CB01:StayOnline", "Processing: $link")
-        
-        val headers = mapOf(
-            "Origin" to "https://stayonline.pro",
-            "Referer" to link,
-            "Host" to link.toHttpUrl().host,
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-            "X-Requested-With" to "XMLHttpRequest",
-            "Accept" to "application/json, text/javascript, */*; q=0.01",
-            "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8"
-        )
-        
-        // Prima ottieni la pagina HTML per estrarre il linkId corretto
-        val pageResponse = app.get(link)
-        val pageHtml = pageResponse.body.string()
-        
-        // Cerca il linkId nello script
-        var linkId = link.split("/").last()
-        val idPattern = Regex("""var linkId\s*=\s*"([^"]+)";""")
-        val idMatch = idPattern.find(pageHtml)
-        if (idMatch != null) {
-            linkId = idMatch.groupValues[1]
-            Log.d("CB01:StayOnline", "Found linkId: $linkId")
-        }
-        
-        // Richiesta POST per ottenere il link reale
-        val data = "id=$linkId&ref="
-        val response = app.post(
-            "https://stayonline.pro/ajax/linkView.php",
-            headers = headers,
-            requestBody = data.toRequestBody("application/x-www-form-urlencoded; charset=UTF-8".toMediaTypeOrNull())
-        )
-
-        val jsonResponse = response.body.string()
-        Log.d("CB01:StayOnline", "Response: $jsonResponse")
-        
-        return try {
-            val json = JSONObject(jsonResponse)
-            if (json.optString("status") == "success") {
-                var realUrl = json.getJSONObject("data").getString("value")
-                Log.d("CB01:StayOnline", "Real URL: $realUrl")
-                
-                // Converti m1xdrop.net/f/xxx → mixdrop.top/e/xxx
-                if (realUrl.contains("m1xdrop.net/f/")) {
-                    val videoId = realUrl.substringAfterLast("/")
-                    realUrl = "https://mixdrop.top/e/$videoId"
-                    Log.d("CB01:StayOnline", "Converted to: $realUrl")
-                }
-                realUrl
-            } else {
-                null
-            }
-        } catch (e: JSONException) {
-            Log.e("CB01:StayOnline", "JSON error: ${e.message}")
-            null
-        }
-    }
-
     private suspend fun bypassUprot(link: String): String? {
         val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
-
-        val headers = mapOf(
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-        )
-
-        val response = app.get(updatedLink, headers = headers, timeout = 10_000)
-        val responseBody = response.body.string()
-        val document = Jsoup.parse(responseBody)
-        Log.d("CB01:Uprot", document.select("a").toString())
+        
+        val response = app.get(updatedLink, timeout = 10_000)
+        val document = Jsoup.parse(response.body.string())
         
         return document.selectFirst("a")?.attr("href")
-    }
-
-    override suspend fun loadLinks(
-        data: String,
-        isCasting: Boolean,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit,
-    ): Boolean {
-        if (data == "null") return false
-        
-        var links = parseJson<List<String>>(data)
-        links = links.filter { it.contains("uprot.net") || it.contains("stayonline") }
-        if (links.size > 2) {
-            links = links.subList(2, 4)
-        }
-        Log.d("CB01", "Scraped Link: $links")
-
-        links.mapNotNull {
-            var finalUrl: String? = null
-            
-            when {
-                it.contains("uprot") -> {
-                    finalUrl = unshortenUprot(it)
-                }
-                it.contains("stayonline") -> {
-                    finalUrl = bypassStayOnline(it)
-                }
-            }
-            
-            finalUrl?.let { url ->
-                Log.d("CB01", "Final URL: $url")
-                
-                when {
-                    url.contains("maxstream") -> {
-                        MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
-                    }
-                    url.contains("mixdrop") || url.contains("m1xdrop") -> {
-                        MixDropExtractor().getUrl(url, null, subtitleCallback, callback)
-                    }
-                }
-            }
-        }
-        return false
     }
 
     data class Post(
