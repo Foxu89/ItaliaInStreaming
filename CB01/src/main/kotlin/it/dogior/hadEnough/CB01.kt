@@ -186,12 +186,13 @@ class CB01 : MainAPI() {
         }
     }
     
-    // ========== ESTRAZIONE EPISODI ROBUSTA ==========
+    // ========== ESTRAZIONE EPISODI DEFINITIVA ==========
     private fun extractEpisodes(document: org.jsoup.nodes.Document): Pair<List<Episode>, MutableList<SeasonData>> {
         val episodes = mutableListOf<Episode>()
         val seasonsData = mutableListOf<SeasonData>()
         val seasons = mutableMapOf<Int, String>()
         
+        // Trova tutte le stagioni
         val seasonWraps = document.select(".sp-wrap")
         
         seasonWraps.forEachIndexed { index, wrap ->
@@ -202,32 +203,39 @@ class CB01 : MainAPI() {
             val seasonName = seasonHeader.replace("- ITA", "").replace("- HD", "").trim()
             seasons[seasonNumber] = seasonName
             
-            // Prendi TUTTI i link Mixdrop (quelli con stayonline.pro)
-            val allStayOnlineLinks = wrap.select("a[href*='stayonline.pro']")
+            // Estrai TUTTO l'HTML del wrap e cerca i pattern direttamente
+            val wrapHtml = wrap.html()
             
-            // Ogni episodio ha 2 link: Maxstream e Mixdrop. Prendiamo solo il secondo di ogni coppia
-            val mixdropLinks = allStayOnlineLinks.filterIndexed { i, _ -> i % 2 == 1 }
+            // Cerca tutti i pattern "N×M" nell'HTML
+            val episodePattern = Regex("""(\d+)×(\d+)""")
+            val matches = episodePattern.findAll(wrapHtml).toList()
             
-            mixdropLinks.forEach { link ->
-                // Trova il testo dell'episodio dal genitore o dal testo adiacente
-                val parent = link.parent()
-                var epText = parent?.text() ?: ""
-                
-                // Se il testo non contiene il pattern, prova a cercare nel nodo precedente
-                if (!epText.contains("×")) {
-                    val previousSibling = parent?.previousElementSibling()
-                    epText = previousSibling?.text() ?: epText
-                }
-                
-                val epMatch = Regex("""(\d+)×(\d+)""").find(epText)
-                
-                if (epMatch != null) {
-                    val epSeason = epMatch.groupValues[1].toIntOrNull() ?: seasonNumber
-                    val epNumber = epMatch.groupValues[2].toIntOrNull() ?: return@forEach
-                    val epName = epText.substringBefore("–").trim()
+            // Estrai TUTTI i link Mixdrop (quelli con stayonline.pro)
+            val allLinks = wrap.select("a[href*='stayonline.pro']")
+            
+            // Filtra solo i link Mixdrop (ogni episodio ha 2 link, prendiamo il secondo)
+            val mixdropLinks = allLinks.filterIndexed { i, _ -> 
+                i % 2 == 1  // Prende solo i link dispari (Mixdrop)
+            }
+            
+            // Abbina i pattern ai link
+            matches.forEachIndexed { idx, match ->
+                if (idx < mixdropLinks.size) {
+                    val epSeason = match.groupValues[1].toIntOrNull() ?: seasonNumber
+                    val epNumber = match.groupValues[2].toIntOrNull() ?: (idx + 1)
+                    val mixdropLink = mixdropLinks[idx].attr("href")
+                    
+                    // Cerca il nome dell'episodio nel testo circostante
+                    val linkElement = mixdropLinks[idx]
+                    val parentText = linkElement.parent()?.text() ?: ""
+                    val epName = if (parentText.contains("–")) {
+                        parentText.substringBefore("–").trim()
+                    } else {
+                        "Episodio $epNumber"
+                    }
                     
                     episodes.add(
-                        newEpisode(link.attr("href")) {
+                        newEpisode(mixdropLink) {
                             name = epName
                             season = epSeason
                             episode = epNumber
@@ -237,18 +245,17 @@ class CB01 : MainAPI() {
             }
         }
         
-        // Se non ha trovato nulla, prova un approccio ancora più aggressivo
+        // Se ancora non trova episodi, usa l'approccio "full text scan"
         if (episodes.isEmpty()) {
-            // Cerca tutti i pattern "N×M" nel documento
-            val allText = document.text()
-            val allMatches = Regex("""(\d+)×(\d+)""").findAll(allText)
-            
-            // Cerca tutti i link stayonline.pro
+            val allHtml = document.html()
             val allLinks = document.select("a[href*='stayonline.pro']")
             val mixdropLinks = allLinks.filterIndexed { i, _ -> i % 2 == 1 }
             
-            if (allMatches.count() == mixdropLinks.size) {
-                allMatches.forEachIndexed { idx, match ->
+            // Cerca tutti i pattern N×M nell'intero documento
+            val allMatches = Regex("""(\d+)×(\d+)""").findAll(allHtml).toList()
+            
+            allMatches.forEachIndexed { idx, match ->
+                if (idx < mixdropLinks.size) {
                     val epSeason = match.groupValues[1].toIntOrNull() ?: 1
                     val epNumber = match.groupValues[2].toIntOrNull() ?: (idx + 1)
                     
@@ -263,6 +270,7 @@ class CB01 : MainAPI() {
             }
         }
         
+        // Crea SeasonData
         seasons.forEach { (num, name) ->
             seasonsData.add(SeasonData(num, name))
         }
