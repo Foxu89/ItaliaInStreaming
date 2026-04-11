@@ -186,7 +186,7 @@ class CB01 : MainAPI() {
         }
     }
     
-    // ========== ESTRAZIONE EPISODI CORRETTA ==========
+    // ========== ESTRAZIONE EPISODI ROBUSTA ==========
     private fun extractEpisodes(document: org.jsoup.nodes.Document): Pair<List<Episode>, MutableList<SeasonData>> {
         val episodes = mutableListOf<Episode>()
         val seasonsData = mutableListOf<SeasonData>()
@@ -202,11 +202,23 @@ class CB01 : MainAPI() {
             val seasonName = seasonHeader.replace("- ITA", "").replace("- HD", "").trim()
             seasons[seasonNumber] = seasonName
             
-            // Cerca gli episodi in tutto il wrap (anche se la tendina è chiusa)
-            val episodeElements = wrap.select("p")
+            // Prendi TUTTI i link Mixdrop (quelli con stayonline.pro)
+            val allStayOnlineLinks = wrap.select("a[href*='stayonline.pro']")
             
-            episodeElements.forEach { epElement ->
-                val epText = epElement.text()
+            // Ogni episodio ha 2 link: Maxstream e Mixdrop. Prendiamo solo il secondo di ogni coppia
+            val mixdropLinks = allStayOnlineLinks.filterIndexed { i, _ -> i % 2 == 1 }
+            
+            mixdropLinks.forEach { link ->
+                // Trova il testo dell'episodio dal genitore o dal testo adiacente
+                val parent = link.parent()
+                var epText = parent?.text() ?: ""
+                
+                // Se il testo non contiene il pattern, prova a cercare nel nodo precedente
+                if (!epText.contains("×")) {
+                    val previousSibling = parent?.previousElementSibling()
+                    epText = previousSibling?.text() ?: epText
+                }
+                
                 val epMatch = Regex("""(\d+)×(\d+)""").find(epText)
                 
                 if (epMatch != null) {
@@ -214,17 +226,39 @@ class CB01 : MainAPI() {
                     val epNumber = epMatch.groupValues[2].toIntOrNull() ?: return@forEach
                     val epName = epText.substringBefore("–").trim()
                     
-                    val mixdropLink = epElement.select("a[href*='stayonline.pro']").lastOrNull()?.attr("href")
+                    episodes.add(
+                        newEpisode(link.attr("href")) {
+                            name = epName
+                            season = epSeason
+                            episode = epNumber
+                        }
+                    )
+                }
+            }
+        }
+        
+        // Se non ha trovato nulla, prova un approccio ancora più aggressivo
+        if (episodes.isEmpty()) {
+            // Cerca tutti i pattern "N×M" nel documento
+            val allText = document.text()
+            val allMatches = Regex("""(\d+)×(\d+)""").findAll(allText)
+            
+            // Cerca tutti i link stayonline.pro
+            val allLinks = document.select("a[href*='stayonline.pro']")
+            val mixdropLinks = allLinks.filterIndexed { i, _ -> i % 2 == 1 }
+            
+            if (allMatches.count() == mixdropLinks.size) {
+                allMatches.forEachIndexed { idx, match ->
+                    val epSeason = match.groupValues[1].toIntOrNull() ?: 1
+                    val epNumber = match.groupValues[2].toIntOrNull() ?: (idx + 1)
                     
-                    if (mixdropLink != null) {
-                        episodes.add(
-                            newEpisode(mixdropLink) {
-                                name = epName
-                                season = epSeason
-                                episode = epNumber
-                            }
-                        )
-                    }
+                    episodes.add(
+                        newEpisode(mixdropLinks[idx].attr("href")) {
+                            name = "Episodio $epNumber"
+                            season = epSeason
+                            episode = epNumber
+                        }
+                    )
                 }
             }
         }
