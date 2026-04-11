@@ -156,7 +156,7 @@ class CB01 : MainAPI() {
         }
     }
     
-    private fun loadMovieResponse(
+    private suspend fun loadMovieResponse(
         mainContainer: org.jsoup.nodes.Element,
         title: String,
         url: String,
@@ -172,7 +172,6 @@ class CB01 : MainAPI() {
             ?.removePrefix("DURATA")
             ?.removeSuffix("′")?.trim()?.toIntOrNull()
 
-        // Per i film, prendi i link dalla tabella
         val links = mutableListOf<String>()
         mainContainer.select("table.cbtable a[href*='stayonline.pro']").forEach { a ->
             links.add(a.attr("href"))
@@ -188,7 +187,7 @@ class CB01 : MainAPI() {
         }
     }
     
-    private fun loadTvSeriesResponse(
+    private suspend fun loadTvSeriesResponse(
         mainContainer: org.jsoup.nodes.Element,
         document: org.jsoup.nodes.Document,
         title: String,
@@ -217,7 +216,6 @@ class CB01 : MainAPI() {
         val seasonsData = mutableListOf<SeasonData>()
         val seasons = mutableMapOf<Int, String>()
         
-        // Trova tutti i dropdown delle stagioni
         val seasonWraps = document.select(".sp-wrap")
         
         seasonWraps.forEachIndexed { index, wrap ->
@@ -228,7 +226,6 @@ class CB01 : MainAPI() {
             val seasonName = seasonHeader.replace("- ITA", "").replace("- HD", "").trim()
             seasons[seasonNumber] = seasonName
             
-            // Estrai episodi da questa stagione
             val episodeElements = wrap.select(".sp-body p")
             
             episodeElements.forEach { epElement ->
@@ -237,10 +234,9 @@ class CB01 : MainAPI() {
                 
                 if (epMatch != null) {
                     val epSeason = epMatch.groupValues[1].toIntOrNull() ?: seasonNumber
-                    val epNumber = epMatch.groupValues[2].toIntOrNull() ?: return@forEachIndexed
+                    val epNumber = epMatch.groupValues[2].toIntOrNull() ?: return@forEach
                     val epName = epText.substringBefore("–").trim()
                     
-                    // Trova i link per questo episodio
                     val links = epElement.select("a[href*='stayonline.pro']").map { it.attr("href") }
                     
                     if (links.isNotEmpty()) {
@@ -256,7 +252,6 @@ class CB01 : MainAPI() {
             }
         }
         
-        // Crea SeasonData per ogni stagione trovata
         seasons.forEach { (num, name) ->
             seasonsData.add(SeasonData(num, name))
         }
@@ -347,12 +342,10 @@ class CB01 : MainAPI() {
             if (json.optString("status") == "success") {
                 var realUrl = json.getJSONObject("data").getString("value")
                 
-                // Converti m1xdrop.net/f/xxx → mixdrop.top/e/xxx
                 if (realUrl.contains("m1xdrop.net/f/")) {
                     val videoId = realUrl.substringAfterLast("/")
                     realUrl = "https://mixdrop.top/e/$videoId"
                 }
-                // Converti uprot.stream → link diretto
                 if (realUrl.contains("uprot.net")) {
                     realUrl = unshortenUprot(realUrl)
                 }
