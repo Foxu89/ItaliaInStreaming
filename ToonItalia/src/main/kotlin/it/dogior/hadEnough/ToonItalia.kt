@@ -164,7 +164,7 @@ class Toonitalia : MainAPI() {
                 this.backgroundPosterUrl = banner
             }
         } else {
-            newMovieLoadResponse(title, url, type) {
+            newMovieLoadResponse(title, url, type, url) {
                 addPoster(poster)
                 this.plot = plot
                 this.backgroundPosterUrl = banner
