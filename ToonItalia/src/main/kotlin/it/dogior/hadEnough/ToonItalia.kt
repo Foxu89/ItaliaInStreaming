@@ -20,6 +20,7 @@ import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import it.dogior.hadEnough.extractors.VOEExtractor
+import java.net.URLEncoder
 
 class Toonitalia : MainAPI() {
     override var mainUrl = "https://toonitalia.xyz"
@@ -43,12 +44,68 @@ class Toonitalia : MainAPI() {
             }
             return url
         }
+        
+        /**
+         * Costruisce l'URL del poster dal titolo e dalla data
+         * Formato: https://toonitalia.xyz/wp-content/uploads/{anno}/{mese}/{titolo-con-trattini}.jpg
+         */
+        fun buildPosterUrl(title: String, date: String?): String? {
+            if (date.isNullOrEmpty()) return null
+            
+            // Estrai anno e mese dalla data (es. "2025-10-04" o "04/10/2025")
+            val datePattern1 = Regex("""(\d{4})-(\d{2})-\d{2}""")
+            val datePattern2 = Regex("""\d{2}/(\d{2})/(\d{4})""")
+            
+            var year: String? = null
+            var month: String? = null
+            
+            datePattern1.find(date)?.let { match ->
+                year = match.groupValues[1]
+                month = match.groupValues[2]
+            }
+            
+            if (year == null) {
+                datePattern2.find(date)?.let { match ->
+                    year = match.groupValues[2]
+                    month = match.groupValues[1]
+                }
+            }
+            
+            if (year == null || month == null) return null
+            
+            // Pulisci il titolo: rimuovi caratteri speciali e sostituisci spazi con trattini
+            var cleanTitle = title
+                .replace(Regex("""[<>:"/\\|?*'’!]"""), "") // rimuovi caratteri non validi
+                .replace(Regex("""[&]"""), "-and-")        // & → -and-
+                .replace(Regex("""[\s]+"""), "-")          // spazi → trattini
+                .replace(Regex("""-+"""), "-")             // trattini multipli → singolo
+                .trim('-')
+                .lowercase()
+            
+            // Codifica URL
+            cleanTitle = try {
+                URLEncoder.encode(cleanTitle, "UTF-8")
+                    .replace("+", "-")
+                    .replace("%2C", ",")
+                    .replace("%3A", ":")
+                    .replace("%2F", "/")
+                    .replace("%3F", "?")
+                    .replace("%23", "#")
+                    .replace("%5B", "[")
+                    .replace("%5D", "]")
+            } catch (e: Exception) {
+                cleanTitle
+            }
+            
+            return "https://toonitalia.xyz/wp-content/uploads/$year/$month/$cleanTitle.jpg"
+        }
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
         val url = if (page > 1) "${request.data}page/$page/" else request.data
         val document = app.get(url).document
         
+        // CERCA I WIDGET CON I POSTER (rpwwt-widget)
         val widgets = document.select(".rpwwt-widget")
         
         val allItems = mutableListOf<SearchResponse>()
@@ -79,6 +136,7 @@ class Toonitalia : MainAPI() {
             }
         }
         
+        // Se non troviamo widget, cerchiamo la lista testuale (fallback)
         if (allItems.isEmpty()) {
             val textLinks = document.select("ul.lcp_catlist li a")
             for (link in textLinks) {
@@ -141,7 +199,20 @@ class Toonitalia : MainAPI() {
         
         val title = document.selectFirst("h1.entry-title, h1")?.text()?.trim() ?: return null
         
-        var poster = document.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, .cover-header img")?.attr("src")
+        // Cerca la data di pubblicazione
+        val dateElement = document.selectFirst("time[datetime], .post-date, .date, .published")
+        var date = dateElement?.attr("datetime")
+        if (date.isNullOrEmpty()) {
+            date = dateElement?.text()
+        }
+        
+        // Prova a costruire il poster dall'URL pattern
+        var poster = buildPosterUrl(title, date)
+        
+        // Fallback: cerca nel HTML
+        if (poster == null) {
+            poster = document.selectFirst("img.wp-post-image, img.attachment-post-thumbnail, .cover-header img")?.attr("src")
+        }
         if (poster.isNullOrEmpty()) {
             poster = document.selectFirst(".cover-header")?.attr("style")?.let { style ->
                 Regex("""background-image:\s*url\(['\"]?([^'\")]+)['\"]?\)""").find(style)?.groupValues?.get(1)
