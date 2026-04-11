@@ -1,6 +1,7 @@
 package it.dogior.hadEnough.extractors
 
 import android.annotation.SuppressLint
+import android.app.Application
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -9,7 +10,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -27,6 +27,20 @@ class MixDropExtractor : ExtractorApi() {
     companion object {
         private const val TAG = "MixDropExtractor"
         private const val TIMEOUT_SECONDS = 15L
+        
+        // Ottiene il Context dell'applicazione tramite riflessione
+        private fun getApplicationContext(): android.content.Context? {
+            return try {
+                val activityThreadClass = Class.forName("android.app.ActivityThread")
+                val currentActivityThreadMethod = activityThreadClass.getMethod("currentActivityThread")
+                val activityThread = currentActivityThreadMethod.invoke(null)
+                val getApplicationMethod = activityThreadClass.getMethod("getApplication")
+                getApplicationMethod.invoke(activityThread) as? Application
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get Application context: ${e.message}")
+                null
+            }
+        }
     }
 
     override suspend fun getUrl(
@@ -41,7 +55,6 @@ class MixDropExtractor : ExtractorApi() {
         val embedUrl = "https://mixdrop.top/e/$videoId"
         Log.d(TAG, "Loading embed URL: $embedUrl")
         
-        // Estrae l'URL del video usando WebView
         val videoUrl = extractWithWebView(embedUrl)
         
         if (videoUrl != null) {
@@ -75,8 +88,7 @@ class MixDropExtractor : ExtractorApi() {
             
             Handler(Looper.getMainLooper()).post {
                 try {
-                    // Ottieni il Context dall'app di Cloudstream
-                    val context = app.baseClient.context ?: run {
+                    val context = getApplicationContext() ?: run {
                         Log.e(TAG, "No context available")
                         continuation.resume(null)
                         return@post
