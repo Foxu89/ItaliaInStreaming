@@ -26,9 +26,8 @@ class MixDropExtractor : ExtractorApi() {
 
     companion object {
         private const val TAG = "MixDropExtractor"
-        private const val TIMEOUT_SECONDS = 15L
+        private const val TIMEOUT_SECONDS = 25L  // Aumentato
         
-        // Ottiene il Context dell'applicazione tramite riflessione
         private fun getApplicationContext(): android.content.Context? {
             return try {
                 val activityThreadClass = Class.forName("android.app.ActivityThread")
@@ -51,11 +50,12 @@ class MixDropExtractor : ExtractorApi() {
     ) {
         Log.d(TAG, "Getting video from: $url")
         
-        val videoId = url.substringAfterLast("/")
+        val videoId = url.substringAfterLast("/").trim()
+        // Prova sia .top che .click (il server fa redirect)
         val embedUrl = "https://mixdrop.top/e/$videoId"
         Log.d(TAG, "Loading embed URL: $embedUrl")
         
-        val videoUrl = extractWithWebView(embedUrl)
+        val videoUrl = extractWithWebView(embedUrl, videoId)
         
         if (videoUrl != null) {
             Log.d(TAG, "Video URL extracted: $videoUrl")
@@ -81,7 +81,7 @@ class MixDropExtractor : ExtractorApi() {
         }
     }
     
-    private suspend fun extractWithWebView(embedUrl: String): String? {
+    private suspend fun extractWithWebView(embedUrl: String, videoId: String): String? {
         return suspendCancellableCoroutine { continuation ->
             val latch = CountDownLatch(1)
             var extractedUrl: String? = null
@@ -100,12 +100,15 @@ class MixDropExtractor : ExtractorApi() {
                     webView.settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        blockNetworkImage = true
+                        blockNetworkImage = false  // Alcuni player hanno bisogno delle immagini per funzionare
                         blockNetworkLoads = false
+                        javaScriptCanOpenWindowsAutomatically = true
+                        mediaPlaybackRequiresUserGesture = false  // IMPORTANTE: permette autoplay
                         userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
                     }
                     
                     var found = false
+                    var pageLoaded = false
                     
                     webView.webViewClient = object : WebViewClient() {
                         override fun shouldInterceptRequest(
@@ -114,8 +117,16 @@ class MixDropExtractor : ExtractorApi() {
                         ): WebResourceResponse? {
                             val requestUrl = request?.url.toString()
                             
-                            if (!found && (requestUrl.contains(".mp4") || requestUrl.contains("delivery") || requestUrl.contains("mxcontent"))) {
-                                Log.d(TAG, "Intercepted: $requestUrl")
+                            // Intercetta qualsiasi URL che sembra un video
+                            if (!found && (
+                                requestUrl.contains(".mp4") || 
+                                requestUrl.contains(".m3u8") ||
+                                requestUrl.contains("delivery") || 
+                                requestUrl.contains("mxcontent") ||
+                                requestUrl.contains("stream") ||
+                                (requestUrl.contains("mixdrop") && requestUrl.contains("video"))
+                            )) {
+                                Log.d(TAG, "Intercepted video URL: $requestUrl")
                                 found = true
                                 extractedUrl = requestUrl
                                 
@@ -128,27 +139,71 @@ class MixDropExtractor : ExtractorApi() {
                                 return null
                             }
                             
-                            val blockExtensions = listOf(".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".css", ".woff", ".woff2", ".ttf")
-                            if (blockExtensions.any { requestUrl.lowercase().contains(it) }) {
-                                return WebResourceResponse("text/plain", "UTF-8", null)
-                            }
-                            
                             return super.shouldInterceptRequest(view, request)
                         }
                         
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
+                            pageLoaded = true
                             Log.d(TAG, "Page loaded: $url")
                             
+                            // Script di click più aggressivo
                             view?.evaluateJavascript("""
                                 (function() {
-                                    var playBtn = document.querySelector('.vjs-big-play-button') || 
-                                                  document.querySelector('[class*="play"]') ||
-                                                  document.querySelector('button');
-                                    if (playBtn) playBtn.click();
+                                    function clickAllButtons() {
+                                        // Selettori più completi
+                                        var selectors = [
+                                            '.vjs-big-play-button',
+                                            '.play-button',
+                                            '.play-btn',
+                                            '[class*="play"]',
+                                            '[id*="play"]',
+                                            'button',
+                                            '.video-js button',
+                                            '.jw-icon-playback',
+                                            '.plyr__control--overlaid',
+                                            '[aria-label="Play"]',
+                                            '[title="Play"]'
+                                        ];
+                                        
+                                        selectors.forEach(function(sel) {
+                                            var el = document.querySelector(sel);
+                                            if (el) {
+                                                // Simula click reale
+                                                el.dispatchEvent(new MouseEvent('click', {
+                                                    view: window,
+                                                    bubbles: true,
+                                                    cancelable: true
+                                                }));
+                                                console.log('Clicked: ' + sel);
+                                            }
+                                        });
+                                        
+                                        // Prova a chiamare play() su tutti i video
+                                        var videos = document.querySelectorAll('video');
+                                        videos.forEach(function(v) {
+                                            v.play().catch(e => console.log('Play error:', e));
+                                            v.muted = true;  // Mute per permettere autoplay
+                                            v.play();
+                                        });
+                                        
+                                        // Cerca iframe e tenta di cliccare al loro interno
+                                        var iframes = document.querySelectorAll('iframe');
+                                        iframes.forEach(function(iframe) {
+                                            try {
+                                                var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                                                var btn = iframeDoc.querySelector('button, .play-button, [class*="play"]');
+                                                if (btn) btn.click();
+                                            } catch(e) {}
+                                        });
+                                    }
                                     
-                                    var video = document.querySelector('video');
-                                    if (video) video.play();
+                                    // Esegui subito
+                                    clickAllButtons();
+                                    
+                                    // Riprova dopo 1 e 3 secondi
+                                    setTimeout(clickAllButtons, 1000);
+                                    setTimeout(clickAllButtons, 3000);
                                 })();
                             """.trimIndent(), null)
                         }
@@ -156,23 +211,42 @@ class MixDropExtractor : ExtractorApi() {
                     
                     webView.loadUrl(embedUrl)
                     
+                    // Timeout più lungo
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!found) {
-                            Log.e(TAG, "WebView timeout")
-                            webView.stopLoading()
-                            webView.destroy()
-                            latch.countDown()
-                            continuation.resume(null)
+                            Log.e(TAG, "WebView timeout - pageLoaded: $pageLoaded")
+                            
+                            // Ultimo tentativo: prova l'URL alternativo .click
+                            if (embedUrl.contains("mixdrop.top")) {
+                                val altUrl = embedUrl.replace("mixdrop.top", "m1xdrop.click")
+                                Log.d(TAG, "Trying alternative URL: $altUrl")
+                                webView.loadUrl(altUrl)
+                                
+                                // Nuovo timeout per l'URL alternativo
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    if (!found) {
+                                        webView.stopLoading()
+                                        webView.destroy()
+                                        latch.countDown()
+                                        continuation.resume(null)
+                                    }
+                                }, 10000)
+                            } else {
+                                webView.stopLoading()
+                                webView.destroy()
+                                latch.countDown()
+                                continuation.resume(null)
+                            }
                         }
                     }, TimeUnit.SECONDS.toMillis(TIMEOUT_SECONDS))
                     
                 } catch (e: Exception) {
-                    Log.e(TAG, "WebView error: ${e.message}")
+                    Log.e(TAG, "WebView error: ${e.message}", e)
                     continuation.resume(null)
                 }
             }
             
-            latch.await(TIMEOUT_SECONDS + 2, TimeUnit.SECONDS)
+            latch.await(TIMEOUT_SECONDS + 15, TimeUnit.SECONDS)
         }
     }
 }
