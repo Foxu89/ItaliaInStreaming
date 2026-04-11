@@ -10,6 +10,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.regex.Pattern
 
 class VOEExtractor : ExtractorApi() {
     override val name = "VOE"
@@ -91,16 +92,16 @@ class VOEExtractor : ExtractorApi() {
             val response = app.get(url, headers = headers)
             val html = response.body.string()
             
-            // Cerca il JSON offuscato
-            val jsonPattern = Regex("""<script type="application/json">(.*?)</script>""", setOf(RegexOption.DOTALL))
-            val jsonMatch = jsonPattern.find(html)
+            // Cerca il JSON offuscato - usa Pattern.DOTALL
+            val jsonPattern = Pattern.compile("<script type=\"application/json\">(.*?)</script>", Pattern.DOTALL)
+            val jsonMatcher = jsonPattern.matcher(html)
             
-            if (jsonMatch == null) {
+            if (!jsonMatcher.find()) {
                 Log.e(TAG, "No obfuscated JSON found")
                 return
             }
             
-            val rawJson = jsonMatch.groupValues[1]
+            val rawJson = jsonMatcher.group(1)
             Log.d(TAG, "Obfuscated JSON found, length: ${rawJson.length}")
             
             val decoded = deobfuscateJson(rawJson)
@@ -111,7 +112,6 @@ class VOEExtractor : ExtractorApi() {
             
             Log.d(TAG, "Decoded JSON: $decoded")
             
-            // Prendi il direct_access_url (MP4 diretto) o source (HLS)
             var videoUrl = decoded.optString("direct_access_url")
             if (videoUrl.isEmpty()) {
                 videoUrl = decoded.optString("source")
