@@ -30,7 +30,6 @@ import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ShortLink
-import it.dogior.hadEnough.extractors.MaxStreamExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -40,6 +39,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+
 
 class CB01 : MainAPI() {
     override var mainUrl = "https://cb01uno.today"
@@ -59,15 +59,13 @@ class CB01 : MainAPI() {
     }
 
     private fun fixTitle(title: String, isMovie: Boolean): String {
-        return if (isMovie) {
-            title.replace(Regex("""(\[HD] )?\(\d{4}\)${'$'}"""), "").trim()
-        } else {
-            title.replace(Regex("""[-–] Stagione \d+.*${'$'}"""), "")
-                .replace(Regex("""[-–] \d+[x×]\d+.*${'$'}"""), "")
-                .replace(Regex("""[-–] ITA.*${'$'}"""), "")
-                .replace(Regex("""[-–] COMPLETA.*${'$'}"""), "")
-                .trim()
+        if (isMovie) {
+            return title.replace(Regex("""(\[HD] )*\(\d{4}\)${'$'}"""), "")
         }
+        return title.replace(Regex("""[-–] Stagione \d+.*${'$'}"""), "")
+            .replace(Regex("""[-–] ITA.*${'$'}"""), "")
+            .replace(Regex("""[-–] *\d+[x×]\d*(/?\d*)*.*${'$'}"""), "")
+            .replace(Regex("""[-–] COMPLETA.*${'$'}"""), "").trim()
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
@@ -150,82 +148,64 @@ class CB01 : MainAPI() {
         val isMovie = !url.contains("serietv")
         
         return if (isMovie) {
-            loadMovieResponse(mainContainer, title, url, poster, banner)
+            // ========== FILM ==========
+            val year = Regex("\\d{4}").find(title)?.value?.toIntOrNull()
+            val plot = mainContainer.selectFirst(".ignore-css > p:nth-child(2)")?.text()
+                ?.replace("+Info »", "")
+            val tags = mainContainer.selectFirst(".ignore-css > p:nth-child(1) > strong:nth-child(1)")
+                ?.text()?.split('–')
+            val runtime = tags?.find { it.contains("DURATA") }?.trim()
+                ?.removePrefix("DURATA")
+                ?.removeSuffix("′")?.trim()?.toIntOrNull()
+
+            // Per i film, prendi SOLO il link Mixdrop (il secondo link)
+            val mixdropLink = mainContainer.selectFirst("a[href*='stayonline.pro']")?.attr("href")
+            
+            newMovieLoadResponse(fixTitle(title, true), url, TvType.Movie, mixdropLink ?: "null") {
+                addPoster(poster)
+                this.plot = plot
+                this.backgroundPosterUrl = banner
+                this.tags = tags?.mapNotNull { if (it.contains("DURATA")) null else it.trim() }
+                this.duration = runtime
+                this.year = year
+            }
         } else {
-            loadTvSeriesResponse(mainContainer, document, title, url, poster, banner)
+            // ========== SERIE TV ==========
+            val description = mainContainer.selectFirst(".ignore-css > p:nth-child(1)")?.text()
+                ?.split(Regex("""\(\d{4}-\d{4}\)"""))
+            val plot = description?.lastOrNull()?.trim()
+            val tags = description?.firstOrNull()?.split('/')?.map { it.trim() }
+            
+            val (episodes, seasons) = extractEpisodes(document)
+            
+            newTvSeriesLoadResponse(fixTitle(title, false), url, TvType.TvSeries, episodes) {
+                addPoster(poster)
+                addSeasonNames(seasons)
+                this.plot = plot
+                this.backgroundPosterUrl = banner
+                this.tags = tags
+            }
         }
     }
     
-    private suspend fun loadMovieResponse(
-        mainContainer: org.jsoup.nodes.Element,
-        title: String,
-        url: String,
-        poster: String?,
-        banner: String?
-    ): LoadResponse {
-        val year = Regex("\\d{4}").find(title)?.value?.toIntOrNull()
-        val plot = mainContainer.selectFirst(".ignore-css > p:nth-child(2)")?.text()
-            ?.replace("+Info »", "")
-        val tags = mainContainer.selectFirst(".ignore-css > p:nth-child(1) > strong:nth-child(1)")
-            ?.text()?.split("–")
-        val runtime = tags?.find { it.contains("DURATA") }?.trim()
-            ?.removePrefix("DURATA")
-            ?.removeSuffix("′")?.trim()?.toIntOrNull()
-
-        val links = mutableListOf<String>()
-        mainContainer.select("table.cbtable a[href*='stayonline.pro']").forEach { a ->
-            links.add(a.attr("href"))
-        }
-
-        return newMovieLoadResponse(fixTitle(title, true), url, TvType.Movie, links.toJson()) {
-            addPoster(poster)
-            this.plot = plot
-            this.backgroundPosterUrl = banner
-            this.tags = tags?.mapNotNull { if (it.contains("DURATA")) null else it.trim() }
-            this.duration = runtime
-            this.year = year
-        }
-    }
-    
-    private suspend fun loadTvSeriesResponse(
-        mainContainer: org.jsoup.nodes.Element,
-        document: org.jsoup.nodes.Document,
-        title: String,
-        url: String,
-        poster: String?,
-        banner: String?
-    ): LoadResponse {
-        val description = mainContainer.selectFirst(".ignore-css > p:nth-child(1)")?.text()
-            ?.split(Regex("""\(\d{4}-\d{4}\)"""))
-        val plot = description?.lastOrNull()?.trim()
-        val tags = description?.firstOrNull()?.split('/')?.map { it.trim() }
-        
-        val (episodes, seasons) = extractEpisodes(document)
-        
-        return newTvSeriesLoadResponse(fixTitle(title, false), url, TvType.TvSeries, episodes) {
-            addPoster(poster)
-            addSeasonNames(seasons)
-            this.plot = plot
-            this.backgroundPosterUrl = banner
-            this.tags = tags
-        }
-    }
-    
+    // ========== NUOVA FUNZIONE PER ESTRAZIONE EPISODI ==========
     private fun extractEpisodes(document: org.jsoup.nodes.Document): Pair<List<Episode>, MutableList<SeasonData>> {
         val episodes = mutableListOf<Episode>()
         val seasonsData = mutableListOf<SeasonData>()
         val seasons = mutableMapOf<Int, String>()
         
+        // Trova tutti i dropdown delle stagioni (.sp-wrap)
         val seasonWraps = document.select(".sp-wrap")
         
         seasonWraps.forEachIndexed { index, wrap ->
             val seasonHeader = wrap.selectFirst(".sp-head")?.text() ?: return@forEachIndexed
-            val seasonNumber = Regex("""STAGIONE\s*(\d+)""").find(seasonHeader)?.groupValues?.get(1)?.toIntOrNull() 
+            val seasonNumber = Regex("""STAGIONE\s*(\d+)""").find(seasonHeader.uppercase())?.groupValues?.get(1)?.toIntOrNull() 
                 ?: (index + 1)
             
             val seasonName = seasonHeader.replace("- ITA", "").replace("- HD", "").trim()
             seasons[seasonNumber] = seasonName
             
+            // Estrai episodi da questa stagione
             val episodeElements = wrap.select(".sp-body p")
             
             episodeElements.forEach { epElement ->
@@ -237,11 +217,12 @@ class CB01 : MainAPI() {
                     val epNumber = epMatch.groupValues[2].toIntOrNull() ?: return@forEach
                     val epName = epText.substringBefore("–").trim()
                     
-                    val links = epElement.select("a[href*='stayonline.pro']").map { it.attr("href") }
+                    // PRENDI SOLO IL LINK MIXDROP (il secondo link, quello con "Mixdrop")
+                    val mixdropLink = epElement.select("a[href*='stayonline.pro']").lastOrNull()?.attr("href")
                     
-                    if (links.isNotEmpty()) {
+                    if (mixdropLink != null) {
                         episodes.add(
-                            newEpisode(links.toJson()) {
+                            newEpisode(mixdropLink) {
                                 name = epName
                                 season = epSeason
                                 episode = epNumber
@@ -252,6 +233,7 @@ class CB01 : MainAPI() {
             }
         }
         
+        // Crea SeasonData per ogni stagione trovata
         seasons.forEach { (num, name) ->
             seasonsData.add(SeasonData(num, name))
         }
@@ -265,40 +247,34 @@ class CB01 : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        if (data == "null" || data == "[]") return false
+        if (data == "null") return false
         
+        Log.d("CB01", "loadLinks data: $data")
+        
+        // Ora data è un singolo link Mixdrop (o array di link)
         val links = try {
+            // Prova a parsare come array
             parseJson<List<String>>(data)
         } catch (e: Exception) {
-            Log.e("CB01", "Failed to parse links: ${e.message}")
-            return false
+            // Se fallisce, prova come stringa singola
+            listOf(data)
         }
         
-        Log.d("CB01", "Processing links: $links")
-        
         links.forEach { link ->
-            ioSafe {
-                try {
-                    val finalUrl = when {
-                        link.contains("stayonline.pro") -> bypassStayOnline(link)
-                        link.contains("uprot.net") -> bypassUprot(link)
-                        else -> link
+            var finalUrl: String? = link
+            
+            // Se è stayonline.pro, bisogna fare il bypass
+            if (link.contains("stayonline.pro")) {
+                finalUrl = bypassStayOnline(link)
+            }
+            
+            finalUrl?.let { url ->
+                Log.d("CB01", "Final URL: $url")
+                
+                when {
+                    url.contains("mixdrop") || url.contains("m1xdrop") -> {
+                        MixDropExtractor().getUrl(url, null, subtitleCallback, callback)
                     }
-                    
-                    if (finalUrl != null) {
-                        Log.d("CB01", "Final URL: $finalUrl")
-                        
-                        when {
-                            finalUrl.contains("maxstream") || finalUrl.contains("uprot.stream") -> {
-                                MaxStreamExtractor().getUrl(finalUrl, null, subtitleCallback, callback)
-                            }
-                            finalUrl.contains("mixdrop") || finalUrl.contains("m1xdrop") -> {
-                                MixDropExtractor().getUrl(finalUrl, null, subtitleCallback, callback)
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("CB01", "Error processing link $link: ${e.message}")
                 }
             }
         }
@@ -306,6 +282,7 @@ class CB01 : MainAPI() {
         return true
     }
 
+    // ========== BYPASS STAYONLINE ==========
     private suspend fun bypassStayOnline(link: String): String? {
         Log.d("CB01:StayOnline", "Processing: $link")
         
@@ -346,9 +323,6 @@ class CB01 : MainAPI() {
                     val videoId = realUrl.substringAfterLast("/")
                     realUrl = "https://mixdrop.top/e/$videoId"
                 }
-                if (realUrl.contains("uprot.net")) {
-                    realUrl = unshortenUprot(realUrl)
-                }
                 realUrl
             } else {
                 null
@@ -357,33 +331,6 @@ class CB01 : MainAPI() {
             Log.e("CB01:StayOnline", "JSON error: ${e.message}")
             null
         }
-    }
-    
-    private suspend fun unshortenUprot(url: String): String {
-        var currentUrl = url
-        val visited = mutableSetOf<String>()
-        
-        while (currentUrl.contains("uprot.net") && currentUrl !in visited) {
-            visited.add(currentUrl)
-            val response = app.get(currentUrl, allowRedirects = false)
-            val location = response.headers["location"]
-            
-            if (location != null) {
-                currentUrl = location
-            } else {
-                break
-            }
-        }
-        return currentUrl
-    }
-
-    private suspend fun bypassUprot(link: String): String? {
-        val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
-        
-        val response = app.get(updatedLink, timeout = 10_000)
-        val document = Jsoup.parse(response.body.string())
-        
-        return document.selectFirst("a")?.attr("href")
     }
 
     data class Post(
