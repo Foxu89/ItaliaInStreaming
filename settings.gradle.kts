@@ -18,9 +18,9 @@ include(
 //    "Huhu",
 //    "IlGenioDelloStreaming",
 /**    "OnlineSerieTV",
-    "SectionOrganizer",
+    "SectionOrganizer",*//
     "StreamingCommunity",
-    "Stremio",**/
+ //   "Stremio",
  //   "SyncStream",
 //    "TV",
     "ToonItalia",
