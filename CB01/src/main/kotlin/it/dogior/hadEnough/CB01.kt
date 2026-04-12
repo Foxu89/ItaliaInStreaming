@@ -186,7 +186,7 @@ class CB01 : MainAPI() {
         }
     }
     
-    // ========== ESTRAZIONE EPISODI DEFINITIVA ==========
+    // ========== ESTRAZIONE EPISODI - APPROCCIO DEL BRO ==========
     private fun extractEpisodes(document: org.jsoup.nodes.Document): Pair<List<Episode>, MutableList<SeasonData>> {
         val episodes = mutableListOf<Episode>()
         val seasonsData = mutableListOf<SeasonData>()
@@ -203,36 +203,28 @@ class CB01 : MainAPI() {
             val seasonName = seasonHeader.replace("- ITA", "").replace("- HD", "").trim()
             seasons[seasonNumber] = seasonName
             
-            // Estrai TUTTO l'HTML del wrap e cerca i pattern direttamente
+            // Ottieni l'HTML grezzo del wrap
             val wrapHtml = wrap.html()
             
-            // Cerca tutti i pattern "N×M" nell'HTML
-            val episodePattern = Regex("""(\d+)×(\d+)""")
-            val matches = episodePattern.findAll(wrapHtml).toList()
+            // Dividi in righe per analizzare blocco per blocco
+            val lines = wrapHtml.split(Regex("""\n|<br>|</li>|<p>|</p>"""))
             
-            // Estrai TUTTI i link Mixdrop (quelli con stayonline.pro)
-            val allLinks = wrap.select("a[href*='stayonline.pro']")
-            
-            // Filtra solo i link Mixdrop (ogni episodio ha 2 link, prendiamo il secondo)
-            val mixdropLinks = allLinks.filterIndexed { i, _ -> 
-                i % 2 == 1  // Prende solo i link dispari (Mixdrop)
-            }
-            
-            // Abbina i pattern ai link
-            matches.forEachIndexed { idx, match ->
-                if (idx < mixdropLinks.size) {
-                    val epSeason = match.groupValues[1].toIntOrNull() ?: seasonNumber
-                    val epNumber = match.groupValues[2].toIntOrNull() ?: (idx + 1)
-                    val mixdropLink = mixdropLinks[idx].attr("href")
+            for (line in lines) {
+                // Cerca pattern episodio: 1x01, 2x05, ecc.
+                val episodeMatch = Regex("""(\d+)x(\d+)""").find(line)
+                
+                // Cerca link Mixdrop (stayonline.pro)
+                val mixdropMatch = Regex("""https?://stayonline\.pro/l/[a-zA-Z0-9]+""").find(line)
+                
+                if (episodeMatch != null && mixdropMatch != null) {
+                    val epSeason = episodeMatch.groupValues[1].toIntOrNull() ?: seasonNumber
+                    val epNumber = episodeMatch.groupValues[2].toIntOrNull() ?: continue
+                    val mixdropLink = mixdropMatch.value
                     
-                    // Cerca il nome dell'episodio nel testo circostante
-                    val linkElement = mixdropLinks[idx]
-                    val parentText = linkElement.parent()?.text() ?: ""
-                    val epName = if (parentText.contains("–")) {
-                        parentText.substringBefore("–").trim()
-                    } else {
-                        "Episodio $epNumber"
-                    }
+                    // Estrai il nome dell'episodio dalla riga
+                    val epName = line.substringBefore("–").trim()
+                        .replace(Regex("""<[^>]+>"""), "") // Rimuovi tag HTML
+                        .ifEmpty { "Episodio $epNumber" }
                     
                     episodes.add(
                         newEpisode(mixdropLink) {
@@ -245,22 +237,22 @@ class CB01 : MainAPI() {
             }
         }
         
-        // Se ancora non trova episodi, usa l'approccio "full text scan"
+        // Fallback: full text scan se non trova nulla
         if (episodes.isEmpty()) {
             val allHtml = document.html()
-            val allLinks = document.select("a[href*='stayonline.pro']")
-            val mixdropLinks = allLinks.filterIndexed { i, _ -> i % 2 == 1 }
+            val lines = allHtml.split(Regex("""\n|<br>|</li>|<p>|</p>"""))
             
-            // Cerca tutti i pattern N×M nell'intero documento
-            val allMatches = Regex("""(\d+)×(\d+)""").findAll(allHtml).toList()
-            
-            allMatches.forEachIndexed { idx, match ->
-                if (idx < mixdropLinks.size) {
-                    val epSeason = match.groupValues[1].toIntOrNull() ?: 1
-                    val epNumber = match.groupValues[2].toIntOrNull() ?: (idx + 1)
+            for (line in lines) {
+                val episodeMatch = Regex("""(\d+)x(\d+)""").find(line)
+                val mixdropMatch = Regex("""https?://stayonline\.pro/l/[a-zA-Z0-9]+""").find(line)
+                
+                if (episodeMatch != null && mixdropMatch != null) {
+                    val epSeason = episodeMatch.groupValues[1].toIntOrNull() ?: 1
+                    val epNumber = episodeMatch.groupValues[2].toIntOrNull() ?: continue
+                    val mixdropLink = mixdropMatch.value
                     
                     episodes.add(
-                        newEpisode(mixdropLinks[idx].attr("href")) {
+                        newEpisode(mixdropLink) {
                             name = "Episodio $epNumber"
                             season = epSeason
                             episode = epNumber
