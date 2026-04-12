@@ -1,5 +1,10 @@
 package it.dogior.hadEnough
 
+import android.annotation.SuppressLint
+import android.os.Handler
+import android.os.Looper
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.APIHolder.capitalize
 import com.lagradost.cloudstream3.Episode
@@ -31,6 +36,11 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
+import org.jsoup.Jsoup
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 class StreamingCommunity(
     override var lang: String = "it",
@@ -50,7 +60,7 @@ class StreamingCommunity(
             "X-Inertia-Version" to inertiaVersion,
             "X-Requested-With" to "XMLHttpRequest",
         ).toMutableMap()
-        val mainUrl = "https://streamingunity.buzz/"
+        val mainUrl = "https://streamingunity.biz/"
         var name = "StreamingCommunity"
         val TAG = "SCommunity"
     }
@@ -106,16 +116,111 @@ class StreamingCommunity(
     private val sections = if (lang == "it") sectionNamesListIT else sectionNamesListEN
     override val mainPage = sections
 
+    // ========== WEBVIEW PER BYPASSARE BLOCCHI ==========
+    private suspend fun fetchWithWebView(url: String): String? {
+        return suspendCancellableCoroutine { continuation ->
+            val latch = CountDownLatch(1)
+            var htmlContent = ""
+            
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    val context = getApplicationContext() ?: run {
+                        continuation.resume(null)
+                        return@post
+                    }
+                    
+                    @SuppressLint("SetJavaScriptEnabled")
+                    val webView = WebView(context)
+                    
+                    webView.settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        userAgentString = "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
+                    }
+                    
+                    var pageLoaded = false
+                    
+                    webView.webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            
+                            if (!pageLoaded) {
+                                pageLoaded = true
+                                
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    view?.evaluateJavascript("""
+                                        (function() {
+                                            return document.documentElement.outerHTML;
+                                        })();
+                                    """.trimIndent()) { html ->
+                                        htmlContent = html?.replace("\\\"", "\"")?.trim('"') ?: ""
+                                        webView.stopLoading()
+                                        webView.destroy()
+                                        latch.countDown()
+                                        continuation.resume(htmlContent)
+                                    }
+                                }, 5000)
+                            }
+                        }
+                    }
+                    
+                    webView.loadUrl(url)
+                    
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        if (!pageLoaded) {
+                            webView.stopLoading()
+                            webView.destroy()
+                            latch.countDown()
+                            continuation.resume(null)
+                        }
+                    }, 20000)
+                    
+                } catch (e: Exception) {
+                    Log.e(TAG, "WebView error: ${e.message}")
+                    latch.countDown()
+                    continuation.resume(null)
+                }
+            }
+            
+            latch.await(25, TimeUnit.SECONDS)
+        }
+    }
+    
+    private fun getApplicationContext(): android.content.Context? {
+        return try {
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val currentActivityThreadMethod = activityThreadClass.getMethod("currentActivityThread")
+            val activityThread = currentActivityThreadMethod.invoke(null)
+            val getApplicationMethod = activityThreadClass.getMethod("getApplication")
+            getApplicationMethod.invoke(activityThread) as? android.app.Application
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private suspend fun setupHeaders() {
-        val response = app.get("$mainUrl/archive")
-        val cookies = response.cookies
-        headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
-        val page = response.document
-        val inertiaPageObject = page.select("#app").attr("data-page")
-        inertiaVersion = inertiaPageObject
-            .substringAfter("\"version\":\"")
-            .substringBefore("\"")
-        headers["X-Inertia-Version"] = inertiaVersion
+        val html = fetchWithWebView("$mainUrl/archive")
+        if (html != null) {
+            val doc = Jsoup.parse(html)
+            val inertiaPageObject = doc.select("#app").attr("data-page")
+            inertiaVersion = inertiaPageObject
+                .substringAfter("\"version\":\"")
+                .substringBefore("\"")
+            headers["X-Inertia-Version"] = inertiaVersion
+        }
+        
+        // Fallback: prova con app.get() se WebView fallisce
+        if (inertiaVersion.isEmpty()) {
+            val response = app.get("$mainUrl/archive")
+            val cookies = response.cookies
+            headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
+            val page = response.document
+            val inertiaPageObject = page.select("#app").attr("data-page")
+            inertiaVersion = inertiaPageObject
+                .substringAfter("\"version\":\"")
+                .substringBefore("\"")
+            headers["X-Inertia-Version"] = inertiaVersion
+        }
     }
 
     private fun searchResponseBuilder(listJson: List<Title>): List<SearchResponse> {
@@ -213,7 +318,6 @@ class StreamingCommunity(
         }
     }
 
-    
     private suspend fun fetchTmdbLogoUrl(
         type: TvType,
         tmdbId: Int?,
@@ -228,7 +332,6 @@ class StreamingCommunity(
             } else {
                 "$tmdbAPI/tv/$tmdbId/images"
             }
-            
             
             val response = app.get(url, headers = tmdbHeaders)
             if (!response.isSuccessful) {
