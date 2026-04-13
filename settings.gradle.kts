@@ -20,6 +20,7 @@ include(
 /**    "OnlineSerieTV",
     "SectionOrganizer",**/
     "StreamingCommunity",
+    "StreamITA",
  //   "Stremio",
  //   "SyncStream",
 //    "TV",
