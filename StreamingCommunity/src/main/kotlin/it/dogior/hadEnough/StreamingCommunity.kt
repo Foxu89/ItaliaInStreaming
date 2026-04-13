@@ -1,10 +1,5 @@
 package it.dogior.hadEnough
 
-import android.annotation.SuppressLint
-import android.os.Handler
-import android.os.Looper
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.APIHolder.capitalize
 import com.lagradost.cloudstream3.Episode
@@ -36,11 +31,6 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
-import org.jsoup.Jsoup
-import kotlinx.coroutines.suspendCancellableCoroutine
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
 
 class StreamingCommunity(
     override var lang: String = "it",
@@ -116,118 +106,38 @@ class StreamingCommunity(
     private val sections = if (lang == "it") sectionNamesListIT else sectionNamesListEN
     override val mainPage = sections
 
-    // ========== WEBVIEW PER BYPASSARE BLOCCHI ==========
-    private suspend fun fetchWithWebView(url: String): String? {
-        return suspendCancellableCoroutine { continuation ->
-            val latch = CountDownLatch(1)
-            var htmlContent = ""
-            
-            Handler(Looper.getMainLooper()).post {
-                try {
-                    val context = getApplicationContext() ?: run {
-                        continuation.resume(null)
-                        return@post
-                    }
-                    
-                    @SuppressLint("SetJavaScriptEnabled")
-                    val webView = WebView(context)
-                    
-                    webView.settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        userAgentString = "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
-                    }
-                    
-                    var pageLoaded = false
-                    
-                    webView.webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            super.onPageFinished(view, url)
-                            
-                            if (!pageLoaded) {
-                                pageLoaded = true
-                                
-                                Handler(Looper.getMainLooper()).postDelayed({
-                                    view?.evaluateJavascript("""
-                                        (function() {
-                                            return document.documentElement.outerHTML;
-                                        })();
-                                    """.trimIndent()) { html ->
-                                        htmlContent = html?.replace("\\\"", "\"")?.trim('"') ?: ""
-                                        webView.stopLoading()
-                                        webView.destroy()
-                                        latch.countDown()
-                                        continuation.resume(htmlContent)
-                                    }
-                                }, 5000)
-                            }
-                        }
-                    }
-                    
-                    webView.loadUrl(url)
-                    
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        if (!pageLoaded) {
-                            webView.stopLoading()
-                            webView.destroy()
-                            latch.countDown()
-                            continuation.resume(null)
-                        }
-                    }, 20000)
-                    
-                } catch (e: Exception) {
-                    Log.e(TAG, "WebView error: ${e.message}")
-                    latch.countDown()
-                    continuation.resume(null)
-                }
-            }
-            
-            latch.await(25, TimeUnit.SECONDS)
-        }
-    }
-    
-    private fun getApplicationContext(): android.content.Context? {
-        return try {
-            val activityThreadClass = Class.forName("android.app.ActivityThread")
-            val currentActivityThreadMethod = activityThreadClass.getMethod("currentActivityThread")
-            val activityThread = currentActivityThreadMethod.invoke(null)
-            val getApplicationMethod = activityThreadClass.getMethod("getApplication")
-            getApplicationMethod.invoke(activityThread) as? android.app.Application
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     private suspend fun setupHeaders() {
-        val html = fetchWithWebView("$mainUrl/archive")
-        if (html != null) {
-            val doc = Jsoup.parse(html)
-            val inertiaPageObject = doc.select("#app").attr("data-page")
-            inertiaVersion = inertiaPageObject
-                .substringAfter("\"version\":\"")
-                .substringBefore("\"")
-            headers["X-Inertia-Version"] = inertiaVersion
-        }
+        Log.d(TAG, "========== SETUP HEADERS START ==========")
+        Log.d(TAG, "Chiamata a: $mainUrl/archive")
         
-        // Fallback: prova con app.get() se WebView fallisce
-        if (inertiaVersion.isEmpty()) {
-            val response = app.get("$mainUrl/archive")
-            val cookies = response.cookies
-            headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
-            val page = response.document
-            val inertiaPageObject = page.select("#app").attr("data-page")
-            inertiaVersion = inertiaPageObject
-                .substringAfter("\"version\":\"")
-                .substringBefore("\"")
-            headers["X-Inertia-Version"] = inertiaVersion
-        }
+        val response = app.get("$mainUrl/archive")
+        val cookies = response.cookies
+        Log.d(TAG, "Cookies ricevuti: ${cookies.map { it.key + "=" + it.value }}")
+        
+        headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
+        
+        val page = response.document
+        val inertiaPageObject = page.select("#app").attr("data-page")
+        Log.d(TAG, "data-page length: ${inertiaPageObject.length}")
+        
+        inertiaVersion = inertiaPageObject
+            .substringAfter("\"version\":\"")
+            .substringBefore("\"")
+        Log.d(TAG, "Inertia Version estratta: $inertiaVersion")
+        
+        headers["X-Inertia-Version"] = inertiaVersion
+        Log.d(TAG, "Headers finali: Cookie=${headers["Cookie"]?.take(50)}..., X-Inertia-Version=$inertiaVersion")
+        Log.d(TAG, "========== SETUP HEADERS END ==========")
     }
 
     private fun searchResponseBuilder(listJson: List<Title>): List<SearchResponse> {
+        Log.d(TAG, "searchResponseBuilder: ${listJson.size} titoli da processare")
+        
         val domain = mainUrl.substringAfter("://").substringBeforeLast("/")
         val list: List<SearchResponse> =
             listJson.filter { it.type == "movie" || it.type == "tv" }.map { title ->
                 val url = "$mainUrl/titles/${title.id}-${title.slug}"
+                Log.d(TAG, "  -> Titolo: ${title.name} (${title.type}) URL: $url")
 
                 if (title.type == "tv") {
                     newTvSeriesSearchResponse(title.name, url) {
@@ -239,38 +149,83 @@ class StreamingCommunity(
                     }
                 }
             }
+        Log.d(TAG, "searchResponseBuilder completato: ${list.size} risultati")
         return list
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        var url = mainUrl.substringBeforeLast("/") + "/api" +
-                request.data.substringAfter(mainUrl)
+        Log.d(TAG, "========================================")
+        Log.d(TAG, "getMainPage chiamato")
+        Log.d(TAG, "Page: $page")
+        Log.d(TAG, "Request name: ${request.name}")
+        Log.d(TAG, "Request data (URL originale): ${request.data}")
+        Log.d(TAG, "mainUrl corrente: $mainUrl")
+        
+        // COSTRUZIONE URL - QUI IL PROBLEMA!
+        val beforeSlash = mainUrl.substringBeforeLast("/")
+        val afterMainUrl = request.data.substringAfter(mainUrl)
+        var url = beforeSlash + "/api" + afterMainUrl
+        
+        Log.d(TAG, "=== COSTRUZIONE URL ===")
+        Log.d(TAG, "mainUrl.substringBeforeLast('/') = $beforeSlash")
+        Log.d(TAG, "request.data.substringAfter(mainUrl) = $afterMainUrl")
+        Log.d(TAG, "URL finale costruita: $url")
+        
         val params = mutableMapOf("lang" to lang)
+        Log.d(TAG, "Params iniziali: $params")
 
         val section = request.data.substringAfterLast("/")
+        Log.d(TAG, "Section estratta: $section")
+        
         when (section) {
-            "trending" -> {}
-            "latest" -> {}
-            "top10" -> {}
+            "trending" -> {
+                Log.d(TAG, "Sezione trending - nessuna modifica params")
+            }
+            "latest" -> {
+                Log.d(TAG, "Sezione latest - nessuna modifica params")
+            }
+            "top10" -> {
+                Log.d(TAG, "Sezione top10 - nessuna modifica params")
+            }
             else -> {
+                Log.d(TAG, "Sezione generica (probabile genre)")
                 val genere = url.substringAfterLast('=')
+                Log.d(TAG, "Genere estratto: $genere")
                 url = url.substringBeforeLast('?')
+                Log.d(TAG, "URL dopo rimozione query: $url")
                 params["g"] = genere
+                Log.d(TAG, "Params aggiornati: $params")
             }
         }
 
         if (page > 0) {
             params["offset"] = ((page - 1) * 60).toString()
+            Log.d(TAG, "Aggiunto offset per page $page: ${params["offset"]}")
         }
+        
+        Log.d(TAG, "=== RICHIESTA HTTP ===")
+        Log.d(TAG, "URL finale: $url")
+        Log.d(TAG, "Params: $params")
+        
         val response = app.get(url, params = params)
         val responseString = response.body.string()
+        Log.d(TAG, "Response status: ${response.code}")
+        Log.d(TAG, "Response body length: ${responseString.length}")
+        Log.d(TAG, "Response body preview: ${responseString.take(500)}")
+        
         val responseJson = parseJson<Section>(responseString)
+        Log.d(TAG, "JSON parsato, titoli trovati: ${responseJson.titles.size}")
+        responseJson.titles.take(5).forEach { title ->
+            Log.d(TAG, "  Titolo esempio: ${title.name} (${title.type})")
+        }
 
         val titlesList = searchResponseBuilder(responseJson.titles)
 
         val hasNextPage =
             response.okhttpResponse.request.url.queryParameter("offset")?.toIntOrNull()
                 ?.let { it < 120 } ?: true && titlesList.size == 60
+        Log.d(TAG, "hasNextPage: $hasNextPage")
+        Log.d(TAG, "========================================")
 
         return newHomePageResponse(
             HomePageList(
@@ -282,30 +237,40 @@ class StreamingCommunity(
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
+        Log.d(TAG, "search chiamato con query: $query")
         val url = "$mainUrl/search"
         val params = mapOf("q" to query)
+        Log.d(TAG, "URL search: $url, params: $params")
 
         if (headers["Cookie"].isNullOrEmpty()) {
+            Log.d(TAG, "Headers vuoti, chiamo setupHeaders()")
             setupHeaders()
         }
         val response = app.get(url, params = params, headers = headers).body.string()
+        Log.d(TAG, "Response search ricevuta, length: ${response.length}")
+        
         val result = parseJson<InertiaResponse>(response)
+        Log.d(TAG, "Titoli trovati: ${result.props.titles?.size ?: 0}")
 
         return searchResponseBuilder(result.props.titles!!)
     }
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
+        Log.d(TAG, "search paginato chiamato con query: $query, page: $page")
         val searchUrl = "${mainUrl.replace("/it", "")}/api/search"
         val params = mutableMapOf("q" to query, "lang" to lang)
         if (page > 0) {
             params["offset"] = ((page - 1) * 60).toString()
         }
+        Log.d(TAG, "URL: $searchUrl, params: $params")
+        
         val response = app.get(searchUrl, params = params, headers = headers).body.string()
         val result = parseJson<it.dogior.hadEnough.SearchResponse>(response)
         val hasNext = (page < 3) || (page < result.lastPage)
+        Log.d(TAG, "Risultati: ${result.data.size}, lastPage: ${result.lastPage}, hasNext: $hasNext")
+        
         return newSearchResponseList(searchResponseBuilder(result.data), hasNext = hasNext)
     }
-
     private suspend fun getPoster(title: TitleProp): String? {
         if (title.tmdbId != null) {
             val tmdbUrl = "https://www.themoviedb.org/${title.type}/${title.tmdbId}"
@@ -318,6 +283,7 @@ class StreamingCommunity(
         }
     }
 
+    
     private suspend fun fetchTmdbLogoUrl(
         type: TvType,
         tmdbId: Int?,
@@ -332,6 +298,7 @@ class StreamingCommunity(
             } else {
                 "$tmdbAPI/tv/$tmdbId/images"
             }
+            
             
             val response = app.get(url, headers = tmdbHeaders)
             if (!response.isSuccessful) {
