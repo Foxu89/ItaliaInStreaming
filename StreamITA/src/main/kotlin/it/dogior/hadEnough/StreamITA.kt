@@ -1,8 +1,9 @@
+// StreamITA.kt
 package it.dogior.hadEnough
 
-import android.content.SharedPreferences
 import android.util.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.LoadResponse.Companion.addImdbId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
@@ -13,7 +14,7 @@ import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
-class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
+class StreamITA : TmdbProvider() {
     override var name = "StreamITA"
     override val hasMainPage = true
     override val instantLinkLoading = true
@@ -27,34 +28,40 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
 
     private val TAG = "StreamITA"
 
-    // Configurazione TMDB
+    // Configurazione TMDB - USA BEARER TOKEN
     private val tmdbAPI = "https://api.themoviedb.org/3"
     private val tmdbApiKey = BuildConfig.TMDB_API
     private val tmdbHeaders = mapOf(
         "Authorization" to "Bearer $tmdbApiKey",
         "Accept" to "application/json"
     )
-    private val langCode = sharedPref?.getString("tmdb_language_code", "it-IT") ?: "it-IT"
 
     // ==================== HOME PAGE ====================
     override val mainPage = mainPageOf(
-        "/trending/all/day?language=$langCode" to "🔥 Tendenze di Oggi",
-        "/movie/popular?language=$langCode" to "🎬 Film Popolari",
-        "/tv/popular?language=$langCode" to "📺 Serie TV Popolari",
-        "/trending/movie/week?language=$langCode" to "🎥 Film della Settimana",
-        "/trending/tv/week?language=$langCode" to "📼 Serie TV della Settimana",
-        "/movie/top_rated?language=$langCode" to "⭐ Film più Votati",
-        "/tv/top_rated?language=$langCode" to "🌟 Serie TV più Votate",
-        "/movie/upcoming?language=$langCode" to "📅 Prossime Uscite",
-        "/tv/on_the_air?language=$langCode" to "📡 Serie TV in Onda",
+        "$tmdbAPI/trending/all/day?language=it-IT" to "🔥 Tendenze di Oggi",
+        "$tmdbAPI/movie/popular?language=it-IT" to "🎬 Film Popolari",
+        "$tmdbAPI/tv/popular?language=it-IT" to "📺 Serie TV Popolari",
+        "$tmdbAPI/trending/movie/week?language=it-IT" to "🎥 Film della Settimana",
+        "$tmdbAPI/trending/tv/week?language=it-IT" to "📼 Serie TV della Settimana",
+        "$tmdbAPI/movie/top_rated?language=it-IT" to "⭐ Film più Votati",
+        "$tmdbAPI/tv/top_rated?language=it-IT" to "🌟 Serie TV più Votate",
+        "$tmdbAPI/movie/upcoming?language=it-IT&region=IT" to "📅 Prossime Uscite",
+        "$tmdbAPI/tv/on_the_air?language=it-IT" to "📡 Serie TV in Onda",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = "$tmdbAPI${request.data}&page=$page"
+        // Rimuovo $tmdbAPI dal data perché è già incluso nella stringa
+        val url = "${request.data}&page=$page"
         Log.d(TAG, "Loading main page: $url")
 
-        val home = app.get(url, headers = tmdbHeaders).parsedSafe<Results>()?.results?.mapNotNull {
-            it.toSearchResponse()
+        val response = app.get(url, headers = tmdbHeaders)
+        if (!response.isSuccessful) {
+            Log.e(TAG, "Main page error: ${response.code}")
+            throw ErrorLoadingException("Errore nel caricamento homepage: ${response.code}")
+        }
+
+        val home = response.parsedSafe<Results>()?.results?.mapNotNull { media ->
+            media.toSearchResponse()
         } ?: throw ErrorLoadingException("Risposta JSON non valida")
 
         return newHomePageResponse(request.name, home)
@@ -79,10 +86,17 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
     override suspend fun search(query: String): List<SearchResponse>? {
         Log.d(TAG, "Searching: $query")
 
-        val url = "$tmdbAPI/search/multi?language=$langCode&query=$query&include_adult=${settingsForProvider.enableAdult}"
-        return app.get(url, headers = tmdbHeaders)
-            .parsedSafe<Results>()
+        val url = "$tmdbAPI/search/multi?language=it-IT&query=$query&include_adult=${settingsForProvider.enableAdult}"
+        val response = app.get(url, headers = tmdbHeaders)
+
+        if (!response.isSuccessful) {
+            Log.e(TAG, "Search error: ${response.code}")
+            return null
+        }
+
+        return response.parsedSafe<Results>()
             ?.results
+            ?.filter { it.mediaType != "person" }
             ?.mapNotNull { media -> media.toSearchResponse() }
     }
 
@@ -95,23 +109,35 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
         val isMovie = type == "movie"
 
         val resUrl = if (isMovie) {
-            "$tmdbAPI/movie/${data.id}?language=$langCode&append_to_response=credits,videos,recommendations"
+            "$tmdbAPI/movie/${data.id}?language=it-IT&append_to_response=credits,videos,recommendations,external_ids"
         } else {
-            "$tmdbAPI/tv/${data.id}?language=$langCode&append_to_response=credits,videos,recommendations"
+            "$tmdbAPI/tv/${data.id}?language=it-IT&append_to_response=credits,videos,recommendations,external_ids"
         }
 
-        val res = app.get(resUrl, headers = tmdbHeaders).parsedSafe<MediaDetail>()
+        Log.d(TAG, "Loading details from: $resUrl")
+
+        val response = app.get(resUrl, headers = tmdbHeaders)
+        if (!response.isSuccessful) {
+            Log.e(TAG, "Details error: ${response.code}")
+            throw ErrorLoadingException("Errore nel caricamento dettagli: ${response.code}")
+        }
+
+        val res = response.parsedSafe<MediaDetail>()
             ?: throw ErrorLoadingException("Risposta JSON non valida")
 
         val title = res.title ?: res.name ?: return null
-        val poster = getImageUrl(res.posterPath)
-        val bgPoster = getImageUrl(res.backdropPath)
+        val poster = getImageUrl(res.posterPath, original = true)
+        val bgPoster = getImageUrl(res.backdropPath, original = true)
         val year = (res.releaseDate ?: res.firstAirDate)?.split("-")?.first()?.toIntOrNull()
         val plot = res.overview ?: "Nessuna descrizione disponibile."
-        val rating = res.voteAverage?.toString()?.toDoubleOrNull()
+        val rating = res.voteAverage?.let {
+            if (it is Double) it else (it as? Number)?.toDouble()
+        }
         val genres = res.genres?.mapNotNull { it.name } ?: emptyList()
+        val imdbId = res.imdbId ?: res.externalIds?.imdbId
 
-        val actors = res.credits?.cast?.take(10)?.mapNotNull { cast ->
+        // CAST
+        val actors = res.credits?.cast?.take(15)?.mapNotNull { cast ->
             cast.name?.let { name ->
                 ActorData(
                     Actor(name, getImageUrl(cast.profilePath)),
@@ -120,8 +146,10 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
             }
         } ?: emptyList()
 
+        // RACCOMANDAZIONI
         val recommendations = res.recommendations?.results?.mapNotNull { it.toSearchResponse() } ?: emptyList()
 
+        // TRAILER
         val trailer = res.videos?.results.orEmpty()
             .filter { it.type == "Trailer" || it.type == "Teaser" }
             .map { "https://www.youtube.com/watch?v=${it.key}" }
@@ -134,7 +162,8 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
                 year = year,
                 season = null,
                 episode = null,
-                isMovie = true
+                isMovie = true,
+                imdbId = imdbId
             )
 
             newMovieLoadResponse(
@@ -153,6 +182,7 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
                 this.tags = genres
                 this.recommendations = recommendations
                 addTrailer(trailer)
+                imdbId?.let { addImdbId(it) }
             }
         } else {
             // ========== SERIE TV ==========
@@ -164,9 +194,15 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
                 val seasonNumber = season.seasonNumber ?: return@forEach
 
                 try {
-                    val seasonUrl = "$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=$langCode"
-                    val seasonDetails = app.get(seasonUrl, headers = tmdbHeaders)
-                        .parsedSafe<MediaDetailEpisodes>()
+                    val seasonUrl = "$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=it-IT"
+                    val seasonResponse = app.get(seasonUrl, headers = tmdbHeaders)
+
+                    if (!seasonResponse.isSuccessful) {
+                        Log.e(TAG, "Season $seasonNumber error: ${seasonResponse.code}")
+                        return@forEach
+                    }
+
+                    val seasonDetails = seasonResponse.parsedSafe<MediaDetailEpisodes>()
 
                     seasonDetails?.episodes?.forEach { eps ->
                         eps.episodeNumber?.let { epNum ->
@@ -178,7 +214,8 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
                                 episode = epNum,
                                 isMovie = false,
                                 episodeTitle = eps.name,
-                                episodeOverview = eps.overview
+                                episodeOverview = eps.overview,
+                                imdbId = imdbId
                             )
 
                             episodes.add(
@@ -215,6 +252,7 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
                     else -> ShowStatus.Completed
                 }
                 addTrailer(trailer)
+                imdbId?.let { addImdbId(it) }
             }
         }
     }
@@ -231,7 +269,8 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
 
         Log.d(TAG, "Loading links for: ${linkData.title} S${linkData.season}E${linkData.episode}")
 
-        // Avvia entrambi gli estrattori in parallelo
+        var anySuccess = false
+
         coroutineScope {
             // Estrattore 1: VixSrc
             launch {
@@ -244,6 +283,7 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
                     }
                     Log.d(TAG, "Trying VixSrc: $vixSrcUrl")
                     vixSrcExtractor.getUrl(vixSrcUrl, "", subtitleCallback, callback)
+                    anySuccess = true
                 } catch (e: Exception) {
                     Log.e(TAG, "VixSrc failed: ${e.message}")
                 }
@@ -260,22 +300,21 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
                     }
                     Log.d(TAG, "Trying VidSrc: $vidSrcUrl")
                     vidSrcExtractor.getUrl(vidSrcUrl, "", subtitleCallback, callback)
+                    anySuccess = true
                 } catch (e: Exception) {
                     Log.e(TAG, "VidSrc failed: ${e.message}")
                 }
             }
         }
 
-        return true
+        return anySuccess
     }
 
     // ==================== HELPER FUNCTIONS ====================
-    private fun getImageUrl(path: String?): String? {
-        return if (!path.isNullOrBlank()) "https://image.tmdb.org/t/p/w500$path" else null
-    }
-
-    private fun getOriginalImageUrl(path: String?): String? {
-        return if (!path.isNullOrBlank()) "https://image.tmdb.org/t/p/original$path" else null
+    private fun getImageUrl(path: String?, original: Boolean = false): String? {
+        if (path.isNullOrBlank()) return null
+        val size = if (original) "original" else "w500"
+        return "https://image.tmdb.org/t/p/$size$path"
     }
 
     // ==================== DATA CLASSES ====================
@@ -293,6 +332,7 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
         val isMovie: Boolean = false,
         val episodeTitle: String? = null,
         val episodeOverview: String? = null,
+        val imdbId: String? = null,
     )
 
     data class Results(
@@ -316,10 +356,16 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
         val name: String? = null,
     )
 
+    data class ExternalIds(
+        val imdbId: String? = null,
+        val tvdbId: Int? = null,
+    )
+
     data class MediaDetail(
         val id: Int? = null,
         val title: String? = null,
         val name: String? = null,
+        val imdbId: String? = null,
         val posterPath: String? = null,
         val backdropPath: String? = null,
         val releaseDate: String? = null,
@@ -333,6 +379,7 @@ class StreamITA(sharedPref: SharedPreferences? = null) : TmdbProvider() {
         val videos: ResultsTrailer? = null,
         val credits: Credits? = null,
         val recommendations: Recommendations? = null,
+        val externalIds: ExternalIds? = null,
     )
 
     data class Seasons(
