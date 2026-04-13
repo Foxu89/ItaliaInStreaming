@@ -1,13 +1,13 @@
 package it.dogior.hadEnough
 
+import android.content.Context
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
-import android.content.Context
 
 @CloudstreamPlugin
-class OnlineSerieTVPlugin: Plugin() {
+class StreamITAPlugin : Plugin() {
     override fun load(context: Context) {
-        // All providers should be added in this manner
-        registerMainAPI(OnlineSerieTV())
+        // Registra il provider principale
+        registerMainAPI(StreamITA())
     }
 }
