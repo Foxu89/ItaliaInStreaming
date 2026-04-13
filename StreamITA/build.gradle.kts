@@ -1,29 +1,39 @@
-// use an integer for version numbers
-version = 4
+import org.jetbrains.kotlin.konan.properties.Properties
 
-dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-}
+version = 1
 
 cloudstream {
-    // All of these properties are optional, you can safely remove them
-
-    description = "Movies and Shows from OnlineSerieTV"
-    authors = listOf("doGior")
-
-    /**
-    * Status int as the following:
-    * 0: Down
-    * 1: Ok
-    * 2: Slow
-    * 3: Beta only
-    * */
-    status = 1
-
-    tvTypes = listOf("Movie", "TvSeries", "Cartoon", "Anime", "Documentary")
-
-    requiresResources = false
     language = "it"
+    description = "Il Migliore plugin Italiano"
+    authors = listOf("DieGon")
+    
+    status = 1  // 1 = OK, 0 = Down, 2 = Slow, 3 = Beta only
+    
+    tvTypes = listOf(
+        "Movie",
+        "TvSeries",
+        "Anime",
+        "Cartoon"
+    )
+    
+    requiresResources = true
+    iconUrl = "https://raw.githubusercontent.com/doGior/StreamITA/master/icon.png"
+}
 
-    iconUrl = "https://onlineserietv.online/wp-content/uploads/2023/01/cropped-tv-1.png"
+android {
+    buildFeatures {
+        buildConfig = true
+        viewBinding = true
+    }
+    defaultConfig {
+        val properties = Properties()
+        // Carica dal file secrets.properties
+        properties.load(project.rootProject.file("secrets.properties").inputStream())
+        android.buildFeatures.buildConfig = true
+        buildConfigField("String", "TMDB_API", "\"${properties.getProperty("TMDB_API")}\"")
+    }
+}
+
+dependencies {
+    implementation("com.google.android.material:material:1.12.0")
 }
