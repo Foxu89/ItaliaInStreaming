@@ -51,8 +51,7 @@ class StreamITA : TmdbProvider() {
     private val tmdbAPI = "https://api.themoviedb.org/3"
     private val tmdbApiKey = BuildConfig.TMDB_API
     private val tmdbHeaders = 
-        mapOf("Authorization" to "Bearer $apiKey")
-    )
+        mapOf("Authorization" to "Bearer $tmdbApiKey")
 
     // ==================== HOME PAGE ====================
     override val mainPage = mainPageOf(
