@@ -50,9 +50,8 @@ class StreamITA : TmdbProvider() {
     // Configurazione TMDB - USA BEARER TOKEN
     private val tmdbAPI = "https://api.themoviedb.org/3"
     private val tmdbApiKey = BuildConfig.TMDB_API
-    private val tmdbHeaders = mapOf(
-        "Authorization" to "Bearer $tmdbApiKey",
-        "Accept" to "application/json"
+    private val tmdbHeaders = 
+        mapOf("Authorization" to "Bearer $apiKey")
     )
 
     // ==================== HOME PAGE ====================
