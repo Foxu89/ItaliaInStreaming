@@ -107,37 +107,24 @@ class StreamingCommunity(
     override val mainPage = sections
 
     private suspend fun setupHeaders() {
-        Log.d(TAG, "========== SETUP HEADERS START ==========")
-        Log.d(TAG, "Chiamata a: $mainUrl/archive")
-        
+        Log.d(TAG, "Setting up headers...")
         val response = app.get("$mainUrl/archive")
         val cookies = response.cookies
-        Log.d(TAG, "Cookies ricevuti: ${cookies.map { it.key + "=" + it.value }}")
-        
         headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
-        
         val page = response.document
         val inertiaPageObject = page.select("#app").attr("data-page")
-        Log.d(TAG, "data-page length: ${inertiaPageObject.length}")
-        
         inertiaVersion = inertiaPageObject
             .substringAfter("\"version\":\"")
             .substringBefore("\"")
-        Log.d(TAG, "Inertia Version estratta: $inertiaVersion")
-        
         headers["X-Inertia-Version"] = inertiaVersion
-        Log.d(TAG, "Headers finali: Cookie=${headers["Cookie"]?.take(50)}..., X-Inertia-Version=$inertiaVersion")
-        Log.d(TAG, "========== SETUP HEADERS END ==========")
+        Log.d(TAG, "Headers setup complete. Version: $inertiaVersion")
     }
 
     private fun searchResponseBuilder(listJson: List<Title>): List<SearchResponse> {
-        Log.d(TAG, "searchResponseBuilder: ${listJson.size} titoli da processare")
-        
         val domain = mainUrl.substringAfter("://").substringBeforeLast("/")
         val list: List<SearchResponse> =
             listJson.filter { it.type == "movie" || it.type == "tv" }.map { title ->
                 val url = "$mainUrl/titles/${title.id}-${title.slug}"
-                Log.d(TAG, "  -> Titolo: ${title.name} (${title.type}) URL: $url")
 
                 if (title.type == "tv") {
                     newTvSeriesSearchResponse(title.name, url) {
@@ -149,137 +136,105 @@ class StreamingCommunity(
                     }
                 }
             }
-        Log.d(TAG, "searchResponseBuilder completato: ${list.size} risultati")
         return list
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        Log.d(TAG, "========================================")
-        Log.d(TAG, "getMainPage chiamato")
+        Log.d(TAG, "=== getMainPage START ===")
+        Log.d(TAG, "Request URL: ${request.data}")
         Log.d(TAG, "Page: $page")
-        Log.d(TAG, "Request name: ${request.name}")
-        Log.d(TAG, "Request data (URL originale): ${request.data}")
-        Log.d(TAG, "mainUrl corrente: $mainUrl")
         
-        // COSTRUZIONE URL - QUI IL PROBLEMA!
-        val beforeSlash = mainUrl.substringBeforeLast("/")
-        val afterMainUrl = request.data.substringAfter(mainUrl)
-        var url = beforeSlash + "/api" + afterMainUrl
+        // Usa l'URL direttamente senza modifiche (già include la lingua)
+        val url = request.data
+        Log.d(TAG, "Fetching URL: $url")
         
-        Log.d(TAG, "=== COSTRUZIONE URL ===")
-        Log.d(TAG, "mainUrl.substringBeforeLast('/') = $beforeSlash")
-        Log.d(TAG, "request.data.substringAfter(mainUrl) = $afterMainUrl")
-        Log.d(TAG, "URL finale costruita: $url")
-        
-        val params = mutableMapOf("lang" to lang)
-        Log.d(TAG, "Params iniziali: $params")
-
-        val section = request.data.substringAfterLast("/")
-        Log.d(TAG, "Section estratta: $section")
-        
-        when (section) {
-            "trending" -> {
-                Log.d(TAG, "Sezione trending - nessuna modifica params")
-            }
-            "latest" -> {
-                Log.d(TAG, "Sezione latest - nessuna modifica params")
-            }
-            "top10" -> {
-                Log.d(TAG, "Sezione top10 - nessuna modifica params")
-            }
-            else -> {
-                Log.d(TAG, "Sezione generica (probabile genre)")
-                val genere = url.substringAfterLast('=')
-                Log.d(TAG, "Genere estratto: $genere")
-                url = url.substringBeforeLast('?')
-                Log.d(TAG, "URL dopo rimozione query: $url")
-                params["g"] = genere
-                Log.d(TAG, "Params aggiornati: $params")
-            }
-        }
-
-        if (page > 0) {
-            params["offset"] = ((page - 1) * 60).toString()
-            Log.d(TAG, "Aggiunto offset per page $page: ${params["offset"]}")
+        if (headers["Cookie"].isNullOrEmpty()) {
+            setupHeaders()
         }
         
-        Log.d(TAG, "=== RICHIESTA HTTP ===")
-        Log.d(TAG, "URL finale: $url")
-        Log.d(TAG, "Params: $params")
+        val response = app.get(url, headers = headers)
+        val responseBody = response.body.string()
+        Log.d(TAG, "Response length: ${responseBody.length}")
         
-        val response = app.get(url, params = params)
-        val responseString = response.body.string()
-        Log.d(TAG, "Response status: ${response.code}")
-        Log.d(TAG, "Response body length: ${responseString.length}")
-        Log.d(TAG, "Response body preview: ${responseString.take(500)}")
+        // Estrai i dati dalla pagina (come in search)
+        val inertiaData = parseJson<InertiaResponse>(responseBody)
+        Log.d(TAG, "Props sliders count: ${inertiaData.props.sliders?.size ?: 0}")
         
-        val responseJson = parseJson<Section>(responseString)
-        Log.d(TAG, "JSON parsato, titoli trovati: ${responseJson.titles.size}")
-        responseJson.titles.take(5).forEach { title ->
-            Log.d(TAG, "  Titolo esempio: ${title.name} (${title.type})")
+        // Trova lo slider corretto in base all'URL
+        val sliderName = when {
+            url.contains("top10") -> "top10"
+            url.contains("trending") -> "trending"
+            url.contains("latest") -> "latest"
+            url.contains("upcoming") -> "upcoming"
+            else -> null
         }
-
-        val titlesList = searchResponseBuilder(responseJson.titles)
-
-        val hasNextPage =
-            response.okhttpResponse.request.url.queryParameter("offset")?.toIntOrNull()
-                ?.let { it < 120 } ?: true && titlesList.size == 60
-        Log.d(TAG, "hasNextPage: $hasNextPage")
-        Log.d(TAG, "========================================")
-
+        
+        Log.d(TAG, "Looking for slider: $sliderName")
+        
+        val slider = if (sliderName != null) {
+            inertiaData.props.sliders?.find { it.name == sliderName }
+        } else {
+            // Per i generi, prendiamo il primo slider? Oppure dobbiamo gestire diversamente
+            inertiaData.props.sliders?.firstOrNull()
+        }
+        
+        val titlesList = slider?.titles?.let { searchResponseBuilder(it) } ?: emptyList()
+        Log.d(TAG, "Titles found: ${titlesList.size}")
+        
         return newHomePageResponse(
             HomePageList(
                 name = request.name,
                 list = titlesList,
                 isHorizontalImages = false
-            ), hasNextPage
+            ), 
+            hasNextPage = false  // Queste pagine non hanno paginazione
         )
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        Log.d(TAG, "search chiamato con query: $query")
+        Log.d(TAG, "=== search START ===")
+        Log.d(TAG, "Query: $query")
+        
+        // URL corretto con la lingua
         val url = "$mainUrl/search"
         val params = mapOf("q" to query)
-        Log.d(TAG, "URL search: $url, params: $params")
+        Log.d(TAG, "Search URL: $url, params: $params")
 
         if (headers["Cookie"].isNullOrEmpty()) {
-            Log.d(TAG, "Headers vuoti, chiamo setupHeaders()")
             setupHeaders()
         }
-        val response = app.get(url, params = params, headers = headers).body.string()
-        Log.d(TAG, "Response search ricevuta, length: ${response.length}")
         
-        val result = parseJson<InertiaResponse>(response)
-        Log.d(TAG, "Titoli trovati: ${result.props.titles?.size ?: 0}")
+        val response = app.get(url, params = params, headers = headers)
+        val responseBody = response.body.string()
+        Log.d(TAG, "Response length: ${responseBody.length}")
+        
+        val result = parseJson<InertiaResponse>(responseBody)
+        val titles = result.props.titles ?: emptyList()
+        Log.d(TAG, "Titles found: ${titles.size}")
 
-        return searchResponseBuilder(result.props.titles!!)
+        return searchResponseBuilder(titles)
     }
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
-        Log.d(TAG, "search paginato chiamato con query: $query, page: $page")
-        val searchUrl = "${mainUrl.replace("/it", "")}/api/search"
-        val params = mutableMapOf("q" to query, "lang" to lang)
-        if (page > 0) {
-            params["offset"] = ((page - 1) * 60).toString()
-        }
-        Log.d(TAG, "URL: $searchUrl, params: $params")
+        Log.d(TAG, "=== search paginated START ===")
+        Log.d(TAG, "Query: $query, Page: $page")
         
-        val response = app.get(searchUrl, params = params, headers = headers).body.string()
-        val result = parseJson<it.dogior.hadEnough.SearchResponse>(response)
-        val hasNext = (page < 3) || (page < result.lastPage)
-        Log.d(TAG, "Risultati: ${result.data.size}, lastPage: ${result.lastPage}, hasNext: $hasNext")
+        // Usa lo stesso metodo della search normale
+        val results = search(query)
+        val hasNext = results.size >= 60 && page < 3
         
-        return newSearchResponseList(searchResponseBuilder(result.data), hasNext = hasNext)
+        return newSearchResponseList(results, hasNext = hasNext)
     }
+
     private suspend fun getPoster(title: TitleProp): String? {
         if (title.tmdbId != null) {
             val tmdbUrl = "https://www.themoviedb.org/${title.type}/${title.tmdbId}"
             val resp = app.get(tmdbUrl).document
-            val img = resp.select("img.poster.w-full").attr("srcset").split(", ").last()
+            val img = resp.select("img.poster.w-full").attr("srcset").split(", ").lastOrNull()
             return img
         } else {
             val domain = mainUrl.substringAfter("://").substringBeforeLast("/")
-            return title.getBackgroundImageId().let { "https://cdn.$domain/images/$it" }
+            return title.getBackgroundImageId()?.let { "https://cdn.$domain/images/$it" }
         }
     }
 
@@ -365,12 +320,18 @@ class StreamingCommunity(
     }
 
     override suspend fun load(url: String): LoadResponse {
+        Log.d(TAG, "=== load START ===")
+        Log.d(TAG, "URL: $url")
+        
         val actualUrl = getActualUrl(url)
+        Log.d(TAG, "Actual URL: $actualUrl")
+        
         if (headers["Cookie"].isNullOrEmpty()) {
             setupHeaders()
         }
         val response = app.get(actualUrl, headers = headers)
         val responseBody = response.body.string()
+        Log.d(TAG, "Response length: ${responseBody.length}")
 
         val domain = mainUrl.substringAfter("://").substringBeforeLast("/")
         val props = parseJson<InertiaResponse>(responseBody).props
@@ -426,7 +387,7 @@ class StreamingCommunity(
             return tvShow
         } else {
             val data = LoadData(
-                "$mainUrl/iframe/${title.id}&canPlayFHD=1",
+                "$mainUrl/iframe/${title.id}?canPlayFHD=1",
                 "movie",
                 title.tmdbId
             )
