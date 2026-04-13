@@ -31,6 +31,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
+import org.jsoup.parser.Parser
 
 class StreamingCommunity(
     override var lang: String = "it",
@@ -63,51 +64,34 @@ class StreamingCommunity(
         "Accept" to "application/json"
     )
 
-    private val sectionNamesListIT = mainPageOf(
-        "$mainUrl/browse/top10" to "Top 10 di oggi",
-        "$mainUrl/browse/trending" to "I Titoli Del Momento",
-        "$mainUrl/browse/latest" to "Aggiunti di Recente",
-        "$mainUrl/browse/upcoming" to "In arrivo...",
-        "$mainUrl/browse/genre?g=Animation" to "Animazione",
-        "$mainUrl/browse/genre?g=Adventure" to "Avventura",
-        "$mainUrl/browse/genre?g=Action" to "Azione",
-        "$mainUrl/browse/genre?g=Comedy" to "Commedia",
-        "$mainUrl/browse/genre?g=Crime" to "Crime",
-        "$mainUrl/browse/genre?g=Documentary" to "Documentario",
-        "$mainUrl/browse/genre?g=Drama" to "Dramma",
-        "$mainUrl/browse/genre?g=Family" to "Famiglia",
-        "$mainUrl/browse/genre?g=Science Fiction" to "Fantascienza",
-        "$mainUrl/browse/genre?g=Fantasy" to "Fantasy",
-        "$mainUrl/browse/genre?g=Horror" to "Horror",
-        "$mainUrl/browse/genre?g=Reality" to "Reality",
-        "$mainUrl/browse/genre?g=Romance" to "Romance",
-        "$mainUrl/browse/genre?g=Thriller" to "Thriller",
-    )
-    private val sectionNamesListEN = mainPageOf(
-        "$mainUrl/browse/top10" to "Top 10 of Today",
-        "$mainUrl/browse/trending" to "Trending Titles",
-        "$mainUrl/browse/latest" to "Recently Added",
-        "$mainUrl/browse/upcoming" to "Upcoming...",
-        "$mainUrl/browse/genre?g=Animation" to "Animation",
-        "$mainUrl/browse/genre?g=Adventure" to "Adventure",
-        "$mainUrl/browse/genre?g=Action" to "Action",
-        "$mainUrl/browse/genre?g=Comedy" to "Comedy",
-        "$mainUrl/browse/genre?g=Crime" to "Crime",
-        "$mainUrl/browse/genre?g=Documentary" to "Documentary",
-        "$mainUrl/browse/genre?g=Drama" to "Drama",
-        "$mainUrl/browse/genre?g=Family" to "Family",
-        "$mainUrl/browse/genre?g=Science Fiction" to "Science Fiction",
-        "$mainUrl/browse/genre?g=Fantasy" to "Fantasy",
-        "$mainUrl/browse/genre?g=Horror" to "Horror",
-        "$mainUrl/browse/genre?g=Reality" to "Reality",
-        "$mainUrl/browse/genre?g=Romance" to "Romance",
-        "$mainUrl/browse/genre?g=Thriller" to "Thriller",
-    )
-    private val sections = if (lang == "it") sectionNamesListIT else sectionNamesListEN
-    override val mainPage = sections
+    override val mainPage = mainPageOf("${Companion.mainUrl}" to "Home")
+
+    private fun isHtmlPayload(payload: String): Boolean {
+        val trimmed = payload.trimStart()
+        return trimmed.startsWith("<") || trimmed.contains("<!DOCTYPE", ignoreCase = true)
+    }
+
+    private fun extractInertiaPageJson(html: String): String? {
+        val dataPageRaw = org.jsoup.Jsoup.parse(html).selectFirst("#app")?.attr("data-page")
+        if (dataPageRaw.isNullOrBlank()) return null
+        return Parser.unescapeEntities(dataPageRaw, true)
+    }
+
+    private fun parseInertiaPayload(payload: String, logContext: String): InertiaResponse? {
+        if (payload.isBlank()) {
+            Log.e(TAG, "$logContext: empty payload")
+            return null
+        }
+        if (isHtmlPayload(payload)) {
+            Log.e(TAG, "$logContext: expected JSON but received HTML payload")
+            return null
+        }
+        return runCatching { parseJson<InertiaResponse>(payload) }
+            .onFailure { Log.e(TAG, "$logContext: invalid JSON payload - ${it.message}") }
+            .getOrNull()
+    }
 
     private suspend fun setupHeaders() {
-        Log.d(TAG, "Setting up headers...")
         val response = app.get("$mainUrl/archive")
         val cookies = response.cookies
         headers["Cookie"] = cookies.map { it.key + "=" + it.value }.joinToString(separator = "; ")
@@ -117,7 +101,6 @@ class StreamingCommunity(
             .substringAfter("\"version\":\"")
             .substringBefore("\"")
         headers["X-Inertia-Version"] = inertiaVersion
-        Log.d(TAG, "Headers setup complete. Version: $inertiaVersion")
     }
 
     private fun searchResponseBuilder(listJson: List<Title>): List<SearchResponse> {
@@ -140,92 +123,48 @@ class StreamingCommunity(
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        Log.d(TAG, "=== getMainPage START ===")
-        Log.d(TAG, "Request URL: ${request.data}")
-        Log.d(TAG, "Page: $page")
-        
-        val url = request.data  // URL completo, es. https://streamingunity.biz/it/browse/top10
-        Log.d(TAG, "Fetching URL: $url")
-        
-        if (headers["Cookie"].isNullOrEmpty()) {
-            setupHeaders()
-        }
-        
-        // Prendi il documento HTML
-        val document = app.get(url, headers = headers).document
-        
-        // Estrai l'attributo data-page
-        val dataPageAttr = document.select("#app").attr("data-page")
-        Log.d(TAG, "data-page length: ${dataPageAttr.length}")
-        
-        // Parsa il JSON
-        val inertiaData = parseJson<InertiaResponse>(dataPageAttr)
-        
-        // I titoli sono direttamente in props.titles per /browse/*
-        val titlesList = inertiaData.props.titles ?: emptyList()
-        Log.d(TAG, "Titles found: ${titlesList.size}")
-        
-        val searchResults = searchResponseBuilder(titlesList)
-        
-        return newHomePageResponse(
-            HomePageList(
-                name = request.name,
-                list = searchResults,
-                isHorizontalImages = false
-            ),
-            hasNext = false  // Queste pagine non hanno paginazione
-        )
+        if (page > 1) return newHomePageResponse(emptyList(), hasNext = false)
+
+        val responseBody = app.get(Companion.mainUrl).body.string()
+        val inertiaJson = extractInertiaPageJson(responseBody)
+        val inertiaResponse = inertiaJson?.let { parseInertiaPayload(it, "Homepage") }
+        val sections = inertiaResponse?.props?.sliders
+            ?.mapNotNull { slider ->
+                val items = searchResponseBuilder(slider.titles)
+                if (items.isEmpty()) return@mapNotNull null
+                HomePageList(
+                    name = slider.label.ifBlank { slider.name },
+                    list = items,
+                    isHorizontalImages = false
+                )
+            } ?: emptyList()
+
+        return newHomePageResponse(sections, hasNext = false)
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        Log.d(TAG, "=== search START ===")
-        Log.d(TAG, "Query: $query")
-        
         val url = "$mainUrl/search"
-        val params = mapOf("q" to query)
-        Log.d(TAG, "Search URL: $url, params: $params")
-
-        if (headers["Cookie"].isNullOrEmpty()) {
-            setupHeaders()
-        }
-        
-        // Prendi il documento HTML
-        val document = app.get(url, params = params, headers = headers).document
-        
-        // Estrai l'attributo data-page
-        val dataPageAttr = document.select("#app").attr("data-page")
-        Log.d(TAG, "data-page length: ${dataPageAttr.length}")
-        
-        // Parsa il JSON
-        val result = parseJson<InertiaResponse>(dataPageAttr)
-        
-        // I titoli sono in props.titles per la ricerca
-        val titles = result.props.titles ?: emptyList()
-        Log.d(TAG, "Titles found: ${titles.size}")
-
+        val response = app.get(url, params = mapOf("q" to query)).body.string()
+        val result = parseInertiaPayload(response, "Search")
+        val titles = result?.props?.titles ?: emptyList()
         return searchResponseBuilder(titles)
     }
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
-        Log.d(TAG, "=== search paginated START ===")
-        Log.d(TAG, "Query: $query, Page: $page")
-        
-        // Usa lo stesso metodo della search normale
-        val results = search(query)
-        val hasNext = results.size >= 60 && page < 3
-        
-        return newSearchResponseList(results, hasNext = hasNext)
+        if (page > 1) return newSearchResponseList(emptyList(), hasNext = false)
+        val items = search(query)
+        return newSearchResponseList(items, hasNext = false)
     }
 
     private suspend fun getPoster(title: TitleProp): String? {
         if (title.tmdbId != null) {
             val tmdbUrl = "https://www.themoviedb.org/${title.type}/${title.tmdbId}"
             val resp = app.get(tmdbUrl).document
-            val img = resp.select("img.poster.w-full").attr("srcset").split(", ").lastOrNull()
+            val img = resp.select("img.poster.w-full").attr("srcset").split(", ").last()
             return img
         } else {
             val domain = mainUrl.substringAfter("://").substringBeforeLast("/")
-            return title.getBackgroundImageId()?.let { "https://cdn.$domain/images/$it" }
+            return title.getBackgroundImageId().let { "https://cdn.$domain/images/$it" }
         }
     }
 
@@ -244,6 +183,7 @@ class StreamingCommunity(
             } else {
                 "$tmdbAPI/tv/$tmdbId/images"
             }
+            
             
             val response = app.get(url, headers = tmdbHeaders)
             if (!response.isSuccessful) {
@@ -310,25 +250,15 @@ class StreamingCommunity(
     }
 
     override suspend fun load(url: String): LoadResponse {
-        Log.d(TAG, "=== load START ===")
-        Log.d(TAG, "URL: $url")
-        
         val actualUrl = getActualUrl(url)
-        Log.d(TAG, "Actual URL: $actualUrl")
-        
         if (headers["Cookie"].isNullOrEmpty()) {
             setupHeaders()
         }
-        
-        // Prendi il documento HTML
-        val document = app.get(actualUrl, headers = headers).document
-        
-        // Estrai l'attributo data-page
-        val dataPageAttr = document.select("#app").attr("data-page")
-        Log.d(TAG, "data-page length: ${dataPageAttr.length}")
-        
-        // Parsa il JSON
-        val props = parseJson<InertiaResponse>(dataPageAttr).props
+        val response = app.get(actualUrl, headers = headers)
+        val responseBody = response.body.string()
+
+        val domain = mainUrl.substringAfter("://").substringBeforeLast("/")
+        val props = parseJson<InertiaResponse>(responseBody).props
         val title = props.title!!
         val genres = title.genres.map { it.name.capitalize() }
         val year = title.releaseDate?.substringBefore('-')?.toIntOrNull()
@@ -356,7 +286,7 @@ class StreamingCommunity(
             ) {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
-                    .let { this.backgroundPosterUrl = "https://cdn.${mainUrl.substringAfter("://").substringBeforeLast("/")}/images/$it" }
+                    .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
 
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
@@ -376,11 +306,12 @@ class StreamingCommunity(
                         addTrailer(trailers)
                     }
                 }
+
             }
             return tvShow
         } else {
             val data = LoadData(
-                "$mainUrl/iframe/${title.id}?canPlayFHD=1",
+                "$mainUrl/iframe/${title.id}&canPlayFHD=1",
                 "movie",
                 title.tmdbId
             )
@@ -392,7 +323,7 @@ class StreamingCommunity(
             ) {
                 this.posterUrl = poster
                 title.getBackgroundImageId()
-                    .let { this.backgroundPosterUrl = "https://cdn.${mainUrl.substringAfter("://").substringBeforeLast("/")}/images/$it" }
+                    .let { this.backgroundPosterUrl = "https://cdn.$domain/images/$it" }
 
                 if (logoUrl != null) {
                     this.logoUrl = logoUrl
@@ -444,9 +375,8 @@ class StreamingCommunity(
                     setupHeaders()
                 }
                 val url = "$mainUrl/titles/${title.id}-${title.slug}/season-${season.number}"
-                val document = app.get(url, headers = headers).document
-                val dataPageAttr = document.select("#app").attr("data-page")
-                val obj = parseJson<InertiaResponse>(dataPageAttr)
+                val obj =
+                    parseJson<InertiaResponse>(app.get(url, headers = headers).body.string())
                 responseEpisodes.addAll(obj.props.loadedSeason?.episodes!!)
             }
             responseEpisodes.forEach { ep ->
