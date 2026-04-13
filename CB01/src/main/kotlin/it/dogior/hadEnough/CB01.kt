@@ -26,18 +26,13 @@ import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
-import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
-import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ShortLink
+import it.dogior.hadEnough.extractors.MaxStreamExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONException
 import org.json.JSONObject
-import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
 class CB01 : MainAPI() {
@@ -53,237 +48,81 @@ class CB01 : MainAPI() {
         "$mainUrl/serietv" to "Serie TV"
     )
 
-    companion object {
-        var actualMainUrl = ""
-    }
-
     private fun fixTitle(title: String, isMovie: Boolean): String {
-        if (isMovie) {
-            return title.replace(Regex("""(\[HD] )*\(\d{4}\)${'$'}"""), "")
-        }
-        return title.replace(Regex("""[-–] Stagione \d+.*${'$'}"""), "")
-            .replace(Regex("""[-–] ITA.*${'$'}"""), "")
-            .replace(Regex("""[-–] *\d+[x×]\d*(/?\d*)*.*${'$'}"""), "")
-            .replace(Regex("""[-–] COMPLETA.*${'$'}"""), "").trim()
-    }
-
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
-        val url = if (page > 1) "${request.data}/page/$page/" else request.data
-        val response = app.get(url)
-
-        if (actualMainUrl.isEmpty()) {
-            actualMainUrl = response.url.substringBeforeLast('/')
-        }
-
-        val document = response.document
-        val items = document.selectFirst(".sequex-one-columns")?.select(".post") ?: return null
-        
-        val posts = items.mapNotNull { card ->
-            val poster = card.selectFirst("img")?.attr("src")
-            val data = card.selectFirst("script")?.data()
-            val fixedData = data?.substringAfter("=")?.substringBefore(";")
-            val post = tryParseJson<Post>(fixedData)
-            post?.let { it.poster = poster }
-            post
-        }
-        
-        val pagination = document.selectFirst(".pagination")?.select(".page-item") ?: return null
-        val lastPage = pagination[pagination.size - 2].text().replace(".", "").toIntOrNull() ?: 1
-        val hasNext = page < lastPage
-
-        val searchResponses = posts.map { post ->
-            if (request.data.contains("serietv")) {
-                newTvSeriesSearchResponse(fixTitle(post.title, false), post.permalink, TvType.TvSeries) {
-                    addPoster(post.poster)
-                }
-            } else {
-                val quality = if (post.title.contains("HD")) SearchQuality.HD else null
-                newMovieSearchResponse(fixTitle(post.title, true), post.permalink, TvType.Movie) {
-                    addPoster(post.poster)
-                    this.quality = quality
-                }
-            }
-        }
-        
-        return newHomePageResponse(HomePageList(request.name, searchResponses, false), hasNext)
-    }
-
-    override suspend fun search(query: String): List<SearchResponse> {
-        val searchLinks = listOf("$mainUrl/?s=$query", "$mainUrl/serietv/?s=$query")
-        return searchLinks.amap { link ->
-            val document = app.get(link).document
-            val items = document.selectFirst(".sequex-one-columns")?.select(".post") ?: return@amap emptyList()
-            
-            items.mapNotNull { card ->
-                val poster = card.selectFirst("img")?.attr("src")
-                val data = card.selectFirst("script")?.data()
-                val fixedData = data?.substringAfter("=")?.substringBefore(";")
-                val post = tryParseJson<Post>(fixedData)
-                post?.let { it.poster = poster }
-                post
-            }.map { post ->
-                if (link.contains("serietv")) {
-                    newTvSeriesSearchResponse(fixTitle(post.title, false), post.permalink, TvType.TvSeries) {
-                        addPoster(post.poster)
-                    }
-                } else {
-                    val quality = if (post.title.contains("HD")) SearchQuality.HD else null
-                    newMovieSearchResponse(fixTitle(post.title, true), post.permalink, TvType.Movie) {
-                        addPoster(post.poster)
-                        this.quality = quality
-                    }
-                }
-            }
-        }.flatten()
+        if (isMovie) return title.replace(Regex("""(\[HD] )*\(\d{4}\)${'$'}"""), "")
+        return title.replace(Regex("""[-–] Stagione \d+"""), "")
+            .replace(Regex("""[-–] ITA"""), "")
+            .replace(Regex("""[-–] *\d+[x×]\d*(/?\d*)*"""), "")
+            .replace(Regex("""[-–] COMPLETA"""), "").trim()
     }
 
     override suspend fun load(url: String): LoadResponse? {
         val document = app.get(url).document
         val mainContainer = document.selectFirst(".sequex-main-container") ?: return null
-        
         val poster = mainContainer.selectFirst("img.responsive-locandina")?.attr("src")
-        val banner = mainContainer.selectFirst("#sequex-page-title-img")?.attr("data-img")
-        val title = mainContainer.selectFirst("h1")?.text() ?: return null
+        val title = mainContainer.selectFirst("h1")?.text()!!
         val isMovie = !url.contains("serietv")
-        
-        return if (isMovie) {
-            // ========== FILM ==========
-            val year = Regex("\\d{4}").find(title)?.value?.toIntOrNull()
-            val plot = mainContainer.selectFirst(".ignore-css > p:nth-child(2)")?.text()
-                ?.replace("+Info »", "")
-            val tags = mainContainer.selectFirst(".ignore-css > p:nth-child(1) > strong:nth-child(1)")
-                ?.text()?.split('–')
-            val runtime = tags?.find { it.contains("DURATA") }?.trim()
-                ?.removePrefix("DURATA")
-                ?.removeSuffix("′")?.trim()?.toIntOrNull()
 
-            val mixdropLink = mainContainer.selectFirst("a[href*='stayonline.pro']")?.attr("href")
-            
-            newMovieLoadResponse(fixTitle(title, true), url, TvType.Movie, mixdropLink ?: "null") {
+        return if (isMovie) {
+            val table = mainContainer.selectFirst("table.cbtable")
+            val movieLinks = table?.select("a")?.filter { 
+                it.text().contains("Mixdrop", true) || it.text().contains("Maxstream", true) 
+            }?.map { it.attr("href") } ?: emptyList()
+
+            newMovieLoadResponse(fixTitle(title, true), url, TvType.Movie, movieLinks.toJson()) {
                 addPoster(poster)
-                this.plot = plot
-                this.backgroundPosterUrl = banner
-                this.tags = tags?.mapNotNull { if (it.contains("DURATA")) null else it.trim() }
-                this.duration = runtime
-                this.year = year
             }
         } else {
-            // ========== SERIE TV ==========
-            val description = mainContainer.selectFirst(".ignore-css > p:nth-child(1)")?.text()
-                ?.split(Regex("""\(\d{4}-\d{4}\)"""))
-            val plot = description?.lastOrNull()?.trim()
-            val tags = description?.firstOrNull()?.split('/')?.map { it.trim() }
-            
-            val (episodes, seasons) = extractEpisodes(document)
-            
+            val (episodes, seasons) = getEpisodes(document)
             newTvSeriesLoadResponse(fixTitle(title, false), url, TvType.TvSeries, episodes) {
                 addPoster(poster)
                 addSeasonNames(seasons)
-                this.plot = plot
-                this.backgroundPosterUrl = banner
-                this.tags = tags
             }
         }
     }
-    
-    // ========== ESTRAZIONE EPISODI - PRENDE SOLO MIXDROP ==========
-    private fun extractEpisodes(document: org.jsoup.nodes.Document): Pair<List<Episode>, MutableList<SeasonData>> {
-        val episodes = mutableListOf<Episode>()
+
+    private suspend fun getEpisodes(page: Document): Pair<List<Episode>, List<SeasonData>> {
         val seasonsData = mutableListOf<SeasonData>()
-        val seasons = mutableMapOf<Int, String>()
-        
-        val seasonWraps = document.select(".sp-wrap")
-        
-        Log.d("CB01", "=== DEBUG EXTRACT EPISODES ===")
-        Log.d("CB01", "Found ${seasonWraps.size} season wraps")
-        
-        seasonWraps.forEachIndexed { index, wrap ->
-            val seasonHeader = wrap.selectFirst(".sp-head")?.text() ?: return@forEachIndexed
-            val seasonNumber = Regex("""STAGIONE\s*(\d+)""").find(seasonHeader.uppercase())?.groupValues?.get(1)?.toIntOrNull() 
-                ?: (index + 1)
-            
-            val seasonName = seasonHeader.replace("- ITA", "").replace("- HD", "").trim()
-            seasons[seasonNumber] = seasonName
-            
-            Log.d("CB01", "Season $seasonNumber: $seasonName")
-            
-            val wrapHtml = wrap.html()
-            val lines = wrapHtml.split(Regex("""\n|<br>|</li>|<p>|</p>"""))
-            
-            for (line in lines) {
-                // Cerca pattern episodio
-                val episodeMatch = Regex("""(\d+)\s*[x×]\s*(\d+)""", RegexOption.IGNORE_CASE).find(line)
-                
-                if (episodeMatch != null) {
-                    // Cerca TUTTI i link stayonline in questa riga
-                    val allLinksInLine = Regex("""https?://stayonline\.pro/l/[a-zA-Z0-9]+""").findAll(line).toList()
+        val episodeList = mutableListOf<Episode>()
+        val seasonDropdowns = page.select(".sp-wrap")
+
+        seasonDropdowns.forEachIndexed { index, dropdown ->
+            val seasonName = dropdown.selectFirst("div.sp-head")?.text() ?: "Stagione ${index + 1}"
+            val seasonNumber = "\\d+".toRegex().find(seasonName)?.value?.toIntOrNull() ?: (index + 1)
+            seasonsData.add(SeasonData(seasonNumber, seasonName.replace("- ITA", "").trim()))
+
+            dropdown.select("div.sp-body p, div.sp-body li").forEach { line ->
+                val lineText = line.text()
+                if (lineText.contains("×") || lineText.contains("x")) {
+                    var epName = lineText.substringBefore("–").trim()
+                    val epNumber = "\\d+".toRegex().find(lineText.substringAfter("×"))?.value?.toIntOrNull()
                     
-                    Log.d("CB01", "  Episode ${episodeMatch.value} - found ${allLinksInLine.size} links")
-                    
-                    // Prendi SOLO il secondo link (Mixdrop), se esiste
-                    if (allLinksInLine.size >= 2) {
-                        val mixdropLink = allLinksInLine[1].value  // [0]=Maxstream, [1]=Mixdrop
+                    // Estraiamo i link presenti nella riga
+                    val linksInRow = line.select("a[href*=/l/], a[href*=stayonline], a[href*=uprot]")
+                        .map { it.attr("href") }
+
+                    if (linksInRow.isNotEmpty()) {
+                        val finalData: String
                         
-                        val epSeason = episodeMatch.groupValues[1].toIntOrNull() ?: seasonNumber
-                        val epNumber = episodeMatch.groupValues[2].toIntOrNull() ?: continue
-                        
-                        val epName = line.substringBefore("–").trim()
-                            .replace(Regex("""<[^>]+>"""), "")
-                            .ifEmpty { "Episodio $epNumber" }
-                        
-                        Log.d("CB01", "  ✅ ADDED: S${epSeason}E${epNumber} -> $mixdropLink")
-                        
-                        episodes.add(
-                            newEpisode(mixdropLink) {
-                                name = epName
-                                season = epSeason
-                                episode = epNumber
-                            }
-                        )
-                    } else {
-                        Log.d("CB01", "  ⚠️ Only ${allLinksInLine.size} link(s) found, skipping")
+                        if (linksInRow.size >= 2) {
+                            // CONDIZIONE 1: Se ci sono almeno 2 link, prendiamo il SECONDO
+                            finalData = listOf(linksInRow[1]).toJson()
+                        } else {
+                            // CONDIZIONE 2: Se c'è solo 1 link, aggiungiamo il tag al nome
+                            finalData = linksInRow.toJson()
+                            epName = "$epName [LINK NON SUPPORTATO]"
+                        }
+
+                        episodeList.add(newEpisode(finalData) {
+                            this.name = epName
+                            this.season = seasonNumber
+                            this.episode = epNumber
+                        })
                     }
                 }
             }
         }
-        
-        // FALLBACK se non trova nulla
-        if (episodes.isEmpty()) {
-            Log.d("CB01", "=== FALLBACK - FULL DOCUMENT SCAN ===")
-            
-            val allHtml = document.html()
-            val lines = allHtml.split(Regex("""\n|<br>|</li>|<p>|</p>"""))
-            
-            for (line in lines) {
-                val episodeMatch = Regex("""(\d+)\s*[x×]\s*(\d+)""", RegexOption.IGNORE_CASE).find(line)
-                
-                if (episodeMatch != null) {
-                    val allLinksInLine = Regex("""https?://stayonline\.pro/l/[a-zA-Z0-9]+""").findAll(line).toList()
-                    
-                    if (allLinksInLine.size >= 2) {
-                        val mixdropLink = allLinksInLine[1].value
-                        val epSeason = episodeMatch.groupValues[1].toIntOrNull() ?: 1
-                        val epNumber = episodeMatch.groupValues[2].toIntOrNull() ?: continue
-                        
-                        episodes.add(
-                            newEpisode(mixdropLink) {
-                                name = "Episodio $epNumber"
-                                season = epSeason
-                                episode = epNumber
-                            }
-                        )
-                    }
-                }
-            }
-        }
-        
-        Log.d("CB01", "=== TOTAL EPISODES FOUND: ${episodes.size} ===")
-        
-        seasons.forEach { (num, name) ->
-            seasonsData.add(SeasonData(num, name))
-        }
-        
-        return episodes to seasonsData
+        return episodeList to seasonsData
     }
 
     override suspend fun loadLinks(
@@ -292,91 +131,60 @@ class CB01 : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        if (data == "null") return false
-        
-        val links = try {
-            parseJson<List<String>>(data)
-        } catch (e: Exception) {
-            listOf(data)
-        }
+        if (data == "null" || data.isEmpty()) return false
+        val links = parseJson<List<String>>(data)
         
         links.forEach { link ->
-            var finalUrl: String? = link
-            
-            if (link.contains("stayonline.pro")) {
-                finalUrl = bypassStayOnline(link)
-            }
-            
-            finalUrl?.let { url ->
-                Log.d("CB01", "Final URL: $url")
-                
+            try {
+                var finalUrl: String? = null
                 when {
-                    url.contains("mixdrop") || url.contains("m1xdrop") -> {
-                        MixDropExtractor().getUrl(url, null, subtitleCallback, callback)
+                    link.contains("stayonline") -> finalUrl = bypassStayOnline(link)
+                    link.contains("uprot") -> finalUrl = unshortenUprot(link)
+                }
+
+                finalUrl?.let { url ->
+                    when {
+                        url.contains("maxstream") -> MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
+                        url.contains("mixdrop") || url.contains("m1xdrop") -> MixDropExtractor().getUrl(url, null, subtitleCallback, callback)
                     }
                 }
+            } catch (e: Exception) {
+                Log.e("CB01", "Errore link: ${e.message}")
             }
         }
-        
         return true
     }
 
-    // ========== BYPASS STAYONLINE ==========
-    private suspend fun bypassStayOnline(link: String): String? {
-        val pageResponse = app.get(link)
-        val pageHtml = pageResponse.body.string()
-        
-        var linkId = link.substringAfterLast("/")
-        val idPattern = Regex("""var linkId\s*=\s*"([^"]+)";""")
-        val idMatch = idPattern.find(pageHtml)
-        if (idMatch != null) {
-            linkId = idMatch.groupValues[1]
+    private suspend fun unshortenUprot(url: String): String {
+        var currentUrl = url
+        val visited = mutableSetOf<String>()
+        while (currentUrl.contains("uprot.net") && currentUrl !in visited) {
+            visited.add(currentUrl)
+            val response = app.get(currentUrl, allowRedirects = false)
+            currentUrl = response.headers["location"] ?: break
         }
-        
-        val headers = mapOf(
-            "Origin" to "https://stayonline.pro",
-            "Referer" to link,
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-            "X-Requested-With" to "XMLHttpRequest",
-            "Accept" to "application/json, text/javascript, */*; q=0.01",
-            "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8"
-        )
-        
-        val data = "id=$linkId&ref="
-        val response = app.post(
-            "https://stayonline.pro/ajax/linkView.php",
-            headers = headers,
-            requestBody = data.toRequestBody("application/x-www-form-urlencoded; charset=UTF-8".toMediaTypeOrNull())
-        )
-
-        val jsonResponse = response.body.string()
-        
-        return try {
-            val json = JSONObject(jsonResponse)
-            if (json.optString("status") == "success") {
-                var realUrl = json.getJSONObject("data").getString("value")
-                
-                if (realUrl.contains("m1xdrop.net/f/")) {
-                    val videoId = realUrl.substringAfterLast("/")
-                    realUrl = "https://mixdrop.top/e/$videoId"
-                }
-                realUrl
-            } else {
-                null
-            }
-        } catch (e: JSONException) {
-            Log.e("CB01:StayOnline", "JSON error: ${e.message}")
-            null
-        }
+        return currentUrl
     }
 
-    data class Post(
-        @JsonProperty("id") val id: String,
-        @JsonProperty("popup") val popup: String,
-        @JsonProperty("unique_id") val uniqueId: String,
-        @JsonProperty("title") val title: String,
-        @JsonProperty("permalink") val permalink: String,
-        @JsonProperty("item_id") val itemId: String,
-        var poster: String? = null,
-    )
+    private suspend fun bypassStayOnline(link: String): String? {
+        val pageHtml = app.get(link).text
+        val idMatch = Regex("""var linkId\s*=\s*"([^"]+)";""").find(pageHtml)
+        val linkId = idMatch?.groupValues?.get(1) ?: link.split("/").last()
+
+        val response = app.post(
+            "https://stayonline.pro/ajax/linkView.php",
+            headers = mapOf("Referer" to link, "X-Requested-With" to "XMLHttpRequest"),
+            requestBody = "id=$linkId&ref=".toRequestBody("application/x-www-form-urlencoded".toMediaTypeOrNull())
+        ).text
+
+        return try {
+            val json = JSONObject(response)
+            if (json.optString("status") == "success") {
+                val realUrl = json.getJSONObject("data").getString("value")
+                if (realUrl.contains("m1xdrop.net/f/")) "https://mixdrop.top/e/${realUrl.substringAfterLast("/")}" else realUrl
+            } else null
+        } catch (e: Exception) { null }
+    }
+
+    data class Post(@JsonProperty("title") val title: String, @JsonProperty("permalink") val permalink: String)
 }
