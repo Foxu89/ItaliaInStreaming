@@ -1,6 +1,7 @@
 // StreamITA.kt
 package it.dogior.hadEnough
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.Actor
