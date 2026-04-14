@@ -1,27 +1,8 @@
 package it.dogior.hadEnough
 
-import com.fasterxml.jackson.annotation.JsonProperty
 import android.util.Log
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.Actor
-import com.lagradost.cloudstream3.ActorData
-import com.lagradost.cloudstream3.Episode
-import com.lagradost.cloudstream3.ErrorLoadingException
-import com.lagradost.cloudstream3.HomePageResponse
-import com.lagradost.cloudstream3.LoadResponse
-import com.lagradost.cloudstream3.MainPageRequest
-import com.lagradost.cloudstream3.Score
-import com.lagradost.cloudstream3.SearchResponse
-import com.lagradost.cloudstream3.ShowStatus
-import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.TvType
-import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.mainPageOf
-import com.lagradost.cloudstream3.newEpisode
-import com.lagradost.cloudstream3.newHomePageResponse
-import com.lagradost.cloudstream3.newMovieLoadResponse
-import com.lagradost.cloudstream3.newMovieSearchResponse
-import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.LoadResponse.Companion.addImdbId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.metaproviders.TmdbProvider
@@ -29,9 +10,12 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import it.dogior.hadEnough.extractors.VidSrcExtractor
+import it.dogior.hadEnough.extractors.VixCloudExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import org.jsoup.parser.Parser
 
 class StreamITA : TmdbProvider() {
     override var name = "StreamITA"
@@ -52,6 +36,7 @@ class StreamITA : TmdbProvider() {
         "Authorization" to "Bearer $tmdbApiKey",
         "Accept" to "application/json"
     )
+    private val scMainUrl = "https://streamingunity.biz"
 
     override val mainPage = mainPageOf(
         "$tmdbAPI/trending/all/day?language=it-IT" to "Tendenze di Oggi",
@@ -189,10 +174,104 @@ class StreamITA : TmdbProvider() {
         }
     }
 
+    private suspend fun getVixCloudFromStreamingCommunity(title: String, year: Int?, season: Int?, episode: Int?): String? {
+        try {
+            val searchQuery = if (season == null) "$title $year" else title
+            val encodedQuery = java.net.URLEncoder.encode(searchQuery, "UTF-8")
+            val searchUrl = "$scMainUrl/search?q=$encodedQuery"
+
+            val response = app.get(searchUrl)
+            if (!response.isSuccessful) return null
+
+            val html = response.text
+            val inertiaJson = org.jsoup.Jsoup.parse(html)
+                .select("#app")
+                .attr("data-page")
+                .takeIf { it.isNotBlank() }
+                ?: return null
+
+            val unescapedJson = Parser.unescapeEntities(inertiaJson, true)
+            val json = JSONObject(unescapedJson)
+            val titles = json.optJSONObject("props")?.optJSONArray("titles") ?: return null
+
+            var matchedTitle: JSONObject? = null
+            for (i in 0 until titles.length()) {
+                val t = titles.getJSONObject(i)
+                val tTitle = t.optString("name", "")
+                val tType = t.optString("type", "")
+                val tYear = t.optString("release_date", "").substringBefore("-").toIntOrNull()
+
+                val isMatch = when {
+                    season != null -> tType == "tv" && tTitle.equals(title, ignoreCase = true)
+                    else -> tType == "movie" && tTitle.equals(title, ignoreCase = true) && (tYear == null || tYear == year)
+                }
+
+                if (isMatch) {
+                    matchedTitle = t
+                    break
+                }
+            }
+
+            if (matchedTitle == null) return null
+
+            val titleId = matchedTitle.optInt("id", 0)
+            val titleSlug = matchedTitle.optString("slug", "")
+            if (titleId == 0) return null
+
+            val pageUrl = if (season == null) {
+                "$scMainUrl/titles/$titleId-$titleSlug"
+            } else {
+                "$scMainUrl/titles/$titleId-$titleSlug/season-$season"
+            }
+
+            val pageResponse = app.get(pageUrl)
+            if (!pageResponse.isSuccessful) return null
+
+            val pageHtml = pageResponse.text
+            val pageJson = org.jsoup.Jsoup.parse(pageHtml)
+                .select("#app")
+                .attr("data-page")
+                .takeIf { it.isNotBlank() }
+                ?: return null
+
+            val pageUnescaped = Parser.unescapeEntities(pageJson, true)
+            val pageData = JSONObject(pageUnescaped)
+            val props = pageData.optJSONObject("props") ?: return null
+            val titleData = props.optJSONObject("title") ?: return null
+
+            val iframeId = if (season == null) {
+                titleData.optInt("id", 0)
+            } else {
+                val loadedSeason = props.optJSONObject("loadedSeason")
+                val episodes = loadedSeason?.optJSONArray("episodes")
+                var episodeId = 0
+                if (episodes != null) {
+                    for (i in 0 until episodes.length()) {
+                        val ep = episodes.getJSONObject(i)
+                        if (ep.optInt("number", 0) == episode) {
+                            episodeId = ep.optInt("id", 0)
+                            break
+                        }
+                    }
+                }
+                episodeId
+            }
+
+            if (iframeId == 0) return null
+
+            return "https://vixcloud.co/embed/$iframeId"
+
+        } catch (e: Exception) {
+            Log.e(TAG, "VixCloud search failed: ${e.message}")
+            return null
+        }
+    }
+
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         val linkData = parseJson<LinkData>(data)
         val tmdbId = linkData.id ?: return false
         var anySuccess = false
+
         coroutineScope {
             launch {
                 try {
@@ -208,6 +287,21 @@ class StreamITA : TmdbProvider() {
                     val url = if (linkData.season == null) "https://vidsrc.ru/movie/$tmdbId" else "https://vidsrc.ru/tv/$tmdbId/${linkData.season}/${linkData.episode}"
                     extractor.getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
                     anySuccess = true
+                } catch (_: Exception) {}
+            }
+            launch {
+                try {
+                    val vixCloudUrl = getVixCloudFromStreamingCommunity(
+                        title = linkData.title ?: return@launch,
+                        year = linkData.year,
+                        season = linkData.season,
+                        episode = linkData.episode
+                    )
+                    if (vixCloudUrl != null) {
+                        val extractor = VixCloudExtractor()
+                        extractor.getUrl(vixCloudUrl, "$scMainUrl/", subtitleCallback, callback)
+                        anySuccess = true
+                    }
                 } catch (_: Exception) {}
             }
         }
