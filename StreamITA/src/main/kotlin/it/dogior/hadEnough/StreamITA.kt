@@ -1,21 +1,37 @@
 package it.dogior.hadEnough
 
-import android.util.Log
 import com.fasterxml.jackson.annotation.JsonProperty
+import android.util.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.Actor
+import com.lagradost.cloudstream3.ActorData
+import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.ErrorLoadingException
+import com.lagradost.cloudstream3.HomePageResponse
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.Score
+import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.ShowStatus
+import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.mainPageOf
+import com.lagradost.cloudstream3.newEpisode
+import com.lagradost.cloudstream3.newHomePageResponse
+import com.lagradost.cloudstream3.newMovieLoadResponse
+import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.LoadResponse.Companion.addImdbId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import it.dogior.hadEnough.extractors.VixCloudExtractor
 import it.dogior.hadEnough.extractors.VidSrcExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import org.json.JSONObject
-import org.jsoup.parser.Parser
 
 class StreamITA : TmdbProvider() {
     override var name = "StreamITA"
@@ -36,18 +52,17 @@ class StreamITA : TmdbProvider() {
         "Authorization" to "Bearer $tmdbApiKey",
         "Accept" to "application/json"
     )
-    private val scMainUrl = "https://streamingunity.biz"
 
     override val mainPage = mainPageOf(
-        "$tmdbAPI/trending/all/day?language=it-IT" to "🔥 Tendenze di Oggi",
-        "$tmdbAPI/movie/popular?language=it-IT" to "🎬 Film Popolari",
-        "$tmdbAPI/tv/popular?language=it-IT" to "📺 Serie TV Popolari",
-        "$tmdbAPI/trending/movie/week?language=it-IT" to "🎥 Film della Settimana",
-        "$tmdbAPI/trending/tv/week?language=it-IT" to "📼 Serie TV della Settimana",
-        "$tmdbAPI/movie/top_rated?language=it-IT" to "⭐ Film più Votati",
-        "$tmdbAPI/tv/top_rated?language=it-IT" to "🌟 Serie TV più Votate",
-        "$tmdbAPI/movie/upcoming?language=it-IT&region=IT" to "📅 Prossime Uscite",
-        "$tmdbAPI/tv/on_the_air?language=it-IT" to "📡 Serie TV in Onda",
+        "$tmdbAPI/trending/all/day?language=it-IT" to "Tendenze di Oggi",
+        "$tmdbAPI/movie/popular?language=it-IT" to "Film Popolari",
+        "$tmdbAPI/tv/popular?language=it-IT" to "Serie TV Popolari",
+        "$tmdbAPI/trending/movie/week?language=it-IT" to "Film della Settimana",
+        "$tmdbAPI/trending/tv/week?language=it-IT" to "Serie TV della Settimana",
+        "$tmdbAPI/movie/top_rated?language=it-IT" to "Film più Votati",
+        "$tmdbAPI/tv/top_rated?language=it-IT" to "Serie TV più Votate",
+        "$tmdbAPI/movie/upcoming?language=it-IT&region=IT" to "Prossime Uscite",
+        "$tmdbAPI/tv/on_the_air?language=it-IT" to "Serie TV in Onda",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -174,193 +189,26 @@ class StreamITA : TmdbProvider() {
         }
     }
 
-    private suspend fun getVixCloudFromStreamingCommunity(title: String, year: Int?, season: Int?, episode: Int?): String? {
-        Log.d(TAG, "🔍 [VixCloud] Inizio scraping per: $title (S${season}E${episode})")
-        
-        try {
-            val searchQuery = if (season == null) "$title $year" else title
-            val encodedQuery = java.net.URLEncoder.encode(searchQuery, "UTF-8")
-            val searchUrl = "$scMainUrl/search?q=$encodedQuery"
-            
-            Log.d(TAG, "🔍 [VixCloud] Search URL: $searchUrl")
-
-            val response = app.get(searchUrl)
-            if (!response.isSuccessful) {
-                Log.e(TAG, "❌ [VixCloud] Search fallita: ${response.code}")
-                return null
-            }
-
-            val html = response.text
-            val inertiaJson = org.jsoup.Jsoup.parse(html)
-                .select("#app")
-                .attr("data-page")
-                .takeIf { it.isNotBlank() }
-            
-            if (inertiaJson == null) {
-                Log.e(TAG, "❌ [VixCloud] data-page non trovato")
-                return null
-            }
-
-            val unescapedJson = Parser.unescapeEntities(inertiaJson, true)
-            val json = JSONObject(unescapedJson)
-            val titles = json.optJSONObject("props")?.optJSONArray("titles")
-            
-            if (titles == null) {
-                Log.e(TAG, "❌ [VixCloud] Nessun titolo nei risultati")
-                return null
-            }
-            
-            Log.d(TAG, "🔍 [VixCloud] Trovati ${titles.length()} risultati")
-
-            var matchedTitle: JSONObject? = null
-            for (i in 0 until titles.length()) {
-                val t = titles.getJSONObject(i)
-                val tTitle = t.optString("name", "")
-                val tType = t.optString("type", "")
-                val tYear = t.optString("release_date", "").substringBefore("-").toIntOrNull()
-
-                val isMatch = when {
-                    season != null -> tType == "tv" && tTitle.equals(title, ignoreCase = true)
-                    else -> tType == "movie" && tTitle.equals(title, ignoreCase = true) && (tYear == null || tYear == year)
-                }
-
-                if (isMatch) {
-                    matchedTitle = t
-                    Log.d(TAG, "✅ [VixCloud] Match trovato: $tTitle ($tType)")
-                    break
-                }
-            }
-
-            if (matchedTitle == null) {
-                Log.e(TAG, "❌ [VixCloud] Nessun match per: $title")
-                return null
-            }
-
-            val titleId = matchedTitle.optInt("id", 0)
-            val titleSlug = matchedTitle.optString("slug", "")
-            if (titleId == 0) {
-                Log.e(TAG, "❌ [VixCloud] ID titolo non trovato")
-                return null
-            }
-
-            val pageUrl = if (season == null) {
-                "$scMainUrl/titles/$titleId-$titleSlug"
-            } else {
-                "$scMainUrl/titles/$titleId-$titleSlug/season-$season"
-            }
-            
-            Log.d(TAG, "🔍 [VixCloud] Page URL: $pageUrl")
-
-            val pageResponse = app.get(pageUrl)
-            if (!pageResponse.isSuccessful) {
-                Log.e(TAG, "❌ [VixCloud] Pagina non accessibile: ${pageResponse.code}")
-                return null
-            }
-
-            val pageHtml = pageResponse.text
-            val pageJson = org.jsoup.Jsoup.parse(pageHtml)
-                .select("#app")
-                .attr("data-page")
-                .takeIf { it.isNotBlank() }
-
-            if (pageJson == null) {
-                Log.e(TAG, "❌ [VixCloud] data-page non trovato nella pagina")
-                return null
-            }
-
-            val pageUnescaped = Parser.unescapeEntities(pageJson, true)
-            val pageData = JSONObject(pageUnescaped)
-            val props = pageData.optJSONObject("props") ?: return null
-            val titleData = props.optJSONObject("title") ?: return null
-
-            val iframeId = if (season == null) {
-                titleData.optInt("id", 0)
-            } else {
-                val loadedSeason = props.optJSONObject("loadedSeason")
-                val episodes = loadedSeason?.optJSONArray("episodes")
-                var episodeId = 0
-                if (episodes != null) {
-                    for (i in 0 until episodes.length()) {
-                        val ep = episodes.getJSONObject(i)
-                        if (ep.optInt("number", 0) == episode) {
-                            episodeId = ep.optInt("id", 0)
-                            Log.d(TAG, "✅ [VixCloud] Episodio trovato: ID=$episodeId")
-                            break
-                        }
-                    }
-                }
-                episodeId
-            }
-
-            if (iframeId == 0) {
-                Log.e(TAG, "❌ [VixCloud] Iframe ID non trovato")
-                return null
-            }
-
-            val finalUrl = "https://vixcloud.co/embed/$iframeId"
-            Log.d(TAG, "✅✅✅ [VixCloud] SUCCESSO! URL: $finalUrl")
-            return finalUrl
-
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ [VixCloud] Eccezione: ${e.message}")
-            e.printStackTrace()
-            return null
-        }
-    }
-
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         val linkData = parseJson<LinkData>(data)
         val tmdbId = linkData.id ?: return false
-        
-        Log.d(TAG, "🎬 [StreamITA] Caricamento link per: ${linkData.title} (TMDB: $tmdbId)")
-        
         var anySuccess = false
-
         coroutineScope {
             launch {
                 try {
-                    Log.d(TAG, "🟡 [VixSrc] Tentativo in corso...")
                     val extractor = VixSrcExtractor()
                     val url = if (linkData.season == null) "https://vixsrc.to/movie/$tmdbId" else "https://vixsrc.to/tv/$tmdbId/${linkData.season}/${linkData.episode}"
                     extractor.getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
                     anySuccess = true
-                    Log.d(TAG, "✅ [VixSrc] SUCCESSO!")
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ [VixSrc] Fallito: ${e.message}")
-                }
+                } catch (_: Exception) {}
             }
             launch {
                 try {
-                    Log.d(TAG, "🟡 [VidSrc] Tentativo in corso...")
                     val extractor = VidSrcExtractor()
                     val url = if (linkData.season == null) "https://vidsrc.ru/movie/$tmdbId" else "https://vidsrc.ru/tv/$tmdbId/${linkData.season}/${linkData.episode}"
                     extractor.getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
                     anySuccess = true
-                    Log.d(TAG, "✅ [VidSrc] SUCCESSO!")
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ [VidSrc] Fallito: ${e.message}")
-                }
-            }
-            launch {
-                try {
-                    Log.d(TAG, "🟡 [VixCloud] Tentativo scraping in corso...")
-                    val vixCloudUrl = getVixCloudFromStreamingCommunity(
-                        title = linkData.title ?: return@launch,
-                        year = linkData.year,
-                        season = linkData.season,
-                        episode = linkData.episode
-                    )
-                    if (vixCloudUrl != null) {
-                        val extractor = VixCloudExtractor()
-                        extractor.getUrl(vixCloudUrl, "$scMainUrl/", subtitleCallback, callback)
-                        anySuccess = true
-                        Log.d(TAG, "✅ [VixCloud] SUCCESSO!")
-                    } else {
-                        Log.e(TAG, "❌ [VixCloud] URL non trovato")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ [VixCloud] Fallito: ${e.message}")
-                }
+                } catch (_: Exception) {}
             }
         }
         return anySuccess
@@ -410,4 +258,16 @@ class StreamITA : TmdbProvider() {
         @JsonProperty("id") val id: Int? = null, @JsonProperty("name") val name: String? = null,
         @JsonProperty("overview") val overview: String? = null, @JsonProperty("air_date") val airDate: String? = null,
         @JsonProperty("still_path") val stillPath: String? = null, @JsonProperty("vote_average") val voteAverage: Double? = null,
-        @JsonProperty("episode_number") val episodeNumber: Int? = null, @J
+        @JsonProperty("episode_number") val episodeNumber: Int? = null, @JsonProperty("season_number") val seasonNumber: Int? = null,
+        @JsonProperty("runtime") val runtime: Int? = null,
+    )
+    data class Trailers(@JsonProperty("key") val key: String? = null, @JsonProperty("type") val type: String? = null)
+    data class ResultsTrailer(@JsonProperty("results") val results: ArrayList<Trailers>? = arrayListOf())
+    data class Cast(
+        @JsonProperty("name") val name: String? = null, @JsonProperty("original_name") val originalName: String? = null,
+        @JsonProperty("character") val character: String? = null, @JsonProperty("profile_path") val profilePath: String? = null,
+    )
+    data class Credits(@JsonProperty("cast") val cast: ArrayList<Cast>? = arrayListOf())
+    data class ResultsRecommendations(@JsonProperty("results") val results: ArrayList<Media>? = arrayListOf())
+    data class Genres(@JsonProperty("name") val name: String? = null)
+}
