@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.konan.properties.Properties
 
-version = 3
+version = 4
 
 cloudstream {
     language = "it"
