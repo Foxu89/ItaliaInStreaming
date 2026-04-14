@@ -7,13 +7,14 @@ import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONObject
 
 class VixCloudExtractor : ExtractorApi() {
-    override val mainUrl = "vixcloud.co"
+    override val mainUrl = "https://vixcloud.co"
     override val name = "VixCloud"
-    override val requiresReferer = false
+    override val requiresReferer = true
     val TAG = "VixCloudExtractor"
     private var referer: String? = null
     private val h = mutableMapOf(
@@ -29,10 +30,10 @@ class VixCloudExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        this.referer = referer
-        Log.d(TAG, "REFERER: $referer  URL: $url")
+        this.referer = referer ?: mainUrl
+        Log.d(TAG, "🎬 REFERER: $referer  URL: $url")
         val playlistUrl = getPlaylistLink(url)
-        Log.w(TAG, "FINAL URL: $playlistUrl")
+        Log.w(TAG, "✅ FINAL URL: $playlistUrl")
 
         callback.invoke(
             newExtractorLink(
@@ -41,15 +42,15 @@ class VixCloudExtractor : ExtractorApi() {
                 url = playlistUrl,
                 type = ExtractorLinkType.M3U8
             ) {
+                this.referer = mainUrl
+                this.quality = Qualities.P1080.value
                 this.headers = h
             }
         )
-
-
     }
 
     private suspend fun getPlaylistLink(url: String): String {
-        Log.d(TAG, "Item url: $url")
+        Log.d(TAG, "🔍 Item url: $url")
 
         val script = getScript(url)
         val masterPlaylist = script.getJSONObject("masterPlaylist")
@@ -76,15 +77,11 @@ class VixCloudExtractor : ExtractorApi() {
     }
 
     private suspend fun getScript(url: String): JSONObject {
-        Log.d(TAG, "Item url: $url")
+        Log.d(TAG, "🔍 Item url: $url")
 
         val iframe = app.get(url, headers = h, interceptor = CloudflareKiller()).document
-        Log.d(TAG, iframe.toString())
-
-//        Log.d(TAG, iframe.document.toString())
         val scripts = iframe.select("script")
-        val script =
-            scripts.find { it.data().contains("masterPlaylist") }!!.data().replace("\n", "\t")
+        val script = scripts.find { it.data().contains("masterPlaylist") }!!.data().replace("\n", "\t")
 
         val scriptJson = getSanitisedScript(script)
         Log.d(TAG, "Script Json: $scriptJson")
@@ -92,10 +89,9 @@ class VixCloudExtractor : ExtractorApi() {
     }
 
     private fun getSanitisedScript(script: String): String {
-        // Split by top-level assignments like window.xxx =
         val parts = Regex("""window\.(\w+)\s*=""")
             .split(script)
-            .drop(1) // first split part is empty before first assignment
+            .drop(1)
 
         val keys = Regex("""window\.(\w+)\s*=""")
             .findAll(script)
@@ -103,21 +99,4 @@ class VixCloudExtractor : ExtractorApi() {
             .toList()
 
         val jsonObjects = keys.zip(parts).map { (key, value) ->
-            // Clean up the value
             val cleaned = value
-                .replace(";", "")
-                // Quote keys only inside objects
-                .replace(Regex("""(\{|\[|,)\s*(\w+)\s*:"""), "$1 \"$2\":")
-                // Remove trailing commas before } or ]
-                .replace(Regex(""",(\s*[}\]])"""), "$1")
-                .trim()
-
-            "\"$key\": $cleaned"
-        }
-        val finalObject =
-            "{\n${jsonObjects.joinToString(",\n")}\n}"
-                .replace("'", "\"")
-
-        return finalObject
-    }
-}
