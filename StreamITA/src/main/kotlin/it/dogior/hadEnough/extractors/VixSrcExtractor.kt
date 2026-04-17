@@ -24,9 +24,9 @@ class VixSrcExtractor : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         this.referer = referer
-        Log.d(TAG, "REFERER: $referer  URL: $url")
+        Log.d(TAG, "🔗 REFERER: $referer  URL: $url")
         val playlistUrl = getPlaylistLink(url)
-        Log.w(TAG, "FINAL URL: $playlistUrl")
+        Log.w(TAG, "🎬 FINAL URL: $playlistUrl")
 
         callback.invoke(
             newExtractorLink(
@@ -41,7 +41,7 @@ class VixSrcExtractor : ExtractorApi() {
     }
 
     private suspend fun getPlaylistLink(url: String): String {
-        Log.d(TAG, "Item url: $url")
+        Log.d(TAG, "📥 Item url: $url")
 
         val script = getScript(url)
         val masterPlaylist = script.getJSONObject("masterPlaylist")
@@ -57,18 +57,19 @@ class VixSrcExtractor : ExtractorApi() {
         } else {
             "${playlistUrl}?$params"
         }
-        Log.d(TAG, "masterPlaylistUrl: $masterPlaylistUrl")
+        Log.d(TAG, "🔧 masterPlaylistUrl: $masterPlaylistUrl")
 
         if (script.optBoolean("canPlayFHD", false)) {
             masterPlaylistUrl += "&h=1"
+            Log.d(TAG, "📺 FHD enabled")
         }
 
-        Log.d(TAG, "Master Playlist URL: $masterPlaylistUrl")
+        Log.d(TAG, "✅ Master Playlist URL: $masterPlaylistUrl")
         return masterPlaylistUrl
     }
 
     private suspend fun getScript(url: String): JSONObject {
-        Log.d(TAG, "Item url: $url")
+        Log.d(TAG, "🌐 Fetching: $url")
         val headers = mutableMapOf(
             "Accept" to "*/*",
             "Alt-Used" to url.toHttpUrl().host,
@@ -83,56 +84,63 @@ class VixSrcExtractor : ExtractorApi() {
 
         val response = app.get(url, headers = headers)
         val html = response.text
+        Log.d(TAG, "📄 Response length: ${html.length}")
 
-        // ========== NUOVO METODO: Cerca window.masterPlaylist DIRETTAMENTE ==========
+        // ========== METODO 1: Cerca window.masterPlaylist DIRETTAMENTE ==========
+        Log.d(TAG, "🔍 Trying DIRECT method...")
         val directPattern = Regex("""window\.masterPlaylist\s*=\s*(\{[^}]+\})""")
         directPattern.find(html)?.let { match ->
             val jsonStr = match.groupValues[1]
-            Log.d(TAG, "✅ Found DIRECT masterPlaylist: $jsonStr")
+            Log.d(TAG, "✅ DIRECT method SUCCESS!")
+            Log.d(TAG, "📋 masterPlaylist: $jsonStr")
             
-            // Cerca anche canPlayFHD
             val canPlayFHD = html.contains("window.canPlayFHD = true")
+            Log.d(TAG, "📺 canPlayFHD: $canPlayFHD")
             
-            // Costruisci JSON completo
             val json = JSONObject()
             json.put("masterPlaylist", JSONObject(jsonStr))
             json.put("canPlayFHD", canPlayFHD)
             return json
         }
+        Log.d(TAG, "❌ DIRECT method failed")
 
-        // ========== VECCHIO METODO: Cerca negli script tag ==========
+        // ========== METODO 2: Cerca negli script tag (vecchio formato) ==========
+        Log.d(TAG, "🔍 Trying SCRIPT TAG method...")
         val document = response.document
         val scripts = document.select("script")
+        Log.d(TAG, "📜 Found ${scripts.size} script tags")
+        
         val script = scripts.find { it.data().contains("masterPlaylist") }?.data()?.replace("\n", "\t")
         
         if (script != null) {
-            Log.d(TAG, "✅ Found in script tag (old format)")
+            Log.d(TAG, "✅ SCRIPT TAG method SUCCESS!")
             val scriptJson = getSanitisedScript(script)
-            Log.d(TAG, "Script Json: $scriptJson")
+            Log.d(TAG, "📋 Script Json: $scriptJson")
             return JSONObject(scriptJson)
         }
+        Log.d(TAG, "❌ SCRIPT TAG method failed")
 
-        throw Exception("❌ masterPlaylist not found in page")
+        throw Exception("❌❌❌ masterPlaylist not found in page!")
     }
 
     private fun getSanitisedScript(script: String): String {
-        // Split by top-level assignments like window.xxx =
+        Log.d(TAG, "🧹 Sanitising script...")
+        
         val parts = Regex("""window\.(\w+)\s*=""")
             .split(script)
-            .drop(1) // first split part is empty before first assignment
+            .drop(1)
 
         val keys = Regex("""window\.(\w+)\s*=""")
             .findAll(script)
             .map { it.groupValues[1] }
             .toList()
+        
+        Log.d(TAG, "🔑 Found keys: $keys")
 
         val jsonObjects = keys.zip(parts).map { (key, value) ->
-            // Clean up the value
             val cleaned = value
                 .replace(";", "")
-                // Quote keys only inside objects
                 .replace(Regex("""(\{|\[|,)\s*(\w+)\s*:"""), "$1 \"$2\":")
-                // Remove trailing commas before } or ]
                 .replace(Regex(""",(\s*[}\]])"""), "$1")
                 .trim()
 
@@ -142,6 +150,7 @@ class VixSrcExtractor : ExtractorApi() {
             "{\n${jsonObjects.joinToString(",\n")}\n}"
                 .replace("'", "\"")
 
+        Log.d(TAG, "✨ Sanitised complete")
         return finalObject
     }
 }
