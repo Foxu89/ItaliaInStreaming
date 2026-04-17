@@ -28,7 +28,6 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import it.dogior.hadEnough.extractors.VidSrcExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -193,24 +192,22 @@ class StreamITA : TmdbProvider() {
         val linkData = parseJson<LinkData>(data)
         val tmdbId = linkData.id ?: return false
         var anySuccess = false
+        
         coroutineScope {
             launch {
                 try {
                     val extractor = VixSrcExtractor()
-                    val url = if (linkData.season == null) "https://vixsrc.to/movie/$tmdbId" else "https://vixsrc.to/tv/$tmdbId/${linkData.season}/${linkData.episode}"
+                    val url = if (linkData.season == null) {
+                        "https://vixsrc.to/movie/$tmdbId"
+                    } else {
+                        "https://vixsrc.to/tv/$tmdbId/${linkData.season}/${linkData.episode}"
+                    }
                     extractor.getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
                     anySuccess = true
                 } catch (_: Exception) {}
             }
-            launch {
-                try {
-                    val extractor = VidSrcExtractor()
-                    val url = if (linkData.season == null) "https://vidsrc.ru/movie/$tmdbId" else "https://vidsrc.ru/tv/$tmdbId/${linkData.season}/${linkData.episode}"
-                    extractor.getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
-                    anySuccess = true
-                } catch (_: Exception) {}
-            }
         }
+        
         return anySuccess
     }
 
