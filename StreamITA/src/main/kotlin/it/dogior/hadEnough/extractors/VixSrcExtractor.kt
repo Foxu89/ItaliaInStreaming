@@ -7,15 +7,13 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
 
 class VixSrcExtractor : ExtractorApi() {
-    override val mainUrl = "vixsrc.to"
-    override val name = "VixCloud"
-    override val requiresReferer = false
+    override val mainUrl = "https://vixsrc.to"
+    override val name = "VixSrc"
+    override val requiresReferer = true
     val TAG = "VixSrcExtractor"
-    private var referer: String? = null
 
     override suspend fun getUrl(
         url: String,
@@ -23,134 +21,173 @@ class VixSrcExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        this.referer = referer
-        Log.d(TAG, "🔗 REFERER: $referer  URL: $url")
-        val playlistUrl = getPlaylistLink(url)
-        Log.w(TAG, "🎬 FINAL URL: $playlistUrl")
-
-        callback.invoke(
-            newExtractorLink(
-                source = "VixSrc",
-                name = "Streaming Community - VixSrc",
-                url = playlistUrl,
-                type = ExtractorLinkType.M3U8
-            ) {
-                this.referer = referer!!
+        Log.d(TAG, "🎬 URL: $url")
+        
+        // Estrai TMDB ID o IMDb ID dall'URL
+        val tmdbId = Regex("""/(?:movie|tv)/(\d+)""").find(url)?.groupValues?.get(1)
+        val imdbId = Regex("""/tt(\d+)""").find(url)?.groupValues?.get(1)
+        val seasonEpisode = Regex("""/tv/\d+/(\d+)/(\d+)""").find(url)
+        val season = seasonEpisode?.groupValues?.get(1)
+        val episode = seasonEpisode?.groupValues?.get(2)
+        
+        Log.d(TAG, "📊 TMDB: $tmdbId, IMDb: $imdbId, S${season}E${episode}")
+        
+        // Costruisci l'URL dell'API
+        val apiUrl = when {
+            imdbId != null && season != null && episode != null -> {
+                "https://vixsrc.to/api/tv/tt$imdbId/$season/$episode?lang=it"
             }
-        )
-    }
-
-    private suspend fun getPlaylistLink(url: String): String {
-        Log.d(TAG, "📥 Item url: $url")
-
-        val script = getScript(url)
-        val masterPlaylist = script.getJSONObject("masterPlaylist")
-        val masterPlaylistParams = masterPlaylist.getJSONObject("params")
-        val token = masterPlaylistParams.getString("token")
-        val expires = masterPlaylistParams.getString("expires")
-        val playlistUrl = masterPlaylist.getString("url")
-
-        var masterPlaylistUrl: String
-        val params = "token=${token}&expires=${expires}"
-        masterPlaylistUrl = if ("?b" in playlistUrl) {
-            "${playlistUrl.replace("?b:1", "?b=1")}&$params"
-        } else {
-            "${playlistUrl}?$params"
+            imdbId != null -> {
+                "https://vixsrc.to/api/movie/tt$imdbId?lang=it"
+            }
+            tmdbId != null && season != null && episode != null -> {
+                "https://vixsrc.to/api/tv/$tmdbId/$season/$episode?lang=it"
+            }
+            tmdbId != null -> {
+                "https://vixsrc.to/api/movie/$tmdbId?lang=it"
+            }
+            else -> throw Exception("❌ Cannot extract ID from URL")
         }
-        Log.d(TAG, "🔧 masterPlaylistUrl: $masterPlaylistUrl")
-
-        if (script.optBoolean("canPlayFHD", false)) {
-            masterPlaylistUrl += "&h=1"
-            Log.d(TAG, "📺 FHD enabled")
+        
+        Log.d(TAG, "🌐 API URL: $apiUrl")
+        
+        try {
+            // Chiamata API
+            val response = app.get(apiUrl, referer = mainUrl)
+            val json = JSONObject(response.text)
+            
+            Log.d(TAG, "📄 API Response: ${response.text.take(200)}")
+            
+            // Estrai src
+            val embedPath = json.optString("src", "")
+            
+            if (embedPath.isEmpty()) {
+                Log.e(TAG, "❌ 'src' field not found in API response")
+                throw Exception("No src in API response")
+            }
+            
+            val embedUrl = if (embedPath.startsWith("http")) {
+                embedPath
+            } else {
+                "$mainUrl$embedPath"
+            }
+            
+            Log.d(TAG, "🔗 Embed URL: $embedUrl")
+            
+            // Ora estrai il masterPlaylist dall'embed
+            val playlistUrl = getPlaylistFromEmbed(embedUrl)
+            
+            Log.i(TAG, "✅ FINAL M3U8: $playlistUrl")
+            
+            callback.invoke(
+                newExtractorLink(
+                    source = name,
+                    name = "VixSrc",
+                    url = playlistUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = mainUrl
+                    this.headers = mapOf(
+                        "Origin" to mainUrl,
+                        "Referer" to mainUrl
+                    )
+                }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ API method failed: ${e.message}")
+            
+            // Fallback: prova il metodo diretto (quello vecchio)
+            Log.d(TAG, "🔄 Trying direct method...")
+            val playlistUrl = getPlaylistDirect(url)
+            
+            callback.invoke(
+                newExtractorLink(
+                    source = name,
+                    name = "VixSrc (Direct)",
+                    url = playlistUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = mainUrl
+                    this.headers = mapOf(
+                        "Origin" to mainUrl,
+                        "Referer" to mainUrl
+                    )
+                }
+            )
         }
-
-        Log.d(TAG, "✅ Master Playlist URL: $masterPlaylistUrl")
-        return masterPlaylistUrl
     }
-
-    private suspend fun getScript(url: String): JSONObject {
-        Log.d(TAG, "🌐 Fetching: $url")
-        val headers = mutableMapOf(
+    
+    private suspend fun getPlaylistFromEmbed(embedUrl: String): String {
+        Log.d(TAG, "📥 Fetching embed: $embedUrl")
+        
+        val headers = mapOf(
             "Accept" to "*/*",
-            "Alt-Used" to url.toHttpUrl().host,
-            "Connection" to "keep-alive",
-            "Host" to url.toHttpUrl().host,
-            "Referer" to referer!!,
-            "Sec-Fetch-Dest" to "iframe",
-            "Sec-Fetch-Mode" to "navigate",
-            "Sec-Fetch-Site" to "cross-site",
-            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/133.0",
+            "Referer" to mainUrl,
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/133.0"
         )
-
+        
+        val response = app.get(embedUrl, headers = headers)
+        val html = response.text
+        
+        // Cerca window.masterPlaylist DIRETTAMENTE
+        val pattern = Regex("""window\.masterPlaylist\s*=\s*(\{[^}]+\})""")
+        val match = pattern.find(html) ?: throw Exception("masterPlaylist not found in embed")
+        
+        val jsonStr = match.groupValues[1]
+        val json = JSONObject(jsonStr)
+        
+        val playlistUrl = json.getString("url")
+        val params = json.getJSONObject("params")
+        val token = params.getString("token")
+        val expires = params.getString("expires")
+        
+        var finalUrl = if (playlistUrl.contains("?b")) {
+            playlistUrl.replace("?b:1", "?b=1") + "&token=$token&expires=$expires"
+        } else {
+            "$playlistUrl?token=$token&expires=$expires"
+        }
+        
+        if (html.contains("window.canPlayFHD = true")) {
+            finalUrl += "&h=1"
+        }
+        
+        return finalUrl
+    }
+    
+    private suspend fun getPlaylistDirect(url: String): String {
+        Log.d(TAG, "📥 Direct fetch: $url")
+        
+        val headers = mapOf(
+            "Accept" to "*/*",
+            "Referer" to mainUrl,
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/133.0"
+        )
+        
         val response = app.get(url, headers = headers)
         val html = response.text
-        Log.d(TAG, "📄 Response length: ${html.length}")
-
-        // ========== METODO 1: Cerca window.masterPlaylist DIRETTAMENTE ==========
-        Log.d(TAG, "🔍 Trying DIRECT method...")
-        val directPattern = Regex("""window\.masterPlaylist\s*=\s*(\{[^}]+\})""")
-        directPattern.find(html)?.let { match ->
-            val jsonStr = match.groupValues[1]
-            Log.d(TAG, "✅ DIRECT method SUCCESS!")
-            Log.d(TAG, "📋 masterPlaylist: $jsonStr")
-            
-            val canPlayFHD = html.contains("window.canPlayFHD = true")
-            Log.d(TAG, "📺 canPlayFHD: $canPlayFHD")
-            
-            val json = JSONObject()
-            json.put("masterPlaylist", JSONObject(jsonStr))
-            json.put("canPlayFHD", canPlayFHD)
-            return json
+        
+        // Cerca window.masterPlaylist
+        val pattern = Regex("""window\.masterPlaylist\s*=\s*(\{[^}]+\})""")
+        val match = pattern.find(html) ?: throw Exception("masterPlaylist not found")
+        
+        val jsonStr = match.groupValues[1]
+        val json = JSONObject(jsonStr)
+        
+        val playlistUrl = json.getString("url")
+        val params = json.getJSONObject("params")
+        val token = params.getString("token")
+        val expires = params.getString("expires")
+        
+        var finalUrl = if (playlistUrl.contains("?b")) {
+            playlistUrl.replace("?b:1", "?b=1") + "&token=$token&expires=$expires"
+        } else {
+            "$playlistUrl?token=$token&expires=$expires"
         }
-        Log.d(TAG, "❌ DIRECT method failed")
-
-        // ========== METODO 2: Cerca negli script tag (vecchio formato) ==========
-        Log.d(TAG, "🔍 Trying SCRIPT TAG method...")
-        val document = response.document
-        val scripts = document.select("script")
-        Log.d(TAG, "📜 Found ${scripts.size} script tags")
         
-        val script = scripts.find { it.data().contains("masterPlaylist") }?.data()?.replace("\n", "\t")
-        
-        if (script != null) {
-            Log.d(TAG, "✅ SCRIPT TAG method SUCCESS!")
-            val scriptJson = getSanitisedScript(script)
-            Log.d(TAG, "📋 Script Json: $scriptJson")
-            return JSONObject(scriptJson)
+        if (html.contains("window.canPlayFHD = true")) {
+            finalUrl += "&h=1"
         }
-        Log.d(TAG, "❌ SCRIPT TAG method failed")
-
-        throw Exception("❌❌❌ masterPlaylist not found in page!")
-    }
-
-    private fun getSanitisedScript(script: String): String {
-        Log.d(TAG, "🧹 Sanitising script...")
         
-        val parts = Regex("""window\.(\w+)\s*=""")
-            .split(script)
-            .drop(1)
-
-        val keys = Regex("""window\.(\w+)\s*=""")
-            .findAll(script)
-            .map { it.groupValues[1] }
-            .toList()
-        
-        Log.d(TAG, "🔑 Found keys: $keys")
-
-        val jsonObjects = keys.zip(parts).map { (key, value) ->
-            val cleaned = value
-                .replace(";", "")
-                .replace(Regex("""(\{|\[|,)\s*(\w+)\s*:"""), "$1 \"$2\":")
-                .replace(Regex(""",(\s*[}\]])"""), "$1")
-                .trim()
-
-            "\"$key\": $cleaned"
-        }
-        val finalObject =
-            "{\n${jsonObjects.joinToString(",\n")}\n}"
-                .replace("'", "\"")
-
-        Log.d(TAG, "✨ Sanitised complete")
-        return finalObject
+        return finalUrl
     }
 }
