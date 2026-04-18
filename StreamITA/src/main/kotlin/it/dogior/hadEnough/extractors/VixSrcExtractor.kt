@@ -5,13 +5,17 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.newExtractorLink
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import org.json.JSONObject
 
 class VixSrcExtractor : ExtractorApi() {
     override val mainUrl = "https://vixsrc.to"
-    override val name = "VixSrc"
+    override val name = "VixCloud"
     override val requiresReferer = true
     val TAG = "VixSrcExtractor"
+    private var referer: String? = null
 
     override suspend fun getUrl(
         url: String,
@@ -19,53 +23,92 @@ class VixSrcExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        Log.d(TAG, "🎬 URL: $url")
+        this.referer = referer ?: mainUrl
+        Log.d(TAG, "URL: $url")
         
-        val tmdbId = Regex("""/(?:movie|tv)/(\d+)""").find(url)?.groupValues?.get(1)
-        val seasonEpisode = Regex("""/tv/\d+/(\d+)/(\d+)""").find(url)
-        val season = seasonEpisode?.groupValues?.get(1)
-        val episode = seasonEpisode?.groupValues?.get(2)
-        
-        if (tmdbId == null) {
-            Log.e(TAG, "❌ Cannot extract TMDB ID")
-            return
-        }
-        
-        // Costruisci URL API
-        val apiUrl = if (season != null && episode != null) {
-            "$mainUrl/api/tv/$tmdbId/$season/$episode?lang=it"
-        } else {
-            "$mainUrl/api/movie/$tmdbId?lang=it"
-        }
-        
-        Log.d(TAG, "🌐 API: $apiUrl")
-        
-        try {
-            val apiResponse = app.get(apiUrl, referer = mainUrl)
-            
-            // Estrai src usando regex (evita problemi JSON)
-            val srcPattern = Regex(""""src"\s*:\s*"([^"]+)"""")
-            val srcMatch = srcPattern.find(apiResponse.text)
-            
-            if (srcMatch != null) {
-                var embedUrl = srcMatch.groupValues[1].replace("\\/", "/")
-                
-                // Se non è un URL completo, aggiungi mainUrl
-                if (!embedUrl.startsWith("http")) {
-                    embedUrl = "$mainUrl$embedUrl"
-                }
-                
-                Log.i(TAG, "✅ Embed URL: $embedUrl")
-                
-                // PASSA L'EMBED URL A loadExtractor! NON COSTRUIRE PLAYLIST!
-                loadExtractor(embedUrl, mainUrl, subtitleCallback, callback)
-                return
+        val playlistUrl = getPlaylistLink(url)
+        Log.i(TAG, "FINAL M3U8: $playlistUrl")
+
+        callback.invoke(
+            newExtractorLink(
+                source = "VixSrc",
+                name = "Streaming Community - VixSrc",
+                url = playlistUrl,
+                type = ExtractorLinkType.M3U8
+            ) {
+                this.referer = mainUrl
+                this.headers = mapOf(
+                    "Origin" to mainUrl,
+                    "Referer" to mainUrl
+                )
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ API failed: ${e.message}")
+        )
+    }
+
+    private suspend fun getPlaylistLink(url: String): String {
+        val html = fetchHtml(url)
+        val json = extractMasterPlaylist(html)
+        
+        val masterPlaylist = json.getJSONObject("masterPlaylist")
+        val params = masterPlaylist.getJSONObject("params")
+        val token = params.getString("token")
+        val expires = params.getString("expires")
+        val playlistUrl = masterPlaylist.getString("url")
+        
+        var finalUrl = if (playlistUrl.contains("?b")) {
+            playlistUrl.replace("?b:1", "?b=1") + "&token=$token&expires=$expires"
+        } else {
+            "$playlistUrl?token=$token&expires=$expires"
         }
         
-        // Fallback: passa URL originale
-        loadExtractor(url, mainUrl, subtitleCallback, callback)
+        if (json.optBoolean("canPlayFHD", false)) {
+            finalUrl += "&h=1"
+        }
+        
+        return finalUrl
+    }
+
+    private suspend fun fetchHtml(url: String): String {
+        val headers = mapOf(
+            "Accept" to "*/*",
+            "Referer" to mainUrl,
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/133.0"
+        )
+        return app.get(url, headers = headers).text
+    }
+
+    private fun extractMasterPlaylist(html: String): JSONObject {
+        // Cerca window.masterPlaylist DIRETTAMENTE
+        val pattern = Regex("""window\.masterPlaylist\s*=\s*(\{[^}]+\})""")
+        val match = pattern.find(html)
+        
+        if (match != null) {
+            var jsonStr = match.groupValues[1]
+            jsonStr = jsonStr.replace(Regex(""",(\s*[}\]])"""), "$1")
+            jsonStr = jsonStr.replace("'", "\"")
+            
+            val json = JSONObject(jsonStr)
+            val result = JSONObject()
+            result.put("masterPlaylist", json)
+            result.put("canPlayFHD", html.contains("window.canPlayFHD = true"))
+            return result
+        }
+        
+        // Fallback: cerca in window.streams
+        val streamsPattern = Regex("""window\.streams\s*=\s*\[(.*?)\]""")
+        val streamsMatch = streamsPattern.find(html)
+        
+        if (streamsMatch != null) {
+            val urlPattern = Regex(""""url":"([^"]+)"""")
+            val urlMatch = urlPattern.find(streamsMatch.groupValues[1])
+            
+            if (urlMatch != null) {
+                val streamUrl = urlMatch.groupValues[1].replace("\\/", "/")
+                val embedHtml = fetchHtml(streamUrl)
+                return extractMasterPlaylist(embedHtml)
+            }
+        }
+        
+        throw Exception("masterPlaylist not found")
     }
 }
