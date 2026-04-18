@@ -47,12 +47,22 @@ class VixSrcExtractor : ExtractorApi() {
             
             if (srcMatch != null) {
                 val embedPath = srcMatch.groupValues[1].replace("\\/", "/")
-                val playlistUrl = extractFromPath(embedPath)
                 
-                if (playlistUrl != null) {
-                    Log.i(TAG, "✅ Using API method")
-                    // USA loadExtractor invece di callback diretto!
-                    loadExtractor(playlistUrl, mainUrl, subtitleCallback, callback)
+                // Estrai ID e parametri
+                val embedId = Regex("""/embed/(\d+)""").find(embedPath)?.groupValues?.get(1)
+                val token = Regex("""[?&]token=([^&]+)""").find(embedPath)?.groupValues?.get(1)
+                val expires = Regex("""[?&]expires=([^&]+)""").find(embedPath)?.groupValues?.get(1)
+                val canPlayFHD = embedPath.contains("canPlayFHD=1")
+                
+                if (embedId != null && token != null && expires != null) {
+                    // COSTRUISCI URL CON b=1 !!!
+                    var finalUrl = "$mainUrl/playlist/$embedId?b=1&token=$token&expires=$expires"
+                    if (canPlayFHD) {
+                        finalUrl += "&h=1"
+                    }
+                    
+                    Log.i(TAG, "✅ M3U8: $finalUrl")
+                    loadExtractor(finalUrl, mainUrl, subtitleCallback, callback)
                     return
                 }
             }
@@ -65,7 +75,7 @@ class VixSrcExtractor : ExtractorApi() {
             val headers = mapOf(
                 "Accept" to "*/*",
                 "Referer" to mainUrl,
-                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/133.0"
+                "User-Agent" to "Mozilla/5.0"
             )
             
             val response = app.get(url, headers = headers)
@@ -85,29 +95,19 @@ class VixSrcExtractor : ExtractorApi() {
                 val token = params.getString("token")
                 val expires = params.getString("expires")
                 
-                val finalUrl = if (playlistUrl.contains("?b")) {
-                    playlistUrl.replace("?b:1", "?b=1") + "&token=$token&expires=$expires"
-                } else {
-                    "$playlistUrl?token=$token&expires=$expires"
-                }
+                val embedId = Regex("""/playlist/(\d+)""").find(playlistUrl)?.groupValues?.get(1)
                 
-                Log.i(TAG, "✅ Using direct method")
-                // USA loadExtractor!
-                loadExtractor(finalUrl, mainUrl, subtitleCallback, callback)
-                return
+                if (embedId != null) {
+                    // COSTRUISCI URL CON b=1 !!!
+                    val finalUrl = "$mainUrl/playlist/$embedId?b=1&token=$token&expires=$expires"
+                    
+                    Log.i(TAG, "✅ Direct M3U8: $finalUrl")
+                    loadExtractor(finalUrl, mainUrl, subtitleCallback, callback)
+                    return
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Direct method failed: ${e.message}")
+            Log.e(TAG, "❌ Direct failed: ${e.message}")
         }
-    }
-    
-    private fun extractFromPath(embedPath: String): String? {
-        val embedId = Regex("""/embed/(\d+)""").find(embedPath)?.groupValues?.get(1)
-        val token = Regex("""[?&]token=([^&]+)""").find(embedPath)?.groupValues?.get(1)
-        val expires = Regex("""[?&]expires=([^&]+)""").find(embedPath)?.groupValues?.get(1)
-        
-        return if (embedId != null && token != null && expires != null) {
-            "$mainUrl/playlist/$embedId?token=$token&expires=$expires"
-        } else null
     }
 }
