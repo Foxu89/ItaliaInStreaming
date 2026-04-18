@@ -6,7 +6,9 @@ import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.M3u8Helper
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.newExtractorLink
 
 class VixSrcExtractor : ExtractorApi() {
     override val mainUrl = "https://vixsrc.to"
@@ -43,7 +45,23 @@ class VixSrcExtractor : ExtractorApi() {
             
             if (m3u8Url.contains("playlist") && m3u8Url.contains("token")) {
                 Log.i(TAG, "✅ Sniffed: $m3u8Url")
-                M3u8Helper.generateM3u8(name, m3u8Url, mainUrl).forEach(callback)
+                
+                // Restituisci SOLO il master playlist (non le singole qualità)
+                callback.invoke(
+                    newExtractorLink(
+                        source = name,
+                        name = "VixSrc",
+                        url = m3u8Url,
+                        type = ExtractorLinkType.M3U8,
+                        quality = Qualities.P1080.value  // Il master contiene tutte le qualità
+                    ) {
+                        this.referer = mainUrl
+                        this.headers = mapOf(
+                            "Origin" to mainUrl,
+                            "Referer" to mainUrl
+                        )
+                    }
+                )
             } else {
                 Log.e(TAG, "❌ Not a playlist: $m3u8Url")
             }
