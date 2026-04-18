@@ -1,6 +1,5 @@
 package it.dogior.hadEnough.extractors
 
-import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.network.WebViewResolver
@@ -14,7 +13,6 @@ class VixSrcExtractor : ExtractorApi() {
     override val mainUrl = "https://vixsrc.to"
     override val name = "VixSrc"
     override val requiresReferer = true
-    val TAG = "VixSrcExtractor"
 
     override suspend fun getUrl(
         url: String,
@@ -22,8 +20,6 @@ class VixSrcExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        Log.d(TAG, "URL: $url")
-        
         val resolver = WebViewResolver(
             interceptUrl = Regex("""playlist.*token"""),
             useOkhttp = true,
@@ -31,7 +27,6 @@ class VixSrcExtractor : ExtractorApi() {
         )
         
         try {
-            Log.d(TAG, "Loading WebView...")
             val response = app.get(
                 url = url,
                 referer = mainUrl,
@@ -44,28 +39,22 @@ class VixSrcExtractor : ExtractorApi() {
             val m3u8Url = response.url
             
             if (m3u8Url.contains("playlist") && m3u8Url.contains("token")) {
-                Log.i(TAG, "Sniffed: $m3u8Url")
-                
                 callback.invoke(
                     newExtractorLink(
                         source = name,
-                        name = "VixSrc",
+                        name = name,
                         url = m3u8Url,
                         type = ExtractorLinkType.M3U8
                     ) {
                         this.referer = mainUrl
-                        this.quality = Qualities.P1080.value
+                        this.quality = Qualities.Unknown.value
                         this.headers = mapOf(
                             "Origin" to mainUrl,
                             "Referer" to mainUrl
                         )
                     }
                 )
-            } else {
-                Log.e(TAG, "Not a playlist: $m3u8Url")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed: ${e.message}")
-        }
+        } catch (_: Exception) {}
     }
 }
