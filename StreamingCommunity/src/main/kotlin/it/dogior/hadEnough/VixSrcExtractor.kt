@@ -1,4 +1,4 @@
-package it.dogior.hadEnough.extractors
+package it.dogior.hadEnough
 
 import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
