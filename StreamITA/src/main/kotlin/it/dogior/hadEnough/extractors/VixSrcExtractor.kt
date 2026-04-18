@@ -5,7 +5,9 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.loadExtractor
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.newExtractorLink
+import org.json.JSONObject
 
 class VixSrcExtractor : ExtractorApi() {
     override val mainUrl = "https://vixsrc.to"
@@ -13,28 +15,31 @@ class VixSrcExtractor : ExtractorApi() {
     override val requiresReferer = true
     private val TAG = "VixSrcExtractor"
 
+    private val headers = mapOf(
+        "Accept" to "*/*",
+        "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Connection" to "keep-alive",
+        "Referer" to "https://vixsrc.to/",
+        "Origin" to "https://vixsrc.to",
+        "Sec-Fetch-Dest" to "empty",
+        "Sec-Fetch-Mode" to "cors",
+        "Sec-Fetch-Site" to "same-origin",
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    )
+
     override suspend fun getUrl(
         url: String,
         referer: String?,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        Log.d(TAG, "========================================")
-        Log.d(TAG, "getUrl called")
-        Log.d(TAG, "Input URL: $url")
-        Log.d(TAG, "Referer: $referer")
-        Log.d(TAG, "========================================")
-        
         val tmdbId = Regex("""/(?:movie|tv)/(\d+)""").find(url)?.groupValues?.get(1)
-        Log.d(TAG, "Extracted TMDB ID: $tmdbId")
-        
         val seasonEpisode = Regex("""/tv/\d+/(\d+)/(\d+)""").find(url)
         val season = seasonEpisode?.groupValues?.get(1)
         val episode = seasonEpisode?.groupValues?.get(2)
-        Log.d(TAG, "Season: $season, Episode: $episode")
         
         if (tmdbId == null) {
-            Log.e(TAG, "Cannot extract TMDB ID from URL, aborting")
+            Log.e(TAG, "Cannot extract TMDB ID")
             return
         }
         
@@ -44,44 +49,58 @@ class VixSrcExtractor : ExtractorApi() {
             "$mainUrl/api/movie/$tmdbId?lang=it"
         }
         
-        Log.d(TAG, "API URL: $apiUrl")
+        Log.d(TAG, "API: $apiUrl")
         
         try {
-            Log.d(TAG, "Making API request...")
-            val apiResponse = app.get(apiUrl, referer = mainUrl)
-            Log.d(TAG, "API response code: ${apiResponse.code}")
-            Log.d(TAG, "API response length: ${apiResponse.text.length}")
-            Log.d(TAG, "API response preview: ${apiResponse.text.take(300)}")
+            val apiResponse = app.get(apiUrl, headers = headers)
+            val json = JSONObject(apiResponse.text)
+            val src = json.optString("src", "")
             
-            val srcPattern = Regex(""""src"\s*:\s*"([^"]+)"""")
-            val srcMatch = srcPattern.find(apiResponse.text)
-            
-            if (srcMatch != null) {
-                Log.d(TAG, "Src pattern MATCHED")
-                var embedUrl = srcMatch.groupValues[1].replace("\\/", "/")
-                Log.d(TAG, "Raw embed path: $embedUrl")
+            if (src.isNotEmpty()) {
+                val embedUrl = if (src.startsWith("http")) src else "$mainUrl$src"
+                Log.d(TAG, "Embed: $embedUrl")
                 
-                if (!embedUrl.startsWith("http")) {
-                    embedUrl = "$mainUrl$embedUrl"
+                val embedResponse = app.get(embedUrl, headers = headers)
+                val html = embedResponse.text
+                
+                val pattern = Regex("""window\.masterPlaylist\s*=\s*(\{[^}]+\})""")
+                val match = pattern.find(html)
+                
+                if (match != null) {
+                    var jsonStr = match.groupValues[1]
+                    jsonStr = jsonStr.replace(Regex(""",(\s*[}\]])"""), "$1")
+                    jsonStr = jsonStr.replace("'", "\"")
+                    
+                    val data = JSONObject(jsonStr)
+                    val playlistUrl = data.getString("url")
+                    val params = data.getJSONObject("params")
+                    val token = params.getString("token")
+                    val expires = params.getString("expires")
+                    
+                    val finalUrl = if (playlistUrl.contains("?b")) {
+                        playlistUrl.replace("?b:1", "?b=1") + "&token=$token&expires=$expires"
+                    } else {
+                        "$playlistUrl?token=$token&expires=$expires"
+                    }
+                    
+                    Log.d(TAG, "M3U8: $finalUrl")
+                    
+                    callback.invoke(
+                        newExtractorLink(
+                            source = name,
+                            name = "VixSrc",
+                            url = finalUrl,
+                            type = ExtractorLinkType.M3U8
+                        ) {
+                            this.referer = mainUrl
+                            this.headers = headers
+                        }
+                    )
+                    return
                 }
-                Log.d(TAG, "Final embed URL: $embedUrl")
-                Log.d(TAG, "Calling loadExtractor with embed URL...")
-                loadExtractor(embedUrl, mainUrl, subtitleCallback, callback)
-                Log.d(TAG, "loadExtractor called successfully")
-                return
-            } else {
-                Log.w(TAG, "Src pattern NOT MATCHED in API response")
-                Log.w(TAG, "Full API response: ${apiResponse.text}")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "API request exception: ${e.javaClass.simpleName} - ${e.message}")
-            e.printStackTrace()
+            Log.e(TAG, "Error: ${e.message}")
         }
-        
-        Log.d(TAG, "Falling back to direct URL: $url")
-        Log.d(TAG, "Calling loadExtractor with direct URL...")
-        loadExtractor(url, mainUrl, subtitleCallback, callback)
-        Log.d(TAG, "Fallback loadExtractor called")
-        Log.d(TAG, "========================================")
     }
 }
