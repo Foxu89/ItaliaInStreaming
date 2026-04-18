@@ -7,7 +7,6 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONObject
 
 class VixSrcExtractor : ExtractorApi() {
@@ -77,8 +76,7 @@ class VixSrcExtractor : ExtractorApi() {
         return app.get(url, headers = headers).text
     }
 
-    private fun extractMasterPlaylist(html: String): JSONObject {
-        // Cerca window.masterPlaylist DIRETTAMENTE
+    private suspend fun extractMasterPlaylist(html: String): JSONObject {
         val pattern = Regex("""window\.masterPlaylist\s*=\s*(\{[^}]+\})""")
         val match = pattern.find(html)
         
@@ -94,7 +92,6 @@ class VixSrcExtractor : ExtractorApi() {
             return result
         }
         
-        // Fallback: cerca in window.streams
         val streamsPattern = Regex("""window\.streams\s*=\s*\[(.*?)\]""")
         val streamsMatch = streamsPattern.find(html)
         
