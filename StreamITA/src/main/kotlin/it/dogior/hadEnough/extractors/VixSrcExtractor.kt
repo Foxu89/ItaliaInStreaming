@@ -22,7 +22,7 @@ class VixSrcExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        Log.d(TAG, "🎬 URL: $url")
+        Log.d(TAG, "URL: $url")
         
         val resolver = WebViewResolver(
             interceptUrl = Regex("""playlist.*token"""),
@@ -31,7 +31,7 @@ class VixSrcExtractor : ExtractorApi() {
         )
         
         try {
-            Log.d(TAG, "🌐 Loading WebView...")
+            Log.d(TAG, "Loading WebView...")
             val response = app.get(
                 url = url,
                 referer = mainUrl,
@@ -44,18 +44,17 @@ class VixSrcExtractor : ExtractorApi() {
             val m3u8Url = response.url
             
             if (m3u8Url.contains("playlist") && m3u8Url.contains("token")) {
-                Log.i(TAG, "✅ Sniffed: $m3u8Url")
+                Log.i(TAG, "Sniffed: $m3u8Url")
                 
-                // Restituisci SOLO il master playlist (non le singole qualità)
                 callback.invoke(
                     newExtractorLink(
                         source = name,
                         name = "VixSrc",
                         url = m3u8Url,
-                        type = ExtractorLinkType.M3U8,
-                        quality = Qualities.P1080.value  // Il master contiene tutte le qualità
+                        type = ExtractorLinkType.M3U8
                     ) {
                         this.referer = mainUrl
+                        this.quality = Qualities.P1080.value
                         this.headers = mapOf(
                             "Origin" to mainUrl,
                             "Referer" to mainUrl
@@ -63,10 +62,10 @@ class VixSrcExtractor : ExtractorApi() {
                     }
                 )
             } else {
-                Log.e(TAG, "❌ Not a playlist: $m3u8Url")
+                Log.e(TAG, "Not a playlist: $m3u8Url")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed: ${e.message}")
+            Log.e(TAG, "Failed: ${e.message}")
         }
     }
 }
