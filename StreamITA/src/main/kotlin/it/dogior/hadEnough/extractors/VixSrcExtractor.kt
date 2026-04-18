@@ -60,7 +60,7 @@ class VixSrcExtractor : ExtractorApi() {
                 return
             }
             
-            var embedPath = srcMatch.groupValues[1].replace("\\/", "/")
+            val embedPath = srcMatch.groupValues[1].replace("\\/", "/")
             
             // Costruisci URL finale del playlist
             val playlistUrl = buildPlaylistUrl(embedPath)
@@ -86,7 +86,7 @@ class VixSrcExtractor : ExtractorApi() {
         }
     }
     
-    private fun buildPlaylistUrl(embedPath: String): String {
+    private suspend fun buildPlaylistUrl(embedPath: String): String {
         Log.d(TAG, "🔧 Building playlist from: $embedPath")
         
         // Estrai ID dell'embed (es. /embed/695389)
@@ -106,10 +106,7 @@ class VixSrcExtractor : ExtractorApi() {
         
         // Fallback: se non trova i parametri, prova a fetchare l'embed
         Log.d(TAG, "⚠️ Parameters not found in URL, fetching embed...")
-        return fetchEmbedAndExtract(embedPath)
-    }
-    
-    private suspend fun fetchEmbedAndExtract(embedPath: String): String {
+        
         val embedUrl = if (embedPath.startsWith("http")) {
             embedPath
         } else {
@@ -139,13 +136,13 @@ class VixSrcExtractor : ExtractorApi() {
         val json = JSONObject(jsonStr)
         val playlistUrl = json.getString("url")
         val params = json.getJSONObject("params")
-        val token = params.getString("token")
-        val expires = params.getString("expires")
+        val fallbackToken = params.getString("token")
+        val fallbackExpires = params.getString("expires")
         
         return if (playlistUrl.contains("?b")) {
-            playlistUrl.replace("?b:1", "?b=1") + "&token=$token&expires=$expires"
+            playlistUrl.replace("?b:1", "?b=1") + "&token=$fallbackToken&expires=$fallbackExpires"
         } else {
-            "$playlistUrl?token=$token&expires=$expires"
+            "$playlistUrl?token=$fallbackToken&expires=$fallbackExpires"
         }
     }
 }
