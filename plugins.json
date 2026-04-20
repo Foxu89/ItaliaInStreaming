@@ -1,0 +1,25 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/StreamITA.cs3",
+        "status": 1,
+        "version": 43,
+        "name": "StreamITA",
+        "internalName": "StreamITA",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "#1 Plugin Italiano Completo!",
+        "fileSize": 101642,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "Cartoon"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/StreamITA/StreamITA_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-5f9d3f4abf7ce11770f1bfaf629a2e156d27efb06136ad7fdcc1a4ac026ab6db"
+    }
+]
