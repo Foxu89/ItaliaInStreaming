@@ -28,9 +28,10 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import it.dogior.hadEnough.extractors.VixSrcExtractor
+import it.dogior.hadEnough.extractors.VixCloudExtractor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class StreamITA : TmdbProvider() {
     override var name = "StreamITA"
@@ -52,6 +53,14 @@ class StreamITA : TmdbProvider() {
         "Accept" to "application/json"
     )
 
+    // URL RAW del JSON su GitHub
+    private val MAPPING_JSON_URL = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/StreamITA/src/main/kotlin/it/dogior/hadEnough/vixcloud_tmdb_mapping.json"
+
+    // CACHE DEL JSON MAPPING
+    private var mappingCache: JSONObject? = null
+    private var lastCacheTime = 0L
+    private val CACHE_TTL = 3600000L // 1 ora in millisecondi
+
     override val mainPage = mainPageOf(
         "$tmdbAPI/trending/all/day?language=it-IT" to "Tendenze di Oggi",
         "$tmdbAPI/movie/popular?language=it-IT" to "Film Popolari",
@@ -63,6 +72,79 @@ class StreamITA : TmdbProvider() {
         "$tmdbAPI/movie/upcoming?language=it-IT&region=IT" to "Prossime Uscite",
         "$tmdbAPI/tv/on_the_air?language=it-IT" to "Serie TV in Onda",
     )
+
+    // ============================================
+    // CARICAMENTO JSON MAPPING DA GITHUB RAW
+    // ============================================
+    
+    private suspend fun loadMappingJson(): JSONObject? {
+        val currentTime = System.currentTimeMillis()
+        
+        // Usa cache se ancora valida
+        if (mappingCache != null && (currentTime - lastCacheTime) < CACHE_TTL) {
+            Log.d(TAG, "Usando cache JSON (${mappingCache?.optInt("total_movies") ?: 0} film)")
+            return mappingCache
+        }
+        
+        try {
+            Log.d(TAG, "Scaricando JSON da: $MAPPING_JSON_URL")
+            
+            val response = app.get(MAPPING_JSON_URL)
+            if (!response.isSuccessful) {
+                Log.e(TAG, "Errore download JSON: ${response.code}")
+                return mappingCache // Ritorna vecchia cache se disponibile
+            }
+            
+            val content = response.text
+            if (content.isNullOrBlank()) {
+                Log.e(TAG, "JSON vuoto")
+                return mappingCache
+            }
+            
+            mappingCache = JSONObject(content)
+            lastCacheTime = currentTime
+            
+            val totalMovies = mappingCache?.optInt("total_movies") ?: 0
+            val totalTv = mappingCache?.optInt("total_tv") ?: 0
+            Log.d(TAG, "JSON caricato: $totalMovies film, $totalTv serie")
+            
+            return mappingCache
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore caricamento JSON: ${e.message}")
+            return mappingCache // Ritorna vecchia cache in caso di errore
+        }
+    }
+
+    private suspend fun getVixcloudId(tmdbId: String, isMovie: Boolean, season: Int? = null, episode: Int? = null): String? {
+        val json = loadMappingJson() ?: return null
+        
+        return try {
+            if (isMovie) {
+                json.getJSONObject("movies").optJSONObject(tmdbId)?.optString("vixcloud_id")
+            } else {
+                // Per serie TV: cerca seasons -> season -> episode
+                val tvData = json.getJSONObject("tv").optJSONObject(tmdbId)
+                if (season != null && episode != null) {
+                    tvData?.getJSONObject("seasons")
+                        ?.optJSONObject(season.toString())
+                        ?.optString(episode.toString())
+                } else {
+                    // Default: S01E01
+                    tvData?.getJSONObject("seasons")
+                        ?.optJSONObject("1")
+                        ?.optString("1")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore estrazione ID per TMDB $tmdbId: ${e.message}")
+            null
+        }
+    }
+
+    // ============================================
+    // METODI ORIGINALI (invariati)
+    // ============================================
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = "${request.data}&page=$page"
@@ -188,23 +270,47 @@ class StreamITA : TmdbProvider() {
         }
     }
 
+    // ============================================
+    // METODO PRINCIPALE: USA IL JSON PER OTTENERE L'ID VIXCLOUD
+    // ============================================
+
     override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
         val linkData = parseJson<LinkData>(data)
-        val tmdbId = linkData.id ?: return false
+        val tmdbId = linkData.id?.toString() ?: return false
+        
+        Log.d(TAG, "Cercando VixCloud ID per TMDB: $tmdbId (isMovie: ${linkData.isMovie})")
+        
+        // CERCA L'ID VIXCLOUD NEL JSON (da GitHub RAW)
+        val vixcloudId = getVixcloudId(
+            tmdbId = tmdbId,
+            isMovie = linkData.isMovie,
+            season = linkData.season,
+            episode = linkData.episode
+        )
+        
+        if (vixcloudId.isNullOrEmpty()) {
+            Log.w(TAG, "Nessun VixCloud ID trovato nel JSON per TMDB: $tmdbId")
+            return false
+        }
+        
+        Log.d(TAG, "VixCloud ID trovato: $vixcloudId")
+        
+        // COSTRUISCI URL PER L'ESTRATTORE
+        val vixcloudUrl = "https://vixcloud.co/embed/$vixcloudId"
+        Log.d(TAG, "Usando URL: $vixcloudUrl")
+        
         var anySuccess = false
         
         coroutineScope {
             launch {
                 try {
-                    val extractor = VixSrcExtractor()
-                    val url = if (linkData.season == null) {
-                        "https://vixsrc.to/movie/$tmdbId"
-                    } else {
-                        "https://vixsrc.to/tv/$tmdbId/${linkData.season}/${linkData.episode}"
-                    }
-                    extractor.getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
+                    val extractor = VixCloudExtractor()
+                    extractor.getUrl(vixcloudUrl, "https://vixcloud.co/", subtitleCallback, callback)
                     anySuccess = true
-                } catch (_: Exception) {}
+                    Log.d(TAG, "Estrazione completata per $vixcloudId")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Errore estrazione: ${e.message}")
+                }
             }
         }
         
@@ -217,6 +323,7 @@ class StreamITA : TmdbProvider() {
         return if (link.startsWith("/")) "https://image.tmdb.org/t/p/$width$link" else link
     }
 
+    // Data classes (invariate)
     data class Results(@JsonProperty("results") val results: ArrayList<Media>? = arrayListOf())
     data class Media(
         @JsonProperty("id") val id: Int,
