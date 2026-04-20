@@ -1,0 +1,117 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/AnimeSaturn.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "AnimeSaturn",
+        "internalName": "AnimeSaturn",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Anime da AnimeSaturn",
+        "fileSize": 24831,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AnimeSaturn/animesaturn_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-f91e8f4a144841aebfc9309c2ad69df93b311e4a67da25c764b542f2ce772c80"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/GuardaPlay.cs3",
+        "status": 1,
+        "version": 8,
+        "name": "GuardaPlay",
+        "internalName": "GuardaPlay",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Film in Streaming da GuardaPlay",
+        "fileSize": 22555,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "Cartoon",
+            "Documentary"
+        ],
+        "iconUrl": "https://guardaplay.store/wp-content/uploads/2021/05/cropped-Guarda-Flix-192x192.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-9640fc9178d04fe5c0085c476b1724c19145db5fcf4de06f03efd9aa2327a3f4"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/OnlineSerieTV.cs3",
+        "status": 1,
+        "version": 24,
+        "name": "OnlineSerieTV",
+        "internalName": "OnlineSerieTV",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Film e SerieTV da OnlineSerieTV",
+        "fileSize": 35941,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Cartoon",
+            "Anime",
+            "Documentary"
+        ],
+        "iconUrl": "https://onlineserietv.lol/wp-content/uploads/2023/01/cropped-tv-1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-aa1fb41c7587631334cb2da14f8c62254ab28fc730c523d6caea745138bfb0b8"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/StreamCenter.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "StreamCenter",
+        "internalName": "StreamCenter",
+        "authors": [
+            "Italiani"
+        ],
+        "description": "Film, Serie TV, Anime e TV in un unico posto.",
+        "fileSize": 726993,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "Live"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/doGior/doGiorsHadEnough/master/StreamCenter/icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-8076c53025e374b1f7f70aae48c626ad5309557e4f0a5e2b1cde164bd35d1985"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/StreamITA.cs3",
+        "status": 1,
+        "version": 108,
+        "name": "StreamITA",
+        "internalName": "StreamITA",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "#1 Plugin Italiano Completo!",
+        "fileSize": 240906,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "Cartoon"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/StreamITA/StreamITA_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-bee444ac66f89103cb4508427b7cb16891a25642cd93981105f90582261df374"
+    }
+]
