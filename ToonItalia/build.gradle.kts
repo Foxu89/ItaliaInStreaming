@@ -1,5 +1,5 @@
 // use an integer for version numbers
-version = 5
+version = 4
 
 cloudstream {
     // All of these properties are optional, you can safely remove them
@@ -14,7 +14,7 @@ cloudstream {
     * 2: Slow
     * 3: Beta only
     * */
-    status = 1
+    status = 0
 
     tvTypes = listOf("Cartoon","TvSeries", "Movie", "Anime")
 
