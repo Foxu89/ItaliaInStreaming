@@ -1,0 +1,189 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/AnimeSaturn.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "AnimeSaturn",
+        "internalName": "AnimeSaturn",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Anime da AnimeSaturn",
+        "fileSize": 24931,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AnimeSaturn/animesaturn_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-cde1b68cce3bdc6fc16bbff84b93f977e727b16fd0e4bd7e2667d3653aa023cf"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/AnimeUnity.cs3",
+        "status": 1,
+        "version": 19,
+        "name": "AnimeUnity",
+        "internalName": "AnimeUnity",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Anime da AnimeUnity",
+        "fileSize": 40264,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AnimeUnity/animeunity_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-dd12716b979a77e2be60721bfe36f017e2239441e07049afb951cbe402e82df8"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/AutoExtensions.cs3",
+        "status": 3,
+        "version": 3,
+        "name": "AutoExtensions",
+        "internalName": "AutoExtensions",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Plugin that revives some of the extension settings removed from CloudStream.",
+        "fileSize": 25717,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "Others"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AutoExtensions/AutoExtensions_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-3e0a33a66118a86f6171df5908c0bbc11c80a3f607b19d469c5b0d5f6f1abf96"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/OnlineSerieTV.cs3",
+        "status": 1,
+        "version": 4,
+        "name": "OnlineSerieTV",
+        "internalName": "OnlineSerieTV",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Film e SerieTV da OnlineSerieTV",
+        "fileSize": 43878,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Cartoon",
+            "Anime",
+            "Documentary"
+        ],
+        "iconUrl": "https://lingering-truth-455c.diegon7771.workers.dev/wp-content/uploads/2023/01/cropped-tv-1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-e680041090a90dff415a29ddc749fe85a8914945eb63ea613209580631094b22"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/SectionOrganizer.cs3",
+        "status": 3,
+        "version": 5,
+        "name": "SectionOrganizer",
+        "internalName": "SectionOrganizer",
+        "authors": [
+            "RowdyRushya, Phisher98, DieGon"
+        ],
+        "description": "Organizza homepage tra vari plugin",
+        "fileSize": 51321,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "All"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/SectionOrganizer/SectionOrganizer_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-9bf53fcf53b7b8569d584844c3cbe90c97bb1ae5ceb769f15af4ac51d3dddedf"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/SleepGuard.cs3",
+        "status": 3,
+        "version": 7,
+        "name": "SleepGuard",
+        "internalName": "SleepGuard",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Detects inactivity during playback (no touch, no input) and pauses to ask if you're still watching",
+        "fileSize": 29724,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "Others"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/SleepGuard/SleepGuard_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-0ce48b0d2d91fbf8412fe8550a64a5db8ffa01f1b2011339bbe91be5d3331441"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/ToonItalia.cs3",
+        "status": 1,
+        "version": 1,
+        "name": "ToonItalia",
+        "internalName": "ToonItalia",
+        "authors": [
+            "doGior",
+            "DieGon"
+        ],
+        "description": "Film, SerieTV e Anime da ToonItalia",
+        "fileSize": 21647,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Cartoon",
+            "TvSeries",
+            "Movie",
+            "Anime"
+        ],
+        "iconUrl": "https://toonitalia.space/wp-content/uploads/2023/08/favicon.ico",
+        "apiVersion": 1,
+        "fileHash": "sha256-8da55d50a609f46765a07a807e6b94b7a96caa0325a045ef83cb0b9307a241ad"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/WatchParty.cs3",
+        "status": 3,
+        "version": 23,
+        "name": "WatchParty",
+        "internalName": "WatchParty",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "\u26a0\ufe0f BETA \u26a0\ufe0f Watch movies and TV series together in real-time with live chat (Up to 5 users).",
+        "fileSize": 130600,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "Others"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/WatchParty/WatchParty_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-5837fc64b6a847ae4b0ee2b5d14c280b7678e0a4fba93bf78e802bc85a8b3cac"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/Wrapped.cs3",
+        "status": 3,
+        "version": 9,
+        "name": "Wrapped",
+        "internalName": "Wrapped",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Generate your CloudStream Wrapped: track total time, movies/series, your Nerd Rank, and get a shareable summary.",
+        "fileSize": 622512,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "Others"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/Wrapped/Wrapped_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-2e8ff213690e0cdd7fa2e16c4b755ad81bb3ca683372368f89cae94e973e817a"
+    }
+]
