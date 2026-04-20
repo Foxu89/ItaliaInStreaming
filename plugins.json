@@ -1,0 +1,155 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/Cinemacity.cs3",
+        "status": 1,
+        "version": 8,
+        "name": "Cinemacity",
+        "internalName": "Cinemacity",
+        "authors": [
+            "Phisher98"
+        ],
+        "description": "Watch Movies & TvSeries (Multi-Lang/Audio)",
+        "fileSize": 45144,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "en",
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "iconUrl": "https://www.google.com/s2/favicons?domain=cinemacity.cc&sz=%size%",
+        "apiVersion": 1,
+        "fileHash": "sha256-e003575837f7a46bc1c21a480d28232e22e2c633692022872891c71bb73e6e48"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/Loonex.cs3",
+        "status": 1,
+        "version": 5,
+        "name": "Loonex",
+        "internalName": "Loonex",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Cartoni animati e film da Loonex",
+        "fileSize": 23438,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Cartoon"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/Loonex/loonex_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-f697b490e86223dccb4b14bdb26975cee741e751adeb5717f7aa9b56a51aacb1"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/OnlineSerieTV.cs3",
+        "status": 1,
+        "version": 22,
+        "name": "OnlineSerieTV",
+        "internalName": "OnlineSerieTV",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Film e SerieTV da OnlineSerieTV",
+        "fileSize": 28719,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Cartoon",
+            "Anime",
+            "Documentary"
+        ],
+        "iconUrl": "https://lingering-truth-455c.appbeta870.workers.dev/wp-content/uploads/2023/01/cropped-tv-1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-0ccd4dea4bdc0cf3c8a31bc37dcd9274335f13b72425334a35f0672c75c7709e"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/StreamITA.cs3",
+        "status": 1,
+        "version": 108,
+        "name": "StreamITA",
+        "internalName": "StreamITA",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "#1 Plugin Italiano Completo!",
+        "fileSize": 240907,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "Cartoon"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/StreamITA/StreamITA_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-6da8f777aa5756fcfc7fcf5d7e857703d79d1c1ba81c05c4fcfe440aa7f1b2cc"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/Stremio.cs3",
+        "status": 3,
+        "version": 21,
+        "name": "Stremio",
+        "internalName": "Stremio",
+        "authors": [
+            "Hexated, phisher98, DieGon"
+        ],
+        "description": "[!!!] Configurazione\n- StremioX: per utilizzare addons di streaming\n- StremioC: per utilizzare addons di catalogo",
+        "fileSize": 104821,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/Stremio/stremio_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-ac051a4497ff56d0294a924ce123b71a7acfff5cda786b5659997069ecd9b277"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/Torrentio.cs3",
+        "status": 1,
+        "version": 10,
+        "name": "Torrentio",
+        "internalName": "Torrentio",
+        "authors": [
+            "doGior"
+        ],
+        "description": "Torrent da Torrentio",
+        "fileSize": 63401,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Torrent",
+            "Documentary"
+        ],
+        "iconUrl": "https://torrentio.strem.fun/images/logo_v1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-f306dd2a7818d88bb61925608d2a1d7e82ad60a84c44230a4c0afedf2b936930"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/TV.cs3",
+        "status": 1,
+        "version": 4,
+        "name": "TV",
+        "internalName": "TV",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "TV live da TV github repository",
+        "fileSize": 30016,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "Live"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/doGior/doGiorsHadEnough/refs/heads/master/TV/television.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-cdbcc752a4452d13f4b96d7abbcba4797c4a1b9c17b192deff6ed649d8446170"
+    }
+]
