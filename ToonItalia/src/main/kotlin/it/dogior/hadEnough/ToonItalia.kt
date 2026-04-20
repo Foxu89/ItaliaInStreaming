@@ -292,7 +292,7 @@ class ToonItalia : MainAPI() {
                 this.year = year
                 this.posterUrl = poster
                 this.tags = genres
-                addRating(rating)
+                
             }
         } else {
             newMovieLoadResponse(title, url, type,
