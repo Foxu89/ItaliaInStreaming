@@ -34,8 +34,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.Interceptor
 import okhttp3.Response
-import com.lagradost.cloudstream3.network.interceptors.BaseInterceptor
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import java.util.concurrent.CountDownLatch
@@ -43,15 +43,15 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
 // ============================================
-// CLOUDFLARE BYPASS RESOLVER CON SCROLL
+// CLOUDFLARE BYPASS INTERCEPTOR
 // ============================================
 
-class CloudflareBypassResolver : BaseInterceptor() {
+class CloudflareBypassInterceptor : Interceptor {
     
     private var cachedCookies: String? = null
     private val cookieLock = Any()
     
-    override suspend fun intercept(chain: BaseInterceptor.Chain): Response {
+    override fun intercept(chain: Interceptor.Chain): Response {
         val url = chain.request().url.toString()
         
         // Se abbiamo già i cookie, usali per richieste HTTP normali
@@ -67,7 +67,7 @@ class CloudflareBypassResolver : BaseInterceptor() {
         
         // Prima richiesta: usa WebView per bypassare Cloudflare
         Log.d("CloudflareBypass", "🛡️ Bypassando Cloudflare con WebView...")
-        val result = fetchWithWebView(url)
+        val result = runBlocking { fetchWithWebView(url) }
         
         if (result.cookies.isNotBlank()) {
             synchronized(cookieLock) {
@@ -110,22 +110,16 @@ class CloudflareBypassResolver : BaseInterceptor() {
                 override fun onPageFinished(view: WebView?, pageUrl: String?) {
                     Log.d("CloudflareBypass", "WebView caricata: $pageUrl")
                     
-                    // Aspetta 3 secondi per Cloudflare
                     Handler(Looper.getMainLooper()).postDelayed({
-                        // Primo scroll
                         webView.evaluateJavascript("window.scrollTo(0, 100);", null)
                         
                         Handler(Looper.getMainLooper()).postDelayed({
-                            // Secondo scroll
                             webView.evaluateJavascript("window.scrollTo(0, 300);", null)
                             
                             Handler(Looper.getMainLooper()).postDelayed({
-                                // Ottieni cookie
                                 val cookieManager = CookieManager.getInstance()
                                 cookiesObtained = cookieManager.getCookie(url) ?: ""
-                                Log.d("CloudflareBypass", "Cookie: ${cookiesObtained.take(100)}...")
                                 
-                                // Ottieni HTML
                                 webView.evaluateJavascript("document.documentElement.outerHTML") { result ->
                                     pageContent = result?.trim('"')?.replace("\\\"", "\"") ?: ""
                                     webView.stopLoading()
@@ -140,13 +134,10 @@ class CloudflareBypassResolver : BaseInterceptor() {
             
             webView.loadUrl(url)
             
-            // Timeout 15 secondi
             val success = latch.await(15, TimeUnit.SECONDS)
-            
             if (!success) {
                 webView.stopLoading()
                 webView.destroy()
-                Log.e("CloudflareBypass", "Timeout WebView")
             }
             
             continuation.resume(WebViewResult(pageContent, cookiesObtained))
@@ -161,12 +152,16 @@ class CloudflareBypassResolver : BaseInterceptor() {
             val getApplicationMethod = activityThreadClass.getMethod("getApplication")
             getApplicationMethod.invoke(activityThread) as? Context
         } catch (e: Exception) {
-            Log.e("CloudflareBypass", "Failed to get context: ${e.message}")
             null
         }
     }
     
     private data class WebViewResult(val html: String, val cookies: String)
+    
+    // Helper per chiamare suspend da Java
+    private fun <T> runBlocking(block: suspend () -> T): T {
+        return kotlinx.coroutines.runBlocking { block() }
+    }
 }
 
 // ============================================
@@ -181,7 +176,9 @@ class ToonItalia : MainAPI() {
         setOf(TvType.TvSeries, TvType.Movie, TvType.Anime, TvType.AnimeMovie, TvType.Cartoon)
     override val hasMainPage = true
 
-    private val cloudflareBypass = CloudflareBypassResolver()
+    private val client = app.baseClient.newBuilder()
+        .addInterceptor(CloudflareBypassInterceptor())
+        .build()
 
     override val mainPage = mainPageOf(
         mainUrl to "Ultimi Aggiunti",
@@ -190,73 +187,54 @@ class ToonItalia : MainAPI() {
         "${mainUrl}film-anime/" to "Film",
     )
 
-    private suspend fun fetchWithBypass(url: String): String {
-        val response = app.get(
-            url = url,
-            interceptor = cloudflareBypass
-        )
-        return response.body.string()
+    private suspend fun fetch(url: String): String {
+        val response = client.newCall(okhttp3.Request.Builder().url(url).build()).execute()
+        return response.body?.string() ?: ""
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = if (page == 1) {
-            request.data
-        } else {
-            request.data + "page/$page"
-        }
-        
-        val html = fetchWithBypass(url)
+        val url = if (page == 1) request.data else request.data + "page/$page"
+        val html = fetch(url)
         val document = Jsoup.parse(html)
 
         val mainSection = document.select("#main").first()?.children()
         val list: List<SearchResponse> = mainSection?.mapNotNull {
-            if (it.tagName() == "article") {
-                it.toSearchResponse(false)
-            } else {
-                null
-            }
+            if (it.tagName() == "article") it.toSearchResponse(false) else null
         } ?: emptyList()
 
         val pageNumbersIndex = if (page == 1) 1 else 3
-
         val pageNumbers = try {
             document.select("div.nav-links > a.page-numbers")[pageNumbersIndex].text().toInt()
         } catch (e: IndexOutOfBoundsException) {
             0
         }
 
-        val hasNext = page < pageNumbers
-
         return newHomePageResponse(
             HomePageList(request.name, list, false),
-            hasNext
+            page < pageNumbers
         )
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
         try {
-            val html = fetchWithBypass("$mainUrl?s=$query")
+            val html = fetch("$mainUrl?s=$query")
             val document = Jsoup.parse(html)
             val list = document.select("article").mapNotNull {
-                if (it.tagName() == "article") {
-                    it.toSearchResponse(true)
-                } else {
-                    null
-                }
+                if (it.tagName() == "article") it.toSearchResponse(true) else null
             }
             if (list.isNotEmpty()) return list
         } catch (e: Exception) {
             Log.d("ToonItalia", "Ricerca diretta fallita: ${e.message}")
         }
-        
         return braveSearch(query)
     }
 
     private suspend fun braveSearch(query: String): List<SearchResponse> {
         val response = app.get("https://search.brave.com/search?q=${query}+site%3A${mainUrl.toHttpUrl().host}")
         val document = response.document
-        val resultList = document.select("#results")
-        val results = resultList.select(".snippet[data-type=\"web\"]").map { it.selectFirst("a")?.attr("href") }
+        val results = document.select("#results .snippet[data-type=\"web\"]").map { 
+            it.selectFirst("a")?.attr("href") 
+        }
 
         val excludedUrls = listOf(
             mainUrl + "category/anime/",
@@ -267,15 +245,14 @@ class ToonItalia : MainAPI() {
             mainUrl + "lista-serietv-ragazzi/"
         )
 
-        val searchResponseList = results.amap { url ->
+        return results.amap { url ->
             if (url != null && excludedUrls.all { !it.contains(url) }) {
-                val html = fetchWithBypass(url)
+                val html = fetch(url)
                 val r = Jsoup.parse(html)
                 val title = r.select(".entry-title").text().trim()
                 val poster = r.select(".attachment-post-thumbnail").attr("src")
-                val typeFooter = r.select(".cat-links > a:nth-child(1)").text()
-
-                val type = if (typeFooter == "") TvType.Movie else TvType.TvSeries
+                val type = if (r.select(".cat-links > a:nth-child(1)").text() == "") 
+                    TvType.Movie else TvType.TvSeries
 
                 if (type == TvType.TvSeries) {
                     newTvSeriesSearchResponse(title, url, type) { this.posterUrl = poster }
@@ -284,12 +261,10 @@ class ToonItalia : MainAPI() {
                 }
             } else null
         }.filterNotNull()
-        
-        return searchResponseList
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val html = fetchWithBypass(url)
+        val html = fetch(url)
         val response = Jsoup.parse(html)
         
         var title = response.select(".entry-title").text().trim()
@@ -300,11 +275,11 @@ class ToonItalia : MainAPI() {
         }
         val plot = response.select(".entry-content > p:nth-child(2)").text().trim()
         val poster = response.select(".attachment-post-thumbnail").attr("src")
-        val typeFooter = response.select(".cat-links > a:nth-child(1)").text()
-        val type = if (typeFooter == "") TvType.Movie else TvType.TvSeries
+        val type = if (response.select(".cat-links > a:nth-child(1)").text() == "") 
+            TvType.Movie else TvType.TvSeries
         
         return if (type == TvType.TvSeries) {
-            val episodes: List<Episode> = getEpisodes(url)
+            val episodes = getEpisodes(url)
             year = response.select(".no-border > tbody:nth-child(2) > tr:nth-child(3) > td:nth-child(1)")
                 .text().takeLast(4).toIntOrNull()
             val genres = response.select(".no-border > tbody:nth-child(2) > tr:nth-child(1) > td:nth-child(2)")
@@ -317,11 +292,10 @@ class ToonItalia : MainAPI() {
                 this.year = year
                 this.posterUrl = poster
                 this.tags = genres
-                
+                addRating(rating)
             }
         } else {
-            newMovieLoadResponse(
-                title, url, type,
+            newMovieLoadResponse(title, url, type,
                 dataUrl = "$url€${response.select(".entry-content > table:nth-child(5) > tbody:nth-child(2) > tr:nth-child(1) > td > a")}"
             ) {
                 this.plot = plot
@@ -332,14 +306,12 @@ class ToonItalia : MainAPI() {
     }
 
     private suspend fun getEpisodes(url: String): List<Episode> {
-        val html = fetchWithBypass(url)
+        val html = fetch(url)
         val response = Jsoup.parse(html)
-        
         val table = response.select(".table_link > thead:nth-child(2)")
         var season: Int? = 1
-        val rows = table.select("tr")
         
-        return rows.mapNotNull {
+        return table.select("tr").mapNotNull {
             if (it.childrenSize() == 0) {
                 null
             } else if (it.childrenSize() == 1) {
@@ -363,8 +335,7 @@ class ToonItalia : MainAPI() {
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         val linkData = data.split("€")
-        val episodeLinks = linkData[1]
-        val soup = Jsoup.parse(episodeLinks)
+        val soup = Jsoup.parse(linkData[1])
         soup.select("a").forEach {
             val link = it.attr("href")
             if (link.contains("uprot")) {
@@ -383,12 +354,10 @@ class ToonItalia : MainAPI() {
 
     private suspend fun bypassUprot(link: String): String? {
         val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
-        val headers = mapOf(
+        val response = app.get(updatedLink, headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-        )
-        val response = app.get(updatedLink, headers = headers, timeout = 10_000)
-        val document = Jsoup.parse(response.body.string())
-        return document.selectFirst("a")?.attr("href")
+        ), timeout = 10_000)
+        return Jsoup.parse(response.body.string()).selectFirst("a")?.attr("href")
     }
 
     private fun Element.toSearchResponse(fromSearch: Boolean): SearchResponse {
