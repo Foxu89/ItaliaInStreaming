@@ -1,7 +1,6 @@
 package it.dogior.hadEnough
 
 import android.annotation.SuppressLint
-import android.app.Application
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -35,49 +34,69 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.Response
+import com.lagradost.cloudstream3.network.interceptors.BaseInterceptor
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
-class ToonItalia : MainAPI() {
-    override var mainUrl = "https://toonitalia.green/"
-    override var name = "ToonItalia"
-    override var lang = "it"
-    override val supportedTypes =
-        setOf(TvType.TvSeries, TvType.Movie, TvType.Anime, TvType.AnimeMovie, TvType.Cartoon)
-    override val hasMainPage = true
+// ============================================
+// CLOUDFLARE BYPASS RESOLVER CON SCROLL
+// ============================================
 
-    // Cookie di sessione dopo bypass Cloudflare
-    private var sessionCookies: String? = null
+class CloudflareBypassResolver : BaseInterceptor() {
+    
+    private var cachedCookies: String? = null
     private val cookieLock = Any()
     
-    // Flag per sapere se abbiamo già bypassato Cloudflare
-    private var cloudflareBypassed = false
-
-    override val mainPage = mainPageOf(
-        mainUrl to "Ultimi Aggiunti",
-        "${mainUrl}category/kids/" to "Serie Tv",
-        "${mainUrl}category/anime/" to "Anime",
-        "${mainUrl}film-anime/" to "Film",
-    )
-
-    // ============================================
-    // BYPASS CLOUDFLARE CON WEBVIEW
-    // ============================================
+    override suspend fun intercept(chain: BaseInterceptor.Chain): Response {
+        val url = chain.request().url.toString()
+        
+        // Se abbiamo già i cookie, usali per richieste HTTP normali
+        synchronized(cookieLock) {
+            if (cachedCookies != null) {
+                val request = chain.request().newBuilder()
+                    .addHeader("Cookie", cachedCookies!!)
+                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
+                    .build()
+                return chain.proceed(request)
+            }
+        }
+        
+        // Prima richiesta: usa WebView per bypassare Cloudflare
+        Log.d("CloudflareBypass", "🛡️ Bypassando Cloudflare con WebView...")
+        val result = fetchWithWebView(url)
+        
+        if (result.cookies.isNotBlank()) {
+            synchronized(cookieLock) {
+                cachedCookies = result.cookies
+            }
+            Log.d("CloudflareBypass", "✅ Cloudflare bypassato! Cookie salvati.")
+        }
+        
+        return Response.Builder()
+            .request(chain.request())
+            .protocol(okhttp3.Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK")
+            .body(okhttp3.ResponseBody.create(null, result.html))
+            .build()
+    }
     
-    private suspend fun bypassCloudflare(): String = withContext(Dispatchers.Main) {
+    @SuppressLint("SetJavaScriptEnabled")
+    private suspend fun fetchWithWebView(url: String): WebViewResult = withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { continuation ->
             val latch = CountDownLatch(1)
+            var pageContent = ""
             var cookiesObtained = ""
             
             val context = getApplicationContext() ?: run {
-                continuation.resume("")
+                continuation.resume(WebViewResult("", ""))
                 return@suspendCancellableCoroutine
             }
             
-            @SuppressLint("SetJavaScriptEnabled")
             val webView = WebView(context)
             
             webView.settings.apply {
@@ -88,37 +107,49 @@ class ToonItalia : MainAPI() {
             }
             
             webView.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    Log.d("ToonItalia", "WebView caricata: $url")
+                override fun onPageFinished(view: WebView?, pageUrl: String?) {
+                    Log.d("CloudflareBypass", "WebView caricata: $pageUrl")
                     
-                    // Aspetta un po' per Cloudflare
+                    // Aspetta 3 secondi per Cloudflare
                     Handler(Looper.getMainLooper()).postDelayed({
-                        // Scroll per sembrare umano (come in Python!)
+                        // Primo scroll
                         webView.evaluateJavascript("window.scrollTo(0, 100);", null)
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            webView.evaluateJavascript("window.scrollTo(0, 300);", null)
-                        }, 1000)
                         
                         Handler(Looper.getMainLooper()).postDelayed({
-                            // Ottieni i cookie
-                            val cookieManager = CookieManager.getInstance()
-                            cookiesObtained = cookieManager.getCookie(mainUrl) ?: ""
+                            // Secondo scroll
+                            webView.evaluateJavascript("window.scrollTo(0, 300);", null)
                             
-                            Log.d("ToonItalia", "Cookie ottenuti: ${cookiesObtained.take(100)}...")
-                            
-                            webView.stopLoading()
-                            webView.destroy()
-                            latch.countDown()
-                        }, 3000)
-                    }, 5000)
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                // Ottieni cookie
+                                val cookieManager = CookieManager.getInstance()
+                                cookiesObtained = cookieManager.getCookie(url) ?: ""
+                                Log.d("CloudflareBypass", "Cookie: ${cookiesObtained.take(100)}...")
+                                
+                                // Ottieni HTML
+                                webView.evaluateJavascript("document.documentElement.outerHTML") { result ->
+                                    pageContent = result?.trim('"')?.replace("\\\"", "\"") ?: ""
+                                    webView.stopLoading()
+                                    webView.destroy()
+                                    latch.countDown()
+                                }
+                            }, 2000)
+                        }, 1000)
+                    }, 3000)
                 }
             }
             
-            webView.loadUrl(mainUrl)
+            webView.loadUrl(url)
             
-            // Timeout 20 secondi
-            latch.await(20, TimeUnit.SECONDS)
-            continuation.resume(cookiesObtained)
+            // Timeout 15 secondi
+            val success = latch.await(15, TimeUnit.SECONDS)
+            
+            if (!success) {
+                webView.stopLoading()
+                webView.destroy()
+                Log.e("CloudflareBypass", "Timeout WebView")
+            }
+            
+            continuation.resume(WebViewResult(pageContent, cookiesObtained))
         }
     }
     
@@ -128,45 +159,44 @@ class ToonItalia : MainAPI() {
             val currentActivityThreadMethod = activityThreadClass.getMethod("currentActivityThread")
             val activityThread = currentActivityThreadMethod.invoke(null)
             val getApplicationMethod = activityThreadClass.getMethod("getApplication")
-            getApplicationMethod.invoke(activityThread) as? Application
+            getApplicationMethod.invoke(activityThread) as? Context
         } catch (e: Exception) {
-            Log.e("ToonItalia", "Failed to get Application context: ${e.message}")
+            Log.e("CloudflareBypass", "Failed to get context: ${e.message}")
             null
         }
     }
     
-    private suspend fun ensureSessionCookies() {
-        synchronized(cookieLock) {
-            if (sessionCookies != null) return
-        }
-        
-        Log.d("ToonItalia", "🛡️ Bypassando Cloudflare con WebView...")
-        val cookies = bypassCloudflare()
-        
-        if (cookies.isNotBlank()) {
-            sessionCookies = cookies
-            cloudflareBypassed = true
-            Log.d("ToonItalia", "✅ Cloudflare bypassato!")
-        } else {
-            Log.e("ToonItalia", "❌ Fallito bypass Cloudflare")
-        }
-    }
-    
-    private suspend fun fetchWithCookies(url: String): String {
-        ensureSessionCookies()
-        
-        return if (sessionCookies != null) {
-            // Usa cookie salvati
-            app.get(url, headers = mapOf("Cookie" to sessionCookies!!)).body.string()
-        } else {
-            // Fallback senza cookie (probabilmente fallirà)
-            app.get(url).body.string()
-        }
-    }
+    private data class WebViewResult(val html: String, val cookies: String)
+}
 
-    // ============================================
-    // METODI PRINCIPALI (MODIFICATI)
-    // ============================================
+// ============================================
+// TOONITALIA PROVIDER
+// ============================================
+
+class ToonItalia : MainAPI() {
+    override var mainUrl = "https://toonitalia.green/"
+    override var name = "ToonItalia"
+    override var lang = "it"
+    override val supportedTypes =
+        setOf(TvType.TvSeries, TvType.Movie, TvType.Anime, TvType.AnimeMovie, TvType.Cartoon)
+    override val hasMainPage = true
+
+    private val cloudflareBypass = CloudflareBypassResolver()
+
+    override val mainPage = mainPageOf(
+        mainUrl to "Ultimi Aggiunti",
+        "${mainUrl}category/kids/" to "Serie Tv",
+        "${mainUrl}category/anime/" to "Anime",
+        "${mainUrl}film-anime/" to "Film",
+    )
+
+    private suspend fun fetchWithBypass(url: String): String {
+        val response = app.get(
+            url = url,
+            interceptor = cloudflareBypass
+        )
+        return response.body.string()
+    }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = if (page == 1) {
@@ -175,7 +205,7 @@ class ToonItalia : MainAPI() {
             request.data + "page/$page"
         }
         
-        val html = fetchWithCookies(url)
+        val html = fetchWithBypass(url)
         val document = Jsoup.parse(html)
 
         val mainSection = document.select("#main").first()?.children()
@@ -204,6 +234,21 @@ class ToonItalia : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
+        try {
+            val html = fetchWithBypass("$mainUrl?s=$query")
+            val document = Jsoup.parse(html)
+            val list = document.select("article").mapNotNull {
+                if (it.tagName() == "article") {
+                    it.toSearchResponse(true)
+                } else {
+                    null
+                }
+            }
+            if (list.isNotEmpty()) return list
+        } catch (e: Exception) {
+            Log.d("ToonItalia", "Ricerca diretta fallita: ${e.message}")
+        }
+        
         return braveSearch(query)
     }
 
@@ -224,35 +269,27 @@ class ToonItalia : MainAPI() {
 
         val searchResponseList = results.amap { url ->
             if (url != null && excludedUrls.all { !it.contains(url) }) {
-                val r = app.get(url).document
+                val html = fetchWithBypass(url)
+                val r = Jsoup.parse(html)
                 val title = r.select(".entry-title").text().trim()
                 val poster = r.select(".attachment-post-thumbnail").attr("src")
                 val typeFooter = r.select(".cat-links > a:nth-child(1)").text()
 
-                val type = if (typeFooter == "") {
-                    TvType.Movie
-                } else {
-                    TvType.TvSeries
-                }
+                val type = if (typeFooter == "") TvType.Movie else TvType.TvSeries
 
                 if (type == TvType.TvSeries) {
-                    newTvSeriesSearchResponse(title, url, type) {
-                        this.posterUrl = poster
-                    }
+                    newTvSeriesSearchResponse(title, url, type) { this.posterUrl = poster }
                 } else {
-                    newMovieSearchResponse(title, url, type) {
-                        this.posterUrl = poster
-                    }
+                    newMovieSearchResponse(title, url, type) { this.posterUrl = poster }
                 }
-            } else {
-                null
-            }
+            } else null
         }.filterNotNull()
+        
         return searchResponseList
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val html = fetchWithCookies(url)
+        val html = fetchWithBypass(url)
         val response = Jsoup.parse(html)
         
         var title = response.select(".entry-title").text().trim()
@@ -264,38 +301,27 @@ class ToonItalia : MainAPI() {
         val plot = response.select(".entry-content > p:nth-child(2)").text().trim()
         val poster = response.select(".attachment-post-thumbnail").attr("src")
         val typeFooter = response.select(".cat-links > a:nth-child(1)").text()
-        val type = if (typeFooter == "") {
-            TvType.Movie
-        } else {
-            TvType.TvSeries
-        }
+        val type = if (typeFooter == "") TvType.Movie else TvType.TvSeries
+        
         return if (type == TvType.TvSeries) {
             val episodes: List<Episode> = getEpisodes(url)
-            year =
-                response.select(".no-border > tbody:nth-child(2) > tr:nth-child(3) > td:nth-child(1)")
-                    .text().takeLast(4).toIntOrNull()
-            val genres =
-                response.select(".no-border > tbody:nth-child(2) > tr:nth-child(1) > td:nth-child(2)")
-                    .text().substringAfterLast("Genere: ").split(',')
-            val rating =
-                response.select(".no-border > tbody:nth-child(2) > tr:nth-child(4) > td:nth-child(1)")
-                    .text().substringAfterLast("Voto: ")
-            newTvSeriesLoadResponse(
-                title,
-                url,
-                type,
-                episodes
-            ) {
+            year = response.select(".no-border > tbody:nth-child(2) > tr:nth-child(3) > td:nth-child(1)")
+                .text().takeLast(4).toIntOrNull()
+            val genres = response.select(".no-border > tbody:nth-child(2) > tr:nth-child(1) > td:nth-child(2)")
+                .text().substringAfterLast("Genere: ").split(',')
+            val rating = response.select(".no-border > tbody:nth-child(2) > tr:nth-child(4) > td:nth-child(1)")
+                .text().substringAfterLast("Voto: ")
+            
+            newTvSeriesLoadResponse(title, url, type, episodes) {
                 this.plot = plot
                 this.year = year
                 this.posterUrl = poster
                 this.tags = genres
+                addRating(rating)
             }
         } else {
             newMovieLoadResponse(
-                title,
-                url,
-                type,
+                title, url, type,
                 dataUrl = "$url€${response.select(".entry-content > table:nth-child(5) > tbody:nth-child(2) > tr:nth-child(1) > td > a")}"
             ) {
                 this.plot = plot
@@ -306,13 +332,14 @@ class ToonItalia : MainAPI() {
     }
 
     private suspend fun getEpisodes(url: String): List<Episode> {
-        val html = fetchWithCookies(url)
+        val html = fetchWithBypass(url)
         val response = Jsoup.parse(html)
         
         val table = response.select(".table_link > thead:nth-child(2)")
         var season: Int? = 1
         val rows = table.select("tr")
-        val episodes: List<Episode> = rows.mapNotNull {
+        
+        return rows.mapNotNull {
             if (it.childrenSize() == 0) {
                 null
             } else if (it.childrenSize() == 1) {
@@ -327,8 +354,6 @@ class ToonItalia : MainAPI() {
                 }
             }
         }
-
-        return episodes
     }
 
     override suspend fun loadLinks(
@@ -358,23 +383,16 @@ class ToonItalia : MainAPI() {
 
     private suspend fun bypassUprot(link: String): String? {
         val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
-
         val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
         )
-
         val response = app.get(updatedLink, headers = headers, timeout = 10_000)
-        val responseBody = response.body.string()
-        val document = Jsoup.parse(responseBody)
-        Log.d("CB01:Uprot", document.select("a").toString())
-        val maxstreamUrl = document.selectFirst("a")?.attr("href")
-
-        return maxstreamUrl
+        val document = Jsoup.parse(response.body.string())
+        return document.selectFirst("a")?.attr("href")
     }
 
     private fun Element.toSearchResponse(fromSearch: Boolean): SearchResponse {
         val title = this.select("h2 > a").text().trim().replace(Regex(""" ?[-–]? ?\d{4}$"""), "")
-
         val url = this.select("h2 > a").attr("href")
         val footer = this.select("footer > span > a").text()
 
@@ -386,29 +404,19 @@ class ToonItalia : MainAPI() {
                 TvType.Movie
             }
         } else {
-            if (footer != "") {
-                TvType.TvSeries
-            } else {
-                TvType.Movie
-            }
+            if (footer != "") TvType.TvSeries else TvType.Movie
         }
 
         val posterUrl = if (fromSearch) {
-            this.select("header:nth-child(1) > div:nth-child(2) > p:nth-child(1) > a:nth-child(1) > img:nth-child(1)")
-                .attr("src")
+            this.select("header:nth-child(1) > div:nth-child(2) > p:nth-child(1) > a:nth-child(1) > img:nth-child(1)").attr("src")
         } else {
-            this.select("header:nth-child(1) > p:nth-child(2) > a:nth-child(1) > img:nth-child(1)")
-                .attr("src")
+            this.select("header:nth-child(1) > p:nth-child(2) > a:nth-child(1) > img:nth-child(1)").attr("src")
         }
 
         return if (type == TvType.TvSeries) {
-            newTvSeriesSearchResponse(title, url, type) {
-                this.posterUrl = posterUrl
-            }
+            newTvSeriesSearchResponse(title, url, type) { this.posterUrl = posterUrl }
         } else {
-            newMovieSearchResponse(title, url, type) {
-                this.posterUrl = posterUrl
-            }
+            newMovieSearchResponse(title, url, type) { this.posterUrl = posterUrl }
         }
     }
 }
