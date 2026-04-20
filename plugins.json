@@ -1,0 +1,174 @@
+[
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/AnimeSaturn.cs3",
+        "status": 1,
+        "version": 6,
+        "name": "AnimeSaturn",
+        "internalName": "AnimeSaturn",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Anime da AnimeSaturn",
+        "fileSize": 24831,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "AnimeMovie",
+            "Anime",
+            "OVA"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AnimeSaturn/animesaturn_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-f91e8f4a144841aebfc9309c2ad69df93b311e4a67da25c764b542f2ce772c80"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/DiscordRPC.cs3",
+        "status": 3,
+        "version": 10,
+        "name": "DiscordRPC",
+        "internalName": "DiscordRPC",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Shows what you are watching on CloudStream as a Discord Rich Presence. Needs your Discord user token, handled only on-device.",
+        "fileSize": 45874,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "Others"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/DiscordRPC/DiscordRPC_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-89d79e448f45a22dd6c9309feaacaaf434a1277064106fd8717eec772f79831e"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/GuardaPlay.cs3",
+        "status": 1,
+        "version": 8,
+        "name": "GuardaPlay",
+        "internalName": "GuardaPlay",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Film in Streaming da GuardaPlay",
+        "fileSize": 22555,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "Cartoon",
+            "Documentary"
+        ],
+        "iconUrl": "https://guardaplay.store/wp-content/uploads/2021/05/cropped-Guarda-Flix-192x192.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-9640fc9178d04fe5c0085c476b1724c19145db5fcf4de06f03efd9aa2327a3f4"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/OnlineSerieTV.cs3",
+        "status": 1,
+        "version": 24,
+        "name": "OnlineSerieTV",
+        "internalName": "OnlineSerieTV",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Film e SerieTV da OnlineSerieTV",
+        "fileSize": 35941,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Cartoon",
+            "Anime",
+            "Documentary"
+        ],
+        "iconUrl": "https://onlineserietv.lol/wp-content/uploads/2023/01/cropped-tv-1.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-aa1fb41c7587631334cb2da14f8c62254ab28fc730c523d6caea745138bfb0b8"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/StreamCenter.cs3",
+        "status": 1,
+        "version": 10,
+        "name": "StreamCenter",
+        "internalName": "StreamCenter",
+        "authors": [
+            "Italiani"
+        ],
+        "description": "Film, Serie TV, Anime e TV in un unico posto.",
+        "fileSize": 727401,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "Live"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/doGior/doGiorsHadEnough/master/StreamCenter/icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-b546168be9464c97cbf995811f9abfabb8ef99c01c85366c7f9581ad54e2e2a4"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/StreamITA.cs3",
+        "status": 1,
+        "version": 108,
+        "name": "StreamITA",
+        "internalName": "StreamITA",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "#1 Plugin Italiano Completo!",
+        "fileSize": 240904,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "language": "it",
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "Cartoon"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/StreamITA/StreamITA_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-949e9144de29f5b4460c32d49d4c305bd9679c18f5eb0a0ad4a8e711f22b24df"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/SyncStream.cs3",
+        "status": 3,
+        "version": 10,
+        "name": "SyncStream",
+        "internalName": "SyncStream",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "Sincronizza Cloudstream tra dispositivi",
+        "fileSize": 79184,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "Others"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/SyncStream/SyncStream_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-79f043fcf324d3d17844bfccab6e73fdfc7b0179f3bb85d836118f61d6a38eb7"
+    },
+    {
+        "url": "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/builds/WatchParty.cs3",
+        "status": 3,
+        "version": 6,
+        "name": "WatchParty",
+        "internalName": "WatchParty",
+        "authors": [
+            "DieGon"
+        ],
+        "description": "\u26a0\ufe0f BETA \u26a0\ufe0f Watch movies and TV series together in real-time with live chat (Up to 5 users).",
+        "fileSize": 90860,
+        "repositoryUrl": "https://github.com/Foxu89/ItaliaInStreaming",
+        "tvTypes": [
+            "Others"
+        ],
+        "iconUrl": "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/WatchParty/WatchParty_icon.png",
+        "apiVersion": 1,
+        "fileHash": "sha256-9e62e10a072507de5efbfec455ebab83f2ffdcfa8a88a4113ae547ab86319311"
+    }
+]
