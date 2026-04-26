@@ -94,7 +94,22 @@ class StreamITA : TmdbProvider() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val data = parseJson<Data>(url)
+        // Gestisce sia JSON Data (ricerca/home) che URL TMDB diretta (raccomandazioni)
+        val data: Data = try {
+            parseJson<Data>(url)
+        } catch (_: Exception) {
+            val tmdbRegex = Regex("""themoviedb\.org/(movie|tv)/(\d+)""")
+            val match = tmdbRegex.find(url)
+            if (match != null) {
+                val type = match.groupValues[1]
+                val id = match.groupValues[2].toInt()
+                Data(id, type)
+            } else {
+                Log.e(TAG, "URL non riconosciuto: $url")
+                return null
+            }
+        }
+
         val type = if (data.type == "movie") TvType.Movie else TvType.TvSeries
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) {
@@ -222,10 +237,8 @@ class StreamITA : TmdbProvider() {
                         if (response.isSuccessful) {
                             val html = response.text
 
-                            // Estrai il link mixdrop
-                            // Pattern: data-link="...m1xdrop..." oppure data-link="...mixdrop..."
                             val mixDropRegex =
-                                Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)"""", 
+                                Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""", 
                                     RegexOption.IGNORE_CASE)
                             val match = mixDropRegex.find(html)
                             val mixdropLink = match?.groupValues?.get(1)?.trim()
