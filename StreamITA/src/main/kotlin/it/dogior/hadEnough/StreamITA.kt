@@ -28,6 +28,7 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import it.dogior.hadEnough.extractors.DropLoadExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.coroutineScope
@@ -94,7 +95,6 @@ class StreamITA : TmdbProvider() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        // Gestisce sia JSON Data (ricerca/home) che URL TMDB diretta (raccomandazioni)
         val data: Data = try {
             parseJson<Data>(url)
         } catch (_: Exception) {
@@ -224,9 +224,55 @@ class StreamITA : TmdbProvider() {
 
         coroutineScope {
             // =============================================
-            // SOLO FILM: MixDrop via guardahd.stream
+            // SOLO FILM: DropLoad + MixDrop + VixSrc
             // =============================================
             if (linkData.isMovie && linkData.imdbId != null) {
+                // --- DropLoad ---
+                launch {
+                    try {
+                        val guardahdUrl =
+                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
+                        Log.d(TAG, "Film: cerco link DropLoad da $guardahdUrl")
+
+                        val response = app.get(guardahdUrl)
+                        if (response.isSuccessful) {
+                            val html = response.text
+
+                            val dropRegex = Regex(
+                                """data-link\s*=\s*"(//[^"]*dr0pstream[^"]*|https?://[^"]*dr0pstream[^"]*)""",
+                                RegexOption.IGNORE_CASE
+                            )
+                            val dropMatch = dropRegex.find(html)
+                            val droploadLink = dropMatch?.groupValues?.get(1)?.trim()
+
+                            if (droploadLink != null) {
+                                val fullLink = if (droploadLink.startsWith("//")) {
+                                    "https:$droploadLink"
+                                } else {
+                                    droploadLink
+                                }
+                                Log.d(TAG, "DropLoad link trovato: $fullLink")
+
+                                val extractor = DropLoadExtractor()
+                                extractor.getUrl(
+                                    fullLink,
+                                    "https://guardahd.stream/",
+                                    subtitleCallback,
+                                    callback
+                                )
+                                anySuccess = true
+                            } else {
+                                Log.w(TAG, "Nessun link DropLoad trovato in guardahd.stream")
+                            }
+                        } else {
+                            Log.w(TAG, "guardahd.stream non raggiungibile per DropLoad: ${response.code}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Errore DropLoad: ${e.message}")
+                    }
+                }
+
+                // --- MixDrop ---
                 launch {
                     try {
                         val guardahdUrl =
@@ -237,9 +283,10 @@ class StreamITA : TmdbProvider() {
                         if (response.isSuccessful) {
                             val html = response.text
 
-                            val mixDropRegex =
-                                Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""", 
-                                    RegexOption.IGNORE_CASE)
+                            val mixDropRegex = Regex(
+                                """data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""",
+                                RegexOption.IGNORE_CASE
+                            )
                             val match = mixDropRegex.find(html)
                             val mixdropLink = match?.groupValues?.get(1)?.trim()
 
@@ -263,10 +310,10 @@ class StreamITA : TmdbProvider() {
                                 Log.w(TAG, "Nessun link MixDrop trovato in guardahd.stream")
                             }
                         } else {
-                            Log.w(TAG, "guardahd.stream non raggiungibile: ${response.code}")
+                            Log.w(TAG, "guardahd.stream non raggiungibile per MixDrop: ${response.code}")
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Errore guardahd/mixdrop: ${e.message}")
+                        Log.e(TAG, "Errore MixDrop: ${e.message}")
                     }
                 }
             }
