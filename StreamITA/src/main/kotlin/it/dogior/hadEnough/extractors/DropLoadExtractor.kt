@@ -16,7 +16,6 @@ import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.utils.Qualities
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -74,7 +73,6 @@ class DropLoadExtractor : ExtractorApi() {
                         "Origin" to "https://dr0pstream.com",
                     )
                     this.referer = "https://dr0pstream.com/"
-                    this.quality = Qualities.HD1080.value
                 }
             )
         }
