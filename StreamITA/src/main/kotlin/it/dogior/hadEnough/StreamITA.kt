@@ -28,6 +28,7 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import it.dogior.hadEnough.extractors.MixDropExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -151,7 +152,15 @@ class StreamITA : TmdbProvider() {
                     val seasonDetails = seasonResponse.parsedSafe<MediaDetailEpisodes>()
                     seasonDetails?.episodes?.forEach { eps ->
                         eps.episodeNumber?.let { epNum ->
-                            val linkData = LinkData(id = data.id, title = title, year = year, season = seasonNumber, episode = epNum, isMovie = false, imdbId = imdbId)
+                            val linkData = LinkData(
+                                id = data.id,
+                                title = title,
+                                year = year,
+                                season = seasonNumber,
+                                episode = epNum,
+                                isMovie = false,
+                                imdbId = imdbId
+                            )
                             episodes.add(newEpisode(linkData.toJson()) {
                                 this.name = eps.name ?: "Episodio $epNum"
                                 this.season = seasonNumber
@@ -188,12 +197,70 @@ class StreamITA : TmdbProvider() {
         }
     }
 
-    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
         val linkData = parseJson<LinkData>(data)
         val tmdbId = linkData.id ?: return false
         var anySuccess = false
-        
+
         coroutineScope {
+            // =============================================
+            // SOLO FILM: MixDrop via guardahd.stream
+            // =============================================
+            if (linkData.isMovie && linkData.imdbId != null) {
+                launch {
+                    try {
+                        val guardahdUrl =
+                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
+                        Log.d(TAG, "Film: cerco link MixDrop da $guardahdUrl")
+
+                        val response = app.get(guardahdUrl)
+                        if (response.isSuccessful) {
+                            val html = response.text
+
+                            // Estrai il link mixdrop
+                            // Pattern: data-link="...m1xdrop..." oppure data-link="...mixdrop..."
+                            val mixDropRegex =
+                                Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)"""", 
+                                    RegexOption.IGNORE_CASE)
+                            val match = mixDropRegex.find(html)
+                            val mixdropLink = match?.groupValues?.get(1)?.trim()
+
+                            if (mixdropLink != null) {
+                                val fullLink = if (mixdropLink.startsWith("//")) {
+                                    "https:$mixdropLink"
+                                } else {
+                                    mixdropLink
+                                }
+                                Log.d(TAG, "MixDrop link trovato: $fullLink")
+
+                                val extractor = MixDropExtractor()
+                                extractor.getUrl(
+                                    fullLink,
+                                    "https://guardahd.stream/",
+                                    subtitleCallback,
+                                    callback
+                                )
+                                anySuccess = true
+                            } else {
+                                Log.w(TAG, "Nessun link MixDrop trovato in guardahd.stream")
+                            }
+                        } else {
+                            Log.w(TAG, "guardahd.stream non raggiungibile: ${response.code}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Errore guardahd/mixdrop: ${e.message}")
+                    }
+                }
+            }
+
+            // =============================================
+            // FILM + SERIE TV: VixSrc (sempre)
+            // =============================================
             launch {
                 try {
                     val extractor = VixSrcExtractor()
@@ -204,10 +271,11 @@ class StreamITA : TmdbProvider() {
                     }
                     extractor.getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
                     anySuccess = true
-                } catch (_: Exception) {}
+                } catch (_: Exception) {
+                }
             }
         }
-        
+
         return anySuccess
     }
 
@@ -216,6 +284,8 @@ class StreamITA : TmdbProvider() {
         val width = if (getOriginal) "original" else "w500"
         return if (link.startsWith("/")) "https://image.tmdb.org/t/p/$width$link" else link
     }
+
+    // ==================== DATA CLASSES ====================
 
     data class Results(@JsonProperty("results") val results: ArrayList<Media>? = arrayListOf())
     data class Media(
@@ -229,18 +299,30 @@ class StreamITA : TmdbProvider() {
     )
     data class Data(val id: Int, val type: String? = null)
     data class LinkData(
-        val id: Int? = null, val imdbId: String? = null, val type: String? = null,
-        val season: Int? = null, val episode: Int? = null, val title: String? = null,
-        val year: Int? = null, val isMovie: Boolean = false, val episodeTitle: String? = null,
+        val id: Int? = null,
+        val imdbId: String? = null,
+        val type: String? = null,
+        val season: Int? = null,
+        val episode: Int? = null,
+        val title: String? = null,
+        val year: Int? = null,
+        val isMovie: Boolean = false,
+        val episodeTitle: String? = null,
         val episodeOverview: String? = null,
     )
     data class MediaDetail(
-        @JsonProperty("id") val id: Int? = null, @JsonProperty("imdb_id") val imdbId: String? = null,
-        @JsonProperty("title") val title: String? = null, @JsonProperty("name") val name: String? = null,
-        @JsonProperty("poster_path") val posterPath: String? = null, @JsonProperty("backdrop_path") val backdropPath: String? = null,
-        @JsonProperty("release_date") val releaseDate: String? = null, @JsonProperty("first_air_date") val firstAirDate: String? = null,
-        @JsonProperty("overview") val overview: String? = null, @JsonProperty("runtime") val runtime: Int? = null,
-        @JsonProperty("vote_average") val voteAverage: Any? = null, @JsonProperty("status") val status: String? = null,
+        @JsonProperty("id") val id: Int? = null,
+        @JsonProperty("imdb_id") val imdbId: String? = null,
+        @JsonProperty("title") val title: String? = null,
+        @JsonProperty("name") val name: String? = null,
+        @JsonProperty("poster_path") val posterPath: String? = null,
+        @JsonProperty("backdrop_path") val backdropPath: String? = null,
+        @JsonProperty("release_date") val releaseDate: String? = null,
+        @JsonProperty("first_air_date") val firstAirDate: String? = null,
+        @JsonProperty("overview") val overview: String? = null,
+        @JsonProperty("runtime") val runtime: Int? = null,
+        @JsonProperty("vote_average") val voteAverage: Any? = null,
+        @JsonProperty("status") val status: String? = null,
         @JsonProperty("genres") val genres: ArrayList<Genres>? = arrayListOf(),
         @JsonProperty("seasons") val seasons: ArrayList<Seasons>? = arrayListOf(),
         @JsonProperty("videos") val videos: ResultsTrailer? = null,
@@ -249,20 +331,32 @@ class StreamITA : TmdbProvider() {
         @JsonProperty("external_ids") val externalIds: ExternalIds? = null,
     )
     data class ExternalIds(@JsonProperty("imdb_id") val imdbId: String? = null)
-    data class Seasons(@JsonProperty("season_number") val seasonNumber: Int? = null, @JsonProperty("air_date") val airDate: String? = null)
+    data class Seasons(
+        @JsonProperty("season_number") val seasonNumber: Int? = null,
+        @JsonProperty("air_date") val airDate: String? = null,
+    )
     data class MediaDetailEpisodes(@JsonProperty("episodes") val episodes: ArrayList<EpisodeData>? = arrayListOf())
     data class EpisodeData(
-        @JsonProperty("id") val id: Int? = null, @JsonProperty("name") val name: String? = null,
-        @JsonProperty("overview") val overview: String? = null, @JsonProperty("air_date") val airDate: String? = null,
-        @JsonProperty("still_path") val stillPath: String? = null, @JsonProperty("vote_average") val voteAverage: Double? = null,
-        @JsonProperty("episode_number") val episodeNumber: Int? = null, @JsonProperty("season_number") val seasonNumber: Int? = null,
+        @JsonProperty("id") val id: Int? = null,
+        @JsonProperty("name") val name: String? = null,
+        @JsonProperty("overview") val overview: String? = null,
+        @JsonProperty("air_date") val airDate: String? = null,
+        @JsonProperty("still_path") val stillPath: String? = null,
+        @JsonProperty("vote_average") val voteAverage: Double? = null,
+        @JsonProperty("episode_number") val episodeNumber: Int? = null,
+        @JsonProperty("season_number") val seasonNumber: Int? = null,
         @JsonProperty("runtime") val runtime: Int? = null,
     )
-    data class Trailers(@JsonProperty("key") val key: String? = null, @JsonProperty("type") val type: String? = null)
+    data class Trailers(
+        @JsonProperty("key") val key: String? = null,
+        @JsonProperty("type") val type: String? = null,
+    )
     data class ResultsTrailer(@JsonProperty("results") val results: ArrayList<Trailers>? = arrayListOf())
     data class Cast(
-        @JsonProperty("name") val name: String? = null, @JsonProperty("original_name") val originalName: String? = null,
-        @JsonProperty("character") val character: String? = null, @JsonProperty("profile_path") val profilePath: String? = null,
+        @JsonProperty("name") val name: String? = null,
+        @JsonProperty("original_name") val originalName: String? = null,
+        @JsonProperty("character") val character: String? = null,
+        @JsonProperty("profile_path") val profilePath: String? = null,
     )
     data class Credits(@JsonProperty("cast") val cast: ArrayList<Cast>? = arrayListOf())
     data class ResultsRecommendations(@JsonProperty("results") val results: ArrayList<Media>? = arrayListOf())
