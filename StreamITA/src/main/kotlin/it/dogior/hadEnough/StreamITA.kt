@@ -28,6 +28,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 
+import it.dogior.hadEnough.extractors.CinemaCityExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import it.dogior.hadEnough.extractors.DropLoadExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
@@ -469,6 +470,30 @@ class StreamITA : TmdbProvider() {
                     extractor.getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
                     anySuccess = true
                 } catch (_: Exception) {
+                }
+            }
+
+            // =============================================
+            // FILM + SERIE TV: CinemaCity
+            // =============================================
+            if (linkData.imdbId != null) {
+                launch {
+                    try {
+                        val extractor = CinemaCityExtractor()
+                        val ccReferer = if (linkData.season != null) {
+                            "season=${linkData.season}&episode=${linkData.episode}"
+                        } else {
+                            ""
+                        }
+                        extractor.getUrl(
+                            linkData.imdbId,
+                            ccReferer,
+                            subtitleCallback,
+                            callback
+                        )
+                        anySuccess = true
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
