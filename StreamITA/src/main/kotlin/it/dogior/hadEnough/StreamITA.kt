@@ -36,6 +36,7 @@ import it.dogior.hadEnough.extractors.VidSrcExtractor
 
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class StreamITA : TmdbProvider() {
     override var name = "StreamITA"
@@ -68,12 +69,35 @@ class StreamITA : TmdbProvider() {
         "$tmdbAPI/tv/top_rated?language=it-IT" to "Serie TV più Votate",
         "$tmdbAPI/movie/upcoming?language=it-IT&region=IT" to "Prossime Uscite",
         "$tmdbAPI/tv/on_the_air?language=it-IT" to "Serie TV in Onda",
+        "$tmdbAPI/tv/airing_today?language=it-IT" to "In Onda Oggi",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=213" to "Netflix",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=1024" to "Amazon Prime",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=2739" to "Disney+",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=453&with_original_language=en" to "Hulu",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=2552&with_original_language=en" to "Apple TV+",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=49&with_original_language=en" to "HBO",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=4330" to "Paramount+",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=3353" to "Peacock",
+        "$tmdbAPI/discover/movie?language=it-IT&with_keywords=210024|222243&sort_by=popularity.desc" to "Anime Film",
+        "$tmdbAPI/discover/tv?language=it-IT&with_keywords=210024|222243&sort_by=popularity.desc" to "Anime TV",
+        "$tmdbAPI/discover/tv?language=it-IT&with_original_language=ko" to "Serie Coreane",
+        "$tmdbAPI/discover/tv?language=it-IT&with_genres=99" to "Documentari",
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val url = "${request.data}&page=$page"
-        val response = app.get(url, headers = authHeaders)
-        if (!response.isSuccessful) throw ErrorLoadingException("Errore homepage: ${response.code}")
+        val response = try {
+            withTimeoutOrNull(10000) {
+                app.get(url, headers = authHeaders)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore homepage: ${e.message}")
+            null
+        }
+        
+        if (response == null || !response.isSuccessful) 
+            throw ErrorLoadingException("Errore homepage: ${response?.code ?: "timeout"}")
+            
         val home = response.parsedSafe<Results>()?.results?.mapNotNull { it.toSearchResponse() }
             ?: throw ErrorLoadingException("Risposta JSON non valida")
         return newHomePageResponse(request.name, home)
@@ -122,9 +146,37 @@ class StreamITA : TmdbProvider() {
             "$tmdbAPI/tv/${data.id}?language=it-IT&append_to_response=$append"
         }
 
-        val response = app.get(resUrl, headers = authHeaders)
-        if (!response.isSuccessful) throw ErrorLoadingException("Errore dettagli: ${response.code}")
-        val res = response.parsedSafe<MediaDetail>() ?: throw ErrorLoadingException("Risposta JSON non valida")
+        // Prima prova in italiano con timeout
+        var res = try {
+            withTimeoutOrNull(10000) {
+                val response = app.get(resUrl, headers = authHeaders)
+                if (response.isSuccessful) response.parsedSafe<MediaDetail>() else null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore richiesta IT: ${e.message}")
+            null
+        }
+
+        // Fallback in inglese se fallisce
+        if (res == null) {
+            Log.d(TAG, "Fallback a lingua inglese per ID: ${data.id}")
+            val enUrl = if (type == TvType.Movie) {
+                "$tmdbAPI/movie/${data.id}?language=en-US&append_to_response=$append"
+            } else {
+                "$tmdbAPI/tv/${data.id}?language=en-US&append_to_response=$append"
+            }
+            res = try {
+                withTimeoutOrNull(8000) {
+                    val response = app.get(enUrl, headers = authHeaders)
+                    if (response.isSuccessful) response.parsedSafe<MediaDetail>() else null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Errore richiesta EN: ${e.message}")
+                null
+            }
+        }
+
+        if (res == null) throw ErrorLoadingException("Contenuto non disponibile (404)")
 
         val title = res.title ?: res.name ?: return null
         val poster = getImageUrl(res.posterPath, true)
@@ -165,10 +217,29 @@ class StreamITA : TmdbProvider() {
             seasons.forEach { season ->
                 val seasonNumber = season.seasonNumber ?: return@forEach
                 try {
-                    val seasonUrl = "$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=it-IT"
-                    val seasonResponse = app.get(seasonUrl, headers = authHeaders)
-                    if (!seasonResponse.isSuccessful) return@forEach
-                    val seasonDetails = seasonResponse.parsedSafe<MediaDetailEpisodes>()
+                    // Prova prima in italiano
+                    var seasonDetails: MediaDetailEpisodes? = null
+                    val itUrl = "$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=it-IT"
+                    
+                    val itResponse = withTimeoutOrNull(8000) {
+                        app.get(itUrl, headers = authHeaders)
+                    }
+                    
+                    if (itResponse?.isSuccessful == true) {
+                        seasonDetails = itResponse.parsedSafe<MediaDetailEpisodes>()
+                    }
+                    
+                    // Fallback inglese per le stagioni
+                    if (seasonDetails == null) {
+                        val enUrl = "$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=en-US"
+                        val enResponse = withTimeoutOrNull(5000) {
+                            app.get(enUrl, headers = authHeaders)
+                        }
+                        if (enResponse?.isSuccessful == true) {
+                            seasonDetails = enResponse.parsedSafe<MediaDetailEpisodes>()
+                        }
+                    }
+                    
                     seasonDetails?.episodes?.forEach { eps ->
                         eps.episodeNumber?.let { epNum ->
                             val linkData = LinkData(
