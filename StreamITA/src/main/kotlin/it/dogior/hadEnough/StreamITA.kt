@@ -85,30 +85,23 @@ class StreamITA : TmdbProvider() {
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val url = "${request.data}&page=$page"
-        val response = try {
-            withTimeoutOrNull(10000) {
-                app.get(url, headers = authHeaders)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Errore homepage: ${e.message}")
-            null
+        val resp = app.get("${request.data}&page=$page", headers = authHeaders).body.string()
+        val type = if (request.data.contains("tv")) "tv" else "movie"
+        val parsedResponse = parseJson<Results>(resp).results?.mapNotNull { media ->
+            media.toSearchResponse(type = type)
         }
-        
-        if (response == null || !response.isSuccessful) 
-            throw ErrorLoadingException("Errore homepage: ${response?.code ?: "timeout"}")
-            
-        val home = response.parsedSafe<Results>()?.results?.mapNotNull { it.toSearchResponse() }
-            ?: throw ErrorLoadingException("Risposta JSON non valida")
+
+        val home = parsedResponse ?: throw ErrorLoadingException("Invalid Json response")
         return newHomePageResponse(request.name, home)
     }
 
-    private fun Media.toSearchResponse(): SearchResponse? {
+    private fun Media.toSearchResponse(type: String = "tv"): SearchResponse? {
         if (mediaType == "person") return null
-        val title = title ?: name ?: originalTitle ?: return null
-        val mediaType = mediaType ?: "movie"
-        val tvType = if (mediaType == "movie") TvType.Movie else TvType.TvSeries
-        return newMovieSearchResponse(title, Data(id = id, type = mediaType).toJson(), tvType) {
+        return newMovieSearchResponse(
+            title ?: name ?: originalTitle ?: return null,
+            Data(id = id, type = mediaType ?: type).toJson(),
+            TvType.Movie,  // ← COME TORRENTIO: sempre TvType.Movie!
+        ) {
             this.posterUrl = getImageUrl(posterPath, true)
             this.score = voteAverage?.let { Score.from10(it) }
         }
@@ -124,10 +117,9 @@ class StreamITA : TmdbProvider() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        Log.d(TAG, "load() URL ricevuto: $url")
+        Log.d(TAG, "load() URL: $url")
         
         val data = parseJson<Data>(url)
-        
         val type = if (data.type == "movie") TvType.Movie else TvType.TvSeries
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) {
@@ -136,20 +128,17 @@ class StreamITA : TmdbProvider() {
             "$tmdbAPI/tv/${data.id}?language=it-IT&append_to_response=$append"
         }
 
-        // Prima prova in italiano con timeout
         var res = try {
             withTimeoutOrNull(10000) {
-                val response = app.get(resUrl, headers = authHeaders)
-                if (response.isSuccessful) response.parsedSafe<MediaDetail>() else null
+                app.get(resUrl, headers = authHeaders).parsedSafe<MediaDetail>()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Errore richiesta IT: ${e.message}")
+            Log.e(TAG, "Errore IT: ${e.message}")
             null
         }
 
-        // Fallback in inglese
         if (res == null) {
-            Log.d(TAG, "Fallback a lingua inglese per ID: ${data.id}")
+            Log.d(TAG, "Fallback EN per ID: ${data.id}")
             val enUrl = if (type == TvType.Movie) {
                 "$tmdbAPI/movie/${data.id}?language=en-US&append_to_response=$append"
             } else {
@@ -157,11 +146,10 @@ class StreamITA : TmdbProvider() {
             }
             res = try {
                 withTimeoutOrNull(8000) {
-                    val response = app.get(enUrl, headers = authHeaders)
-                    if (response.isSuccessful) response.parsedSafe<MediaDetail>() else null
+                    app.get(enUrl, headers = authHeaders).parsedSafe<MediaDetail>()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Errore richiesta EN: ${e.message}")
+                Log.e(TAG, "Errore EN: ${e.message}")
                 null
             }
         }
@@ -194,7 +182,7 @@ class StreamITA : TmdbProvider() {
                 this.year = year
                 this.plot = plot
                 this.duration = res.runtime
-                this.score = rating?.let { Score.from10(it) }
+                addScore(rating ?: "0")
                 this.actors = actors
                 this.tags = genres
                 this.recommendations = recommendations
@@ -203,66 +191,35 @@ class StreamITA : TmdbProvider() {
             }
         } else {
             val seasons = res.seasons?.filter { it.seasonNumber != null && it.seasonNumber > 0 } ?: emptyList()
-            val episodes = mutableListOf<Episode>()
-            seasons.forEach { season ->
-                val seasonNumber = season.seasonNumber ?: return@forEach
-                try {
-                    // Prova prima in italiano
-                    var seasonDetails: MediaDetailEpisodes? = null
-                    val itUrl = "$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=it-IT"
-                    
-                    val itResponse = withTimeoutOrNull(8000) {
-                        app.get(itUrl, headers = authHeaders)
+            val episodes = seasons.mapNotNull { season ->
+                app.get(
+                    "$tmdbAPI/tv/${data.id}/season/${season.seasonNumber}?language=it-IT",
+                    headers = authHeaders
+                ).parsedSafe<MediaDetailEpisodes>()?.episodes?.map { eps ->
+                    val linkData = LinkData(
+                        id = data.id, title = title, year = year,
+                        season = eps.seasonNumber, episode = eps.episodeNumber,
+                        isMovie = false, imdbId = imdbId
+                    )
+                    newEpisode(linkData.toJson()) {
+                        this.name = eps.name ?: "Episodio ${eps.episodeNumber}"
+                        this.season = eps.seasonNumber
+                        this.episode = eps.episodeNumber
+                        this.posterUrl = getImageUrl(eps.stillPath)
+                        this.description = eps.overview
+                        this.score = eps.voteAverage?.let { Score.from10(it) }
+                        this.runTime = eps.runtime
+                        this.addDate(eps.airDate)
                     }
-                    
-                    if (itResponse?.isSuccessful == true) {
-                        seasonDetails = itResponse.parsedSafe<MediaDetailEpisodes>()
-                    }
-                    
-                    // Fallback inglese per le stagioni
-                    if (seasonDetails == null) {
-                        val enUrl = "$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=en-US"
-                        val enResponse = withTimeoutOrNull(5000) {
-                            app.get(enUrl, headers = authHeaders)
-                        }
-                        if (enResponse?.isSuccessful == true) {
-                            seasonDetails = enResponse.parsedSafe<MediaDetailEpisodes>()
-                        }
-                    }
-                    
-                    seasonDetails?.episodes?.forEach { eps ->
-                        eps.episodeNumber?.let { epNum ->
-                            val linkData = LinkData(
-                                id = data.id,
-                                title = title,
-                                year = year,
-                                season = seasonNumber,
-                                episode = epNum,
-                                isMovie = false,
-                                imdbId = imdbId
-                            )
-                            episodes.add(newEpisode(linkData.toJson()) {
-                                this.name = eps.name ?: "Episodio $epNum"
-                                this.season = seasonNumber
-                                this.episode = epNum
-                                this.posterUrl = getImageUrl(eps.stillPath)
-                                this.description = eps.overview
-                                this.score = eps.voteAverage?.let { Score.from10(it) }
-                                this.runTime = eps.runtime
-                                this.addDate(eps.airDate)
-                            })
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Stagione $seasonNumber fallita: ${e.message}")
                 }
-            }
+            }.flatten()
+            
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 this.posterUrl = poster
                 this.backgroundPosterUrl = bgPoster
                 this.year = year
                 this.plot = plot
-                this.score = rating?.let { Score.from10(it) }
+                addScore(rating ?: "0")
                 this.actors = actors
                 this.tags = genres
                 this.recommendations = recommendations
@@ -288,178 +245,70 @@ class StreamITA : TmdbProvider() {
         var anySuccess = false
 
         coroutineScope {
-            // =============================================
-            // SOLO FILM: DropLoad + MixDrop + StreamHG
-            // =============================================
             if (linkData.isMovie && linkData.imdbId != null) {
-                // --- DropLoad ---
                 launch {
                     try {
-                        val guardahdUrl =
-                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
-                        Log.d(TAG, "Film: cerco link DropLoad da $guardahdUrl")
-
+                        val guardahdUrl = "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
                         val response = app.get(guardahdUrl)
                         if (response.isSuccessful) {
                             val html = response.text
-
-                            val dropRegex = Regex(
-                                """data-link\s*=\s*"(//[^"]*dr0pstream[^"]*|https?://[^"]*dr0pstream[^"]*)""",
-                                RegexOption.IGNORE_CASE
-                            )
-                            val dropMatch = dropRegex.find(html)
-                            val droploadLink = dropMatch?.groupValues?.get(1)?.trim()
-
-                            if (droploadLink != null) {
-                                val fullLink = if (droploadLink.startsWith("//")) {
-                                    "https:$droploadLink"
-                                } else {
-                                    droploadLink
-                                }
-                                Log.d(TAG, "DropLoad link trovato: $fullLink")
-
-                                val extractor = DropLoadExtractor()
-                                extractor.getUrl(
-                                    fullLink,
-                                    "https://guardahd.stream/",
-                                    subtitleCallback,
-                                    callback
-                                )
+                            val dropMatch = Regex("""data-link\s*=\s*"(//[^"]*dr0pstream[^"]*|https?://[^"]*dr0pstream[^"]*)""", RegexOption.IGNORE_CASE).find(html)
+                            dropMatch?.groupValues?.get(1)?.trim()?.let { link ->
+                                val fullLink = if (link.startsWith("//")) "https:$link" else link
+                                DropLoadExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
                                 anySuccess = true
-                            } else {
-                                Log.w(TAG, "Nessun link DropLoad trovato in guardahd.stream")
                             }
-                        } else {
-                            Log.w(TAG, "guardahd.stream non raggiungibile per DropLoad: ${response.code}")
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Errore DropLoad: ${e.message}")
-                    }
+                    } catch (_: Exception) {}
                 }
-
-                // --- MixDrop ---
                 launch {
                     try {
-                        val guardahdUrl =
-                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
-                        Log.d(TAG, "Film: cerco link MixDrop da $guardahdUrl")
-
+                        val guardahdUrl = "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
                         val response = app.get(guardahdUrl)
                         if (response.isSuccessful) {
                             val html = response.text
-
-                            val mixDropRegex = Regex(
-                                """data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""",
-                                RegexOption.IGNORE_CASE
-                            )
-                            val match = mixDropRegex.find(html)
-                            val mixdropLink = match?.groupValues?.get(1)?.trim()
-
-                            if (mixdropLink != null) {
-                                val fullLink = if (mixdropLink.startsWith("//")) {
-                                    "https:$mixdropLink"
-                                } else {
-                                    mixdropLink
-                                }
-                                Log.d(TAG, "MixDrop link trovato: $fullLink")
-
-                                val extractor = MixDropExtractor()
-                                extractor.getUrl(
-                                    fullLink,
-                                    "https://guardahd.stream/",
-                                    subtitleCallback,
-                                    callback
-                                )
+                            val match = Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""", RegexOption.IGNORE_CASE).find(html)
+                            match?.groupValues?.get(1)?.trim()?.let { link ->
+                                val fullLink = if (link.startsWith("//")) "https:$link" else link
+                                MixDropExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
                                 anySuccess = true
-                            } else {
-                                Log.w(TAG, "Nessun link MixDrop trovato in guardahd.stream")
                             }
-                        } else {
-                            Log.w(TAG, "guardahd.stream non raggiungibile per MixDrop: ${response.code}")
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Errore MixDrop: ${e.message}")
-                    }
+                    } catch (_: Exception) {}
                 }
-
-                // --- StreamHG ---
                 launch {
                     try {
-                        val guardahdUrl =
-                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
-                        Log.d(TAG, "Film: cerco link StreamHG da $guardahdUrl")
-
+                        val guardahdUrl = "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
                         val response = app.get(guardahdUrl)
                         if (response.isSuccessful) {
                             val html = response.text
-
-                            val hgRegex = Regex(
-                                """data-link\s*=\s*"(//[^"]*dhcplay[^"]*|https?://[^"]*dhcplay[^"]*)""",
-                                RegexOption.IGNORE_CASE
-                            )
-                            val hgMatch = hgRegex.find(html)
-                            val streamhgLink = hgMatch?.groupValues?.get(1)?.trim()
-
-                            if (streamhgLink != null) {
-                                val fullLink = if (streamhgLink.startsWith("//")) {
-                                    "https:$streamhgLink"
-                                } else {
-                                    streamhgLink
-                                }
-                                Log.d(TAG, "StreamHG link trovato: $fullLink")
-
-                                val extractor = StreamHGExtractor()
-                                extractor.getUrl(
-                                    fullLink,
-                                    "https://guardahd.stream/",
-                                    subtitleCallback,
-                                    callback
-                                )
+                            val match = Regex("""data-link\s*=\s*"(//[^"]*dhcplay[^"]*|https?://[^"]*dhcplay[^"]*)""", RegexOption.IGNORE_CASE).find(html)
+                            match?.groupValues?.get(1)?.trim()?.let { link ->
+                                val fullLink = if (link.startsWith("//")) "https:$link" else link
+                                StreamHGExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
                                 anySuccess = true
-                            } else {
-                                Log.w(TAG, "Nessun link StreamHG trovato in guardahd.stream")
                             }
-                        } else {
-                            Log.w(TAG, "guardahd.stream non raggiungibile per StreamHG: ${response.code}")
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Errore StreamHG: ${e.message}")
-                    }
+                    } catch (_: Exception) {}
                 }
             }
 
-            // =============================================
-            // FILM + SERIE TV: VixSrc (sempre)
-            // =============================================
             launch {
                 try {
-                    val extractor = VixSrcExtractor()
-                    val url = if (linkData.season == null) {
-                        "https://vixsrc.to/movie/$tmdbId"
-                    } else {
-                        "https://vixsrc.to/tv/$tmdbId/${linkData.season}/${linkData.episode}"
-                    }
-                    extractor.getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
+                    val url = if (linkData.season == null) "https://vixsrc.to/movie/$tmdbId"
+                    else "https://vixsrc.to/tv/$tmdbId/${linkData.season}/${linkData.episode}"
+                    VixSrcExtractor().getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
                     anySuccess = true
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) {}
             }
 
-            // =============================================
-            // FILM + SERIE TV: VidSrc (sempre, solo inglese)
-            // =============================================
             launch {
                 try {
-                    val extractor = VidSrcExtractor()
-                    val url = if (linkData.season == null) {
-                        "https://vidsrc.ru/movie/$tmdbId"
-                    } else {
-                        "https://vidsrc.ru/tv/$tmdbId/${linkData.season}/${linkData.episode}"
-                    }
-                    extractor.getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
+                    val url = if (linkData.season == null) "https://vidsrc.ru/movie/$tmdbId"
+                    else "https://vidsrc.ru/tv/$tmdbId/${linkData.season}/${linkData.episode}"
+                    VidSrcExtractor().getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
                     anySuccess = true
-                } catch (_: Exception) {
-                }
+                } catch (_: Exception) {}
             }
         }
 
