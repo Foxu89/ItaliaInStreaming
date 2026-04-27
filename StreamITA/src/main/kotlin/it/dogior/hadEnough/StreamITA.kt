@@ -182,7 +182,6 @@ class StreamITA : TmdbProvider() {
                 this.year = year
                 this.plot = plot
                 this.duration = res.runtime
-                addScore(rating ?: "0")
                 this.actors = actors
                 this.tags = genres
                 this.recommendations = recommendations
@@ -219,7 +218,6 @@ class StreamITA : TmdbProvider() {
                 this.backgroundPosterUrl = bgPoster
                 this.year = year
                 this.plot = plot
-                addScore(rating ?: "0")
                 this.actors = actors
                 this.tags = genres
                 this.recommendations = recommendations
