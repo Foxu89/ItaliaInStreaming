@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 
 class StreamITA : TmdbProvider() {
     override var name = "StreamITA"
+    override var lang: String = "it"
     override val hasMainPage = true
     override val instantLinkLoading = true
     override val hasQuickSearch = true
