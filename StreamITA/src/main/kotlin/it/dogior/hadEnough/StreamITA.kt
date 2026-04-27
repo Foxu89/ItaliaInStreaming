@@ -28,7 +28,6 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 
-import it.dogior.hadEnough.extractors.CinemaCityExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import it.dogior.hadEnough.extractors.DropLoadExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
@@ -74,9 +73,9 @@ class StreamITA : TmdbProvider() {
         "$tmdbAPI/discover/tv?language=it-IT&with_networks=213" to "Netflix",
         "$tmdbAPI/discover/tv?language=it-IT&with_networks=1024" to "Amazon Prime",
         "$tmdbAPI/discover/tv?language=it-IT&with_networks=2739" to "Disney+",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=453&with_original_language=en" to "Hulu",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=2552&with_original_language=en" to "Apple TV+",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=49&with_original_language=en" to "HBO",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=453" to "Hulu",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=2552" to "Apple TV+",
+        "$tmdbAPI/discover/tv?language=it-IT&with_networks=49" to "HBO",
         "$tmdbAPI/discover/tv?language=it-IT&with_networks=4330" to "Paramount+",
         "$tmdbAPI/discover/tv?language=it-IT&with_networks=3353" to "Peacock",
         "$tmdbAPI/discover/movie?language=it-IT&with_keywords=210024|222243&sort_by=popularity.desc" to "Anime Film",
@@ -119,26 +118,16 @@ class StreamITA : TmdbProvider() {
         val url = "$tmdbAPI/search/multi?language=it-IT&query=$query&include_adult=${settingsForProvider.enableAdult}"
         val response = app.get(url, headers = authHeaders)
         if (!response.isSuccessful) return null
-        return response.parsedSafe<Results>()?.results?.filter { it.mediaType != "person" }
+        return response.parsedSafe<Results>()?.results
+            ?.filter { it.mediaType == "movie" || it.mediaType == "tv" }
             ?.mapNotNull { it.toSearchResponse() }
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        val data: Data = try {
-            parseJson<Data>(url)
-        } catch (_: Exception) {
-            val tmdbRegex = Regex("""themoviedb\.org/(movie|tv)/(\d+)""")
-            val match = tmdbRegex.find(url)
-            if (match != null) {
-                val type = match.groupValues[1]
-                val id = match.groupValues[2].toInt()
-                Data(id, type)
-            } else {
-                Log.e(TAG, "URL non riconosciuto: $url")
-                return null
-            }
-        }
-
+        Log.d(TAG, "load() URL ricevuto: $url")
+        
+        val data = parseJson<Data>(url)
+        
         val type = if (data.type == "movie") TvType.Movie else TvType.TvSeries
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) {
@@ -158,7 +147,7 @@ class StreamITA : TmdbProvider() {
             null
         }
 
-        // Fallback in inglese se fallisce
+        // Fallback in inglese
         if (res == null) {
             Log.d(TAG, "Fallback a lingua inglese per ID: ${data.id}")
             val enUrl = if (type == TvType.Movie) {
@@ -177,7 +166,7 @@ class StreamITA : TmdbProvider() {
             }
         }
 
-        if (res == null) throw ErrorLoadingException("Contenuto non disponibile (404)")
+        if (res == null) throw ErrorLoadingException("Contenuto non disponibile")
 
         val title = res.title ?: res.name ?: return null
         val poster = getImageUrl(res.posterPath, true)
@@ -470,30 +459,6 @@ class StreamITA : TmdbProvider() {
                     extractor.getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
                     anySuccess = true
                 } catch (_: Exception) {
-                }
-            }
-
-            // =============================================
-            // FILM + SERIE TV: CinemaCity
-            // =============================================
-            if (linkData.imdbId != null) {
-                launch {
-                    try {
-                        val extractor = CinemaCityExtractor()
-                        val ccReferer = if (linkData.season != null) {
-                            "season=${linkData.season}&episode=${linkData.episode}"
-                        } else {
-                            ""
-                        }
-                        extractor.getUrl(
-                            linkData.imdbId,
-                            ccReferer,
-                            subtitleCallback,
-                            callback
-                        )
-                        anySuccess = true
-                    } catch (_: Exception) {
-                    }
                 }
             }
         }
