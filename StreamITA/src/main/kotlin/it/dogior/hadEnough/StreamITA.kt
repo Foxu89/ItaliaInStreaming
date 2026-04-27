@@ -1,6 +1,5 @@
 package it.dogior.hadEnough
 
-import com.fasterxml.jackson.annotation.JsonProperty
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.Actor
@@ -28,10 +27,13 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+
+import it.dogior.hadEnough.extractors.VixSrcExtractor
 import it.dogior.hadEnough.extractors.DropLoadExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
 import it.dogior.hadEnough.extractors.StreamHGExtractor
-import it.dogior.hadEnough.extractors.VixSrcExtractor
+import it.dogior.hadEnough.extractors.VidSrcExtractor
+
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
@@ -226,7 +228,7 @@ class StreamITA : TmdbProvider() {
 
         coroutineScope {
             // =============================================
-            // SOLO FILM: DropLoad + MixDrop + StreamHG + VixSrc
+            // SOLO FILM: DropLoad + MixDrop + StreamHG
             // =============================================
             if (linkData.isMovie && linkData.imdbId != null) {
                 // --- DropLoad ---
@@ -381,6 +383,23 @@ class StreamITA : TmdbProvider() {
                 } catch (_: Exception) {
                 }
             }
+
+            // =============================================
+            // FILM + SERIE TV: VidSrc (sempre, solo inglese)
+            // =============================================
+            launch {
+                try {
+                    val extractor = VidSrcExtractor()
+                    val url = if (linkData.season == null) {
+                        "https://vidsrc.ru/movie/$tmdbId"
+                    } else {
+                        "https://vidsrc.ru/tv/$tmdbId/${linkData.season}/${linkData.episode}"
+                    }
+                    extractor.getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
+                    anySuccess = true
+                } catch (_: Exception) {
+                }
+            }
         }
 
         return anySuccess
@@ -391,5 +410,4 @@ class StreamITA : TmdbProvider() {
         val width = if (getOriginal) "original" else "w500"
         return if (link.startsWith("/")) "https://image.tmdb.org/t/p/$width$link" else link
     }
-
 }
