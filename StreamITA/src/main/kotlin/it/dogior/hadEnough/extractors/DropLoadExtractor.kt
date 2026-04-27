@@ -28,7 +28,7 @@ class DropLoadExtractor : ExtractorApi() {
 
     companion object {
         private const val TAG = "DropLoadExtractor"
-        private const val TIMEOUT_SECONDS = 20L
+        private const val TIMEOUT_SECONDS = 15L
 
         private fun getApplicationContext(): Context? {
             return try {
@@ -125,39 +125,6 @@ class DropLoadExtractor : ExtractorApi() {
                             }
 
                             return super.shouldInterceptRequest(view, request)
-                        }
-
-                        override fun onPageFinished(view: WebView?, url: String?) {
-                            // Se dopo il caricamento non abbiamo ancora trovato nulla,
-                            // chiudi e cerca nei dati di pagina
-                            if (!found) {
-                                Handler(Looper.getMainLooper()).postDelayed({
-                                    if (!found) {
-                                        view?.evaluateJavascript("""
-                                            (function() {
-                                                var sources = document.querySelectorAll('source');
-                                                for(var i = 0; i < sources.length; i++) {
-                                                    if(sources[i].src && sources[i].src.includes('m3u8')) {
-                                                        return sources[i].src;
-                                                    }
-                                                }
-                                                return '';
-                                            })();
-                                        """.trimIndent()) { result ->
-                                            val clean = result.trim('"').trim()
-                                            if (clean.isNotEmpty() && clean != "null" && !found) {
-                                                found = true
-                                                extractedUrl = clean
-                                                Log.i(TAG, "M3U8 trovato da DOM: $clean")
-                                                view.stopLoading()
-                                                view.destroy()
-                                                latch.countDown()
-                                                continuation.resume(clean)
-                                            }
-                                        }
-                                    }
-                                }, 5000)
-                            }
                         }
                     }
 
