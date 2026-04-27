@@ -30,6 +30,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import it.dogior.hadEnough.extractors.DropLoadExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
+import it.dogior.hadEnough.extractors.StreamHGExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -225,7 +226,7 @@ class StreamITA : TmdbProvider() {
 
         coroutineScope {
             // =============================================
-            // SOLO FILM: DropLoad + MixDrop + VixSrc
+            // SOLO FILM: DropLoad + MixDrop + StreamHG + VixSrc
             // =============================================
             if (linkData.isMovie && linkData.imdbId != null) {
                 // --- DropLoad ---
@@ -315,6 +316,51 @@ class StreamITA : TmdbProvider() {
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Errore MixDrop: ${e.message}")
+                    }
+                }
+
+                // --- StreamHG ---
+                launch {
+                    try {
+                        val guardahdUrl =
+                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
+                        Log.d(TAG, "Film: cerco link StreamHG da $guardahdUrl")
+
+                        val response = app.get(guardahdUrl)
+                        if (response.isSuccessful) {
+                            val html = response.text
+
+                            val hgRegex = Regex(
+                                """data-link\s*=\s*"(//[^"]*dhcplay[^"]*|https?://[^"]*dhcplay[^"]*)""",
+                                RegexOption.IGNORE_CASE
+                            )
+                            val hgMatch = hgRegex.find(html)
+                            val streamhgLink = hgMatch?.groupValues?.get(1)?.trim()
+
+                            if (streamhgLink != null) {
+                                val fullLink = if (streamhgLink.startsWith("//")) {
+                                    "https:$streamhgLink"
+                                } else {
+                                    streamhgLink
+                                }
+                                Log.d(TAG, "StreamHG link trovato: $fullLink")
+
+                                val extractor = StreamHGExtractor()
+                                extractor.getUrl(
+                                    fullLink,
+                                    "https://guardahd.stream/",
+                                    subtitleCallback,
+                                    callback
+                                )
+                                anySuccess = true
+                            } else {
+                                Log.w(TAG, "Nessun link StreamHG trovato in guardahd.stream")
+                            }
+                        } else {
+                            Log.w(TAG, "guardahd.stream non raggiungibile per StreamHG: ${response.code}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Errore StreamHG: ${e.message}")
                     }
                 }
             }
