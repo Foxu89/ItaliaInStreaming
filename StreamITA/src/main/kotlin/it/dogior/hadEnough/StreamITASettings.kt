@@ -151,12 +151,24 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
 
     private var currentLang: String = sharedPref?.getString(StreamITAPlugin.PREF_LANG, "it-IT") ?: "it-IT"
     private var currentLangPosition: Int = sharedPref?.getInt(StreamITAPlugin.PREF_LANG_POSITION, 0) ?: 0
+    private var currentCacheHours: Int = sharedPref?.getInt(StreamITAPlugin.PREF_CACHE_HOURS, 24) ?: 24
+
+    private val cacheValues = intArrayOf(1, 6, 12, 24, 72, 168)
+    private val cacheDisplay = arrayOf(
+        "1 ora",
+        "6 ore",
+        "12 ore",
+        "1 giorno",
+        "3 giorni",
+        "1 settimana"
+    )
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         view.findViewByName<View>("general_options_card")?.applyOutlineBackground()
 
+        // Setup spinner lingua
         val langs = arrayOf("it-IT", "en-US", "es-ES", "fr-FR", "de-DE")
         val langsDisplay = arrayOf(
             "\uD83C\uDDEE\uD83C\uDDF9  Italiano",
@@ -178,14 +190,60 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
+        // Setup spinner cache
+        val cacheSpinner: Spinner? = view.findViewByName("cache_spinner")
+        cacheSpinner?.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_dropdown_item, cacheDisplay
+        )
+        val cacheIndex = cacheValues.indexOf(currentCacheHours).let { if (it < 0) 3 else it }
+        cacheSpinner?.setSelection(cacheIndex)
+        cacheSpinner?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                currentCacheHours = cacheValues[position]
+            }
+            override fun onNothingSelected(p0: AdapterView<*>?) {}
+        }
+
+        // Cache info
+        updateCacheInfo(view)
+
+        // Pulsante svuota cache
+        view.findViewByName<TextView>("cache_clear_btn")?.setOnClickListener {
+            val cacheDir = requireContext().cacheDir
+            var deletedFiles = 0
+            var deletedSize = 0L
+            cacheDir.listFiles()?.forEach { file ->
+                deletedSize += file.length()
+                file.delete()
+                deletedFiles++
+            }
+            showToast("Cache svuotata: $deletedFiles file, ${deletedSize / 1024 / 1024} MB")
+            updateCacheInfo(view)
+        }
+
+        // Setup save button
         setupSaveButton(view) {
             sharedPref?.edit {
                 putString(StreamITAPlugin.PREF_LANG, currentLang)
                 putInt(StreamITAPlugin.PREF_LANG_POSITION, currentLangPosition)
+                putInt(StreamITAPlugin.PREF_CACHE_HOURS, currentCacheHours)
             }
             showToast("Modifiche in Generali salvate")
             dismiss()
         }
+    }
+
+    private fun updateCacheInfo(view: View) {
+        val cacheDir = requireContext().cacheDir
+        var totalFiles = 0
+        var totalSize = 0L
+        cacheDir.listFiles()?.forEach { file ->
+            totalFiles++
+            totalSize += file.length()
+        }
+        val sizeMB = totalSize / 1024 / 1024
+        view.findViewByName<TextView>("cache_info_text")?.text =
+            "Cache: $totalFiles elementi • $sizeMB MB"
     }
 }
 
