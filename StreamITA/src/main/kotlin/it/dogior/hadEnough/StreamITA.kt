@@ -30,6 +30,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.coroutineScope
+import org.json.JSONObject
 
 class StreamITA(
     private val sharedPref: SharedPreferences?
@@ -56,6 +57,9 @@ class StreamITA(
 
     private val apiLang: String
         get() = sharedPref?.getString(StreamITAPlugin.PREF_LANG, "it-IT") ?: "it-IT"
+
+    private val showLogo: Boolean
+        get() = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_LOGO, false) ?: false
 
     private fun getSectionName(key: String): String {
         val langCode = apiLang.substringBefore("-")
@@ -207,7 +211,6 @@ class StreamITA(
         val parsedResponse = parseJson<Results>(resp).results?.mapNotNull { media ->
             media.toSearchResponse(type = type)
         }
-
         val home = parsedResponse ?: throw ErrorLoadingException("Invalid Json response")
         return newHomePageResponse(request.name, home)
     }
@@ -236,11 +239,9 @@ class StreamITA(
     override suspend fun load(url: String): LoadResponse? {
         Log.d(TAG, "load() URL: $url")
 
-        // Prova prima a parsare come JSON (formato Data)
         val data: Data = try {
             parseJson<Data>(url)
         } catch (_: Exception) {
-            // Fallback: estrai ID da URL diretti TMDB (raccomandazioni)
             val tmdbRegex = Regex("""themoviedb\.org/(movie|tv)/(\d+)""")
             val match = tmdbRegex.find(url)
             if (match != null) {
@@ -298,6 +299,7 @@ class StreamITA(
         val rating = res.voteAverage?.toString()
         val genres = res.genres?.mapNotNull { it.name } ?: emptyList()
         val imdbId = res.imdbId ?: res.externalIds?.imdbId
+        val logoUrl = if (showLogo && data.id != null) fetchTmdbLogoUrl(type, data.id, apiLang) else null
 
         val actors = res.credits?.cast?.take(15)?.mapNotNull { cast ->
             val name = cast.name ?: cast.originalName ?: return@mapNotNull null
@@ -322,6 +324,7 @@ class StreamITA(
                 this.recommendations = recommendations
                 addTrailer(trailer)
                 imdbId?.let { addImdbId(it) }
+                if (logoUrl != null) this.logoUrl = logoUrl
             }
         } else {
             val seasons = res.seasons?.filter { it.seasonNumber != null && it.seasonNumber > 0 } ?: emptyList()
@@ -364,6 +367,7 @@ class StreamITA(
                 }
                 addTrailer(trailer)
                 imdbId?.let { addImdbId(it) }
+                if (logoUrl != null) this.logoUrl = logoUrl
             }
         }
     }
@@ -394,6 +398,77 @@ class StreamITA(
         }
 
         return anySuccess
+    }
+
+    private suspend fun fetchTmdbLogoUrl(
+        type: TvType,
+        tmdbId: Int?,
+        appLangCode: String?
+    ): String? {
+        if (tmdbId == null) return null
+        return try {
+            val appLang = appLangCode?.substringBefore("-")?.lowercase()
+            val url = if (type == TvType.Movie) {
+                "$tmdbAPI/movie/$tmdbId/images"
+            } else {
+                "$tmdbAPI/tv/$tmdbId/images"
+            }
+            val response = app.get(url, headers = authHeaders)
+            if (!response.isSuccessful) return null
+            val jsonText = response.body?.string() ?: return null
+            val json = JSONObject(jsonText)
+            val logos = json.optJSONArray("logos") ?: return null
+            if (logos.length() == 0) return null
+
+            fun logoUrlAt(i: Int): String {
+                val logo = logos.getJSONObject(i)
+                val filePath = logo.optString("file_path", "")
+                return "https://image.tmdb.org/t/p/w500$filePath"
+            }
+
+            fun isSvg(i: Int): Boolean {
+                val logo = logos.getJSONObject(i)
+                val filePath = logo.optString("file_path", "")
+                return filePath.endsWith(".svg", ignoreCase = true)
+            }
+
+            if (!appLang.isNullOrBlank()) {
+                var svgFallback: String? = null
+                for (i in 0 until logos.length()) {
+                    val logo = logos.getJSONObject(i)
+                    if (logo.optString("iso_639_1") == appLang) {
+                        if (isSvg(i)) {
+                            if (svgFallback == null) svgFallback = logoUrlAt(i)
+                        } else {
+                            return logoUrlAt(i)
+                        }
+                    }
+                }
+                if (svgFallback != null) return svgFallback
+            }
+
+            var enSvgFallback: String? = null
+            for (i in 0 until logos.length()) {
+                val logo = logos.getJSONObject(i)
+                if (logo.optString("iso_639_1") == "en") {
+                    if (isSvg(i)) {
+                        if (enSvgFallback == null) enSvgFallback = logoUrlAt(i)
+                    } else {
+                        return logoUrlAt(i)
+                    }
+                }
+            }
+            if (enSvgFallback != null) return enSvgFallback
+
+            for (i in 0 until logos.length()) {
+                if (!isSvg(i)) return logoUrlAt(i)
+            }
+
+            if (logos.length() > 0) logoUrlAt(0) else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error fetching TMDB logo: ${e.message}")
+            null
+        }
     }
 
     private fun getImageUrl(link: String?, getOriginal: Boolean = false): String? {
