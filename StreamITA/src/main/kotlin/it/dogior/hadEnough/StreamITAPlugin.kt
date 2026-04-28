@@ -12,7 +12,7 @@ class StreamITAPlugin : Plugin() {
 
         openSettings = { ctx ->
             val activity = ctx as AppCompatActivity
-            StreamITASettings().show(activity.supportFragmentManager, "StreamITASettings")
+            StreamITASettings(this).show(activity.supportFragmentManager, "StreamITASettings")
         }
     }
 }
