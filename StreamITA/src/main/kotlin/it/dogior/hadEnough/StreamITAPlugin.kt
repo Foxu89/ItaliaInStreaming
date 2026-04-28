@@ -14,6 +14,7 @@ class StreamITAPlugin : Plugin() {
 
         const val PREF_LANG = "lang"
         const val PREF_LANG_POSITION = "lang_position"
+        const val PREF_SHOW_LOGO = "show_logo"
     }
 
     override fun load(context: Context) {
