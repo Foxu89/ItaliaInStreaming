@@ -1,5 +1,7 @@
 package it.dogior.hadEnough
 
+import android.content.res.ResourcesCompat
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -45,6 +47,17 @@ abstract class StreamITABaseSettingsFragment : BottomSheetDialogFragment() {
         val id = res.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
         return findViewById(id)
     }
+
+    // === METODO AGGIUNTO: carica drawable dalle risorse del plugin ===
+    protected fun getDrawable(name: String): Drawable? {
+        val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        return id?.let { ResourcesCompat.getDrawable(res, it, null) }
+    }
+
+    // === METODO AGGIUNTO: applica sfondo outline a una View ===
+    protected fun View.applyOutlineBackground() {
+        this.background = getDrawable("outline")
+    }
 }
 
 class StreamITASettings : StreamITABaseSettingsFragment() {
@@ -58,6 +71,16 @@ class StreamITASettings : StreamITABaseSettingsFragment() {
         val buildInfoId = res.getIdentifier("header_build_info", "id", BuildConfig.LIBRARY_PACKAGE_NAME)
         view.findViewById<TextView>(buildInfoId)?.text =
             "Ultimo aggiornamento: ${BuildConfig.BUILD_COMPLETED_AT_ROME}"
+
+        // === APPLICA SFONDO ALLE CARD ===
+        listOf(
+            "general_settings_card",
+            "extractors_settings_card",
+            "ui_settings_card",
+            "advanced_settings_card"
+        ).forEach { cardName ->
+            view.findViewByName<View>(cardName)?.applyOutlineBackground()
+        }
 
         // Card click listeners
         view.findViewByName<View>("general_settings_card")?.setOnClickListener {
