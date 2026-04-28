@@ -1,6 +1,6 @@
 package it.dogior.hadEnough
 
-import android.content.res.ResourcesCompat
+import androidx.core.content.res.ResourcesCompat
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.LayoutInflater
