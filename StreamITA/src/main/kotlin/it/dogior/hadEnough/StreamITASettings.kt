@@ -111,9 +111,11 @@ class StreamITASettings : StreamITABaseSettingsFragment() {
         view.findViewById<TextView>(buildInfoId)?.text =
             "Ultimo aggiornamento: ${BuildConfig.BUILD_COMPLETED_AT_ROME}"
 
-        // Setup save button
+        // Setup save button - come AnimeUnity: mostra sempre popup riavvio
         setupSaveButton(view) {
-            showToast("Nessuna modifica da salvare")
+            promptRestartAfterSave(
+                "Impostazioni salvate. Vuoi riavviare l'applicazione ora per applicare subito le modifiche?"
+            )
         }
 
         // Applica sfondo alle card
@@ -180,7 +182,7 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
                 putString(StreamITAPlugin.PREF_LANG, currentLang)
                 putInt(StreamITAPlugin.PREF_LANG_POSITION, currentLangPosition)
             }
-            showToast("Lingua salvata: ${langsDisplay[currentLangPosition]}")
+            showToast("Modifiche in Generali salvate")
             dismiss()
         }
     }
