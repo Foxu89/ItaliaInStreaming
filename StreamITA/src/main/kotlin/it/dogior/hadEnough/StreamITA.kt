@@ -61,6 +61,9 @@ class StreamITA(
     private val showLogo: Boolean
         get() = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_LOGO, false) ?: false
 
+    private val cacheSeconds: Int
+        get() = (sharedPref?.getInt(StreamITAPlugin.PREF_CACHE_HOURS, 24) ?: 24) * 3600
+
     private fun getSectionName(key: String): String {
         val langCode = apiLang.substringBefore("-")
         return when (key) {
@@ -135,13 +138,7 @@ class StreamITA(
                 else -> "In Onda Oggi"
             }
             "netflix" -> "Netflix"
-            "amazon" -> when (langCode) {
-                "en" -> "Amazon Prime"
-                "es" -> "Amazon Prime"
-                "fr" -> "Amazon Prime"
-                "de" -> "Amazon Prime"
-                else -> "Amazon Prime"
-            }
+            "amazon" -> "Amazon Prime"
             "disney" -> "Disney+"
             "hulu" -> "Hulu"
             "apple" -> "Apple TV+"
@@ -206,7 +203,7 @@ class StreamITA(
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val resp = app.get("${request.data}&page=$page", headers = authHeaders).body.string()
+        val resp = app.get("${request.data}&page=$page", headers = authHeaders, cacheTime = cacheSeconds).body.string()
         val type = if (request.data.contains("tv")) "tv" else "movie"
         val parsedResponse = parseJson<Results>(resp).results?.mapNotNull { media ->
             media.toSearchResponse(type = type)
@@ -229,7 +226,7 @@ class StreamITA(
 
     override suspend fun search(query: String): List<SearchResponse>? {
         val url = "$tmdbAPI/search/multi?language=$apiLang&query=$query&include_adult=${settingsForProvider.enableAdult}"
-        val response = app.get(url, headers = authHeaders)
+        val response = app.get(url, headers = authHeaders, cacheTime = cacheSeconds)
         if (!response.isSuccessful) return null
         return response.parsedSafe<Results>()?.results
             ?.filter { it.mediaType == "movie" || it.mediaType == "tv" }
@@ -265,7 +262,7 @@ class StreamITA(
 
         var res = try {
             withTimeoutOrNull(10000) {
-                app.get(resUrl, headers = authHeaders).parsedSafe<MediaDetail>()
+                app.get(resUrl, headers = authHeaders, cacheTime = cacheSeconds).parsedSafe<MediaDetail>()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Errore richiesta: ${e.message}")
@@ -281,7 +278,7 @@ class StreamITA(
             }
             res = try {
                 withTimeoutOrNull(8000) {
-                    app.get(enUrl, headers = authHeaders).parsedSafe<MediaDetail>()
+                    app.get(enUrl, headers = authHeaders, cacheTime = cacheSeconds).parsedSafe<MediaDetail>()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Errore EN: ${e.message}")
@@ -331,7 +328,8 @@ class StreamITA(
             val episodes = seasons.mapNotNull { season ->
                 app.get(
                     "$tmdbAPI/tv/${data.id}/season/${season.seasonNumber}?language=$apiLang",
-                    headers = authHeaders
+                    headers = authHeaders,
+                    cacheTime = cacheSeconds
                 ).parsedSafe<MediaDetailEpisodes>()?.episodes?.map { eps ->
                     val linkData = LinkData(
                         id = data.id, title = title, year = year,
@@ -413,7 +411,7 @@ class StreamITA(
             } else {
                 "$tmdbAPI/tv/$tmdbId/images"
             }
-            val response = app.get(url, headers = authHeaders)
+            val response = app.get(url, headers = authHeaders, cacheTime = cacheSeconds)
             if (!response.isSuccessful) return null
             val jsonText = response.body?.string() ?: return null
             val json = JSONObject(jsonText)
