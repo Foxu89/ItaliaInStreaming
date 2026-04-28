@@ -28,6 +28,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.coroutineScope
 
 class StreamITA : TmdbProvider() {
     override var name = "StreamITA"
@@ -235,18 +236,20 @@ class StreamITA : TmdbProvider() {
         val tmdbId = linkData.id ?: return false
         var anySuccess = false
 
-        val extractors = StreamITAExtractors(
-            scope = this,
-            subtitleCallback = subtitleCallback,
-            callback = callback,
-            onSuccess = { anySuccess = true }
-        )
+        coroutineScope {
+            val extractors = StreamITAExtractors(
+                scope = this,
+                subtitleCallback = subtitleCallback,
+                callback = callback,
+                onSuccess = { anySuccess = true }
+            )
 
-        if (linkData.isMovie && linkData.imdbId != null) {
-            extractors.loadMovieExtractors(linkData.imdbId)
+            if (linkData.isMovie && linkData.imdbId != null) {
+                extractors.loadMovieExtractors(linkData.imdbId)
+            }
+
+            extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
         }
-
-        extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
 
         return anySuccess
     }
