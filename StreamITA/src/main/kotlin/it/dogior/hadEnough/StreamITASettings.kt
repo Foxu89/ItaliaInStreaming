@@ -3,6 +3,7 @@ package it.dogior.hadEnough
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Color
 import androidx.core.content.res.ResourcesCompat
 import android.graphics.drawable.Drawable
 import android.os.Bundle
@@ -166,7 +167,21 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        view.findViewByName<View>("general_options_card")?.applyOutlineBackground()
+        // Applica sfondo alle card
+        view.findViewByName<View>("lang_card")?.applyOutlineBackground()
+        view.findViewByName<View>("cache_card")?.applyOutlineBackground()
+
+        // Pulsante svuota cache (stile rosso AnimeUnity)
+        val clearCacheBtn: TextView? = view.findViewByName("clear_cache_btn")
+        clearCacheBtn?.let { btn ->
+            val dangerDrawable = getDrawable("outline_danger")
+            if (dangerDrawable != null) {
+                btn.background = dangerDrawable
+            } else {
+                btn.applyOutlineBackground()
+            }
+            btn.setTextColor(Color.parseColor("#FFFF7F7F"))
+        }
 
         // Setup spinner lingua
         val langs = arrayOf("it-IT", "en-US", "es-ES", "fr-FR", "de-DE")
@@ -208,7 +223,7 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
         updateCacheInfo(view)
 
         // Pulsante svuota cache
-        view.findViewByName<TextView>("cache_clear_btn")?.setOnClickListener {
+        clearCacheBtn?.setOnClickListener {
             val cacheDir = requireContext().cacheDir
             var deletedFiles = 0
             var deletedSize = 0L
