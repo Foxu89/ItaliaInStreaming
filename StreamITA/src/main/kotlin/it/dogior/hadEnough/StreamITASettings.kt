@@ -151,8 +151,8 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
 
     override val layoutName: String = "settings_streamita_general"
 
-    private var currentLang: String = sharedPref?.getString(StreamITAPlugin.PREF_LANG, "it") ?: "it"
-    private var currentLangPosition: Int = if (currentLang == "en") 1 else 0
+    private var currentLang: String = sharedPref?.getString(StreamITAPlugin.PREF_LANG, "it-IT") ?: "it-IT"
+    private var currentLangPosition: Int = sharedPref?.getInt(StreamITAPlugin.PREF_LANG_POSITION, 0) ?: 0
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -161,8 +161,14 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
         view.findViewByName<View>("general_options_card")?.applyOutlineBackground()
 
         // Setup spinner lingua
-        val langs = arrayOf("it", "en")
-        val langsDisplay = arrayOf("\uD83C\uDDEE\uD83C\uDDF9  Italiano", "\uD83C\uDDEC\uD83C\uDDE7  English")
+        val langs = arrayOf("it-IT", "en-US", "es-ES", "fr-FR", "de-DE")
+        val langsDisplay = arrayOf(
+            "\uD83C\uDDEE\uD83C\uDDF9  Italiano",
+            "\uD83C\uDDFA\uD83C\uDDF8  English",
+            "\uD83C\uDDEA\uD83C\uDDF8  Español",
+            "\uD83C\uDDEB\uD83C\uDDF7  Français",
+            "\uD83C\uDDE9\uD83C\uDDEA  Deutsch"
+        )
         val langSpinner: Spinner? = view.findViewByName("lang_spinner")
         langSpinner?.adapter = ArrayAdapter(
             requireContext(), android.R.layout.simple_spinner_dropdown_item, langsDisplay
