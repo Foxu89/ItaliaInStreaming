@@ -1,4 +1,27 @@
 import org.jetbrains.kotlin.konan.properties.Properties
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+
+fun resolveBuildCompletedAtRome(): String {
+    val envValue = providers.environmentVariable("BUILD_COMPLETED_AT_ROME").orNull?.trim()
+    if (!envValue.isNullOrEmpty()) return envValue
+    return SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.ITALY).apply {
+        timeZone = TimeZone.getTimeZone("Europe/Rome")
+    }.format(Date())
+}
+
+val buildCompletedAtRome = resolveBuildCompletedAtRome()
+
+android {
+    buildFeatures {
+        buildConfig = true
+    }
+    defaultConfig {
+        buildConfigField("String", "BUILD_COMPLETED_AT_ROME", "\"$buildCompletedAtRome\"")
+    }
+}
 
 version = 30
 
