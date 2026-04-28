@@ -1,5 +1,6 @@
 package it.dogior.hadEnough
 
+import android.content.SharedPreferences
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.Actor
@@ -30,9 +31,11 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.coroutineScope
 
-class StreamITA : TmdbProvider() {
+class StreamITA(
+    private val sharedPref: SharedPreferences?
+) : TmdbProvider() {
     override var name = "StreamITA"
-    override var lang: String = "it"
+    override var lang: String = sharedPref?.getString(StreamITAPlugin.PREF_LANG, "it-IT") ?: "it-IT"
     override val hasMainPage = true
     override val instantLinkLoading = true
     override val hasQuickSearch = true
@@ -51,29 +54,151 @@ class StreamITA : TmdbProvider() {
         "Accept" to "application/json"
     )
 
+    private val apiLang: String
+        get() = sharedPref?.getString(StreamITAPlugin.PREF_LANG, "it-IT") ?: "it-IT"
+
+    private fun getSectionName(key: String): String {
+        val langCode = apiLang.substringBefore("-")
+        return when (key) {
+            "trending" -> when (langCode) {
+                "en" -> "Trending Today"
+                "es" -> "Tendencias de Hoy"
+                "fr" -> "Tendances du Jour"
+                "de" -> "Trends von Heute"
+                else -> "Tendenze di Oggi"
+            }
+            "popular_movies" -> when (langCode) {
+                "en" -> "Popular Movies"
+                "es" -> "Películas Populares"
+                "fr" -> "Films Populaires"
+                "de" -> "Beliebte Filme"
+                else -> "Film Popolari"
+            }
+            "popular_tv" -> when (langCode) {
+                "en" -> "Popular TV Shows"
+                "es" -> "Series Populares"
+                "fr" -> "Séries Populaires"
+                "de" -> "Beliebte Serien"
+                else -> "Serie TV Popolari"
+            }
+            "trending_movies" -> when (langCode) {
+                "en" -> "Trending Movies"
+                "es" -> "Películas del Momento"
+                "fr" -> "Films du Moment"
+                "de" -> "Filme der Woche"
+                else -> "Film della Settimana"
+            }
+            "trending_tv" -> when (langCode) {
+                "en" -> "Trending TV Shows"
+                "es" -> "Series del Momento"
+                "fr" -> "Séries du Moment"
+                "de" -> "Serien der Woche"
+                else -> "Serie TV della Settimana"
+            }
+            "top_movies" -> when (langCode) {
+                "en" -> "Top Rated Movies"
+                "es" -> "Películas Mejor Valoradas"
+                "fr" -> "Films les Mieux Notés"
+                "de" -> "Bestbewertete Filme"
+                else -> "Film più Votati"
+            }
+            "top_tv" -> when (langCode) {
+                "en" -> "Top Rated TV Shows"
+                "es" -> "Series Mejor Valoradas"
+                "fr" -> "Séries les Mieux Notées"
+                "de" -> "Bestbewertete Serien"
+                else -> "Serie TV più Votate"
+            }
+            "upcoming" -> when (langCode) {
+                "en" -> "Upcoming"
+                "es" -> "Próximamente"
+                "fr" -> "Prochainement"
+                "de" -> "Demnächst"
+                else -> "Prossime Uscite"
+            }
+            "on_air" -> when (langCode) {
+                "en" -> "On TV"
+                "es" -> "En TV"
+                "fr" -> "À la Télé"
+                "de" -> "Im Fernsehen"
+                else -> "Serie TV in Onda"
+            }
+            "airing_today" -> when (langCode) {
+                "en" -> "Airing Today"
+                "es" -> "Se Emite Hoy"
+                "fr" -> "Diffusé Aujourd'hui"
+                "de" -> "Heute ausgestrahlt"
+                else -> "In Onda Oggi"
+            }
+            "netflix" -> "Netflix"
+            "amazon" -> when (langCode) {
+                "en" -> "Amazon Prime"
+                "es" -> "Amazon Prime"
+                "fr" -> "Amazon Prime"
+                "de" -> "Amazon Prime"
+                else -> "Amazon Prime"
+            }
+            "disney" -> "Disney+"
+            "hulu" -> "Hulu"
+            "apple" -> "Apple TV+"
+            "hbo" -> "HBO"
+            "paramount" -> "Paramount+"
+            "peacock" -> "Peacock"
+            "anime_movies" -> when (langCode) {
+                "en" -> "Anime Movies"
+                "es" -> "Películas de Anime"
+                "fr" -> "Films d'Anime"
+                "de" -> "Anime Filme"
+                else -> "Anime Film"
+            }
+            "anime_tv" -> when (langCode) {
+                "en" -> "Anime TV"
+                "es" -> "Anime TV"
+                "fr" -> "Anime TV"
+                "de" -> "Anime TV"
+                else -> "Anime TV"
+            }
+            "korean" -> when (langCode) {
+                "en" -> "Korean Shows"
+                "es" -> "Series Coreanas"
+                "fr" -> "Séries Coréennes"
+                "de" -> "Koreanische Serien"
+                else -> "Serie Coreane"
+            }
+            "documentaries" -> when (langCode) {
+                "en" -> "Documentaries"
+                "es" -> "Documentales"
+                "fr" -> "Documentaires"
+                "de" -> "Dokumentationen"
+                else -> "Documentari"
+            }
+            else -> key
+        }
+    }
+
     override val mainPage = mainPageOf(
-        "$tmdbAPI/trending/all/day?language=it-IT" to "Tendenze di Oggi",
-        "$tmdbAPI/movie/popular?language=it-IT" to "Film Popolari",
-        "$tmdbAPI/tv/popular?language=it-IT" to "Serie TV Popolari",
-        "$tmdbAPI/trending/movie/week?language=it-IT" to "Film della Settimana",
-        "$tmdbAPI/trending/tv/week?language=it-IT" to "Serie TV della Settimana",
-        "$tmdbAPI/movie/top_rated?language=it-IT" to "Film più Votati",
-        "$tmdbAPI/tv/top_rated?language=it-IT" to "Serie TV più Votate",
-        "$tmdbAPI/movie/upcoming?language=it-IT&region=IT" to "Prossime Uscite",
-        "$tmdbAPI/tv/on_the_air?language=it-IT" to "Serie TV in Onda",
-        "$tmdbAPI/tv/airing_today?language=it-IT" to "In Onda Oggi",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=213" to "Netflix",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=1024" to "Amazon Prime",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=2739" to "Disney+",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=453" to "Hulu",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=2552" to "Apple TV+",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=49" to "HBO",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=4330" to "Paramount+",
-        "$tmdbAPI/discover/tv?language=it-IT&with_networks=3353" to "Peacock",
-        "$tmdbAPI/discover/movie?language=it-IT&with_keywords=210024|222243&sort_by=popularity.desc" to "Anime Film",
-        "$tmdbAPI/discover/tv?language=it-IT&with_keywords=210024|222243&sort_by=popularity.desc" to "Anime TV",
-        "$tmdbAPI/discover/tv?language=it-IT&with_original_language=ko" to "Serie Coreane",
-        "$tmdbAPI/discover/tv?language=it-IT&with_genres=99" to "Documentari",
+        "$tmdbAPI/trending/all/day?language=$apiLang" to getSectionName("trending"),
+        "$tmdbAPI/movie/popular?language=$apiLang" to getSectionName("popular_movies"),
+        "$tmdbAPI/tv/popular?language=$apiLang" to getSectionName("popular_tv"),
+        "$tmdbAPI/trending/movie/week?language=$apiLang" to getSectionName("trending_movies"),
+        "$tmdbAPI/trending/tv/week?language=$apiLang" to getSectionName("trending_tv"),
+        "$tmdbAPI/movie/top_rated?language=$apiLang" to getSectionName("top_movies"),
+        "$tmdbAPI/tv/top_rated?language=$apiLang" to getSectionName("top_tv"),
+        "$tmdbAPI/movie/upcoming?language=$apiLang&region=IT" to getSectionName("upcoming"),
+        "$tmdbAPI/tv/on_the_air?language=$apiLang" to getSectionName("on_air"),
+        "$tmdbAPI/tv/airing_today?language=$apiLang" to getSectionName("airing_today"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_networks=213" to getSectionName("netflix"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_networks=1024" to getSectionName("amazon"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_networks=2739" to getSectionName("disney"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_networks=453" to getSectionName("hulu"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_networks=2552" to getSectionName("apple"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_networks=49" to getSectionName("hbo"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_networks=4330" to getSectionName("paramount"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_networks=3353" to getSectionName("peacock"),
+        "$tmdbAPI/discover/movie?language=$apiLang&with_keywords=210024|222243&sort_by=popularity.desc" to getSectionName("anime_movies"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_keywords=210024|222243&sort_by=popularity.desc" to getSectionName("anime_tv"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_original_language=ko" to getSectionName("korean"),
+        "$tmdbAPI/discover/tv?language=$apiLang&with_genres=99" to getSectionName("documentaries"),
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -100,7 +225,7 @@ class StreamITA : TmdbProvider() {
     }
 
     override suspend fun search(query: String): List<SearchResponse>? {
-        val url = "$tmdbAPI/search/multi?language=it-IT&query=$query&include_adult=${settingsForProvider.enableAdult}"
+        val url = "$tmdbAPI/search/multi?language=$apiLang&query=$query&include_adult=${settingsForProvider.enableAdult}"
         val response = app.get(url, headers = authHeaders)
         if (!response.isSuccessful) return null
         return response.parsedSafe<Results>()?.results
@@ -115,9 +240,9 @@ class StreamITA : TmdbProvider() {
         val type = if (data.type == "movie") TvType.Movie else TvType.TvSeries
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) {
-            "$tmdbAPI/movie/${data.id}?language=it-IT&append_to_response=$append"
+            "$tmdbAPI/movie/${data.id}?language=$apiLang&append_to_response=$append"
         } else {
-            "$tmdbAPI/tv/${data.id}?language=it-IT&append_to_response=$append"
+            "$tmdbAPI/tv/${data.id}?language=$apiLang&append_to_response=$append"
         }
 
         var res = try {
@@ -125,7 +250,7 @@ class StreamITA : TmdbProvider() {
                 app.get(resUrl, headers = authHeaders).parsedSafe<MediaDetail>()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Errore IT: ${e.message}")
+            Log.e(TAG, "Errore richiesta: ${e.message}")
             null
         }
 
@@ -185,7 +310,7 @@ class StreamITA : TmdbProvider() {
             val seasons = res.seasons?.filter { it.seasonNumber != null && it.seasonNumber > 0 } ?: emptyList()
             val episodes = seasons.mapNotNull { season ->
                 app.get(
-                    "$tmdbAPI/tv/${data.id}/season/${season.seasonNumber}?language=it-IT",
+                    "$tmdbAPI/tv/${data.id}/season/${season.seasonNumber}?language=$apiLang",
                     headers = authHeaders
                 ).parsedSafe<MediaDetailEpisodes>()?.episodes?.map { eps ->
                     val linkData = LinkData(
