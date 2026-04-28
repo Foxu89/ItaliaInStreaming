@@ -1,5 +1,6 @@
 package it.dogior.hadEnough
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.SharedPreferences
 import androidx.core.content.res.ResourcesCompat
@@ -12,6 +13,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
@@ -106,19 +108,16 @@ class StreamITASettings : StreamITABaseSettingsFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Build info
         val buildInfoId = res.getIdentifier("header_build_info", "id", BuildConfig.LIBRARY_PACKAGE_NAME)
         view.findViewById<TextView>(buildInfoId)?.text =
             "Ultimo aggiornamento: ${BuildConfig.BUILD_COMPLETED_AT_ROME}"
 
-        // Setup save button - come AnimeUnity: mostra sempre popup riavvio
         setupSaveButton(view) {
             promptRestartAfterSave(
                 "Impostazioni salvate. Vuoi riavviare l'applicazione ora per applicare subito le modifiche?"
             )
         }
 
-        // Applica sfondo alle card
         listOf(
             "general_settings_card",
             "extractors_settings_card",
@@ -128,7 +127,6 @@ class StreamITASettings : StreamITABaseSettingsFragment() {
             view.findViewByName<View>(cardName)?.applyOutlineBackground()
         }
 
-        // Card click listeners
         view.findViewByName<View>("general_settings_card")?.setOnClickListener {
             StreamITAGeneralSettings().show(parentFragmentManager, "GeneralSettings")
         }
@@ -157,10 +155,8 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Applica sfondo alla card
         view.findViewByName<View>("general_options_card")?.applyOutlineBackground()
 
-        // Setup spinner lingua
         val langs = arrayOf("it-IT", "en-US", "es-ES", "fr-FR", "de-DE")
         val langsDisplay = arrayOf(
             "\uD83C\uDDEE\uD83C\uDDF9  Italiano",
@@ -182,7 +178,6 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
-        // Setup save button
         setupSaveButton(view) {
             sharedPref?.edit {
                 putString(StreamITAPlugin.PREF_LANG, currentLang)
@@ -200,6 +195,30 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
 
 class StreamITAUISettings : StreamITABaseSettingsFragment() {
     override val layoutName: String = "settings_streamita_ui"
+
+    private var showLogo: Boolean = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_LOGO, false) ?: false
+
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        view.findViewByName<View>("ui_options_card")?.applyOutlineBackground()
+
+        val logoSwitch: Switch? = view.findViewByName("show_logo_switch")
+        logoSwitch?.text = ""
+        logoSwitch?.isChecked = showLogo
+        logoSwitch?.setOnCheckedChangeListener { _, isChecked ->
+            showLogo = isChecked
+        }
+
+        setupSaveButton(view) {
+            sharedPref?.edit {
+                putBoolean(StreamITAPlugin.PREF_SHOW_LOGO, showLogo)
+            }
+            showToast("Modifiche in Interfaccia UI salvate")
+            dismiss()
+        }
+    }
 }
 
 class StreamITAAdvancedSettings : StreamITABaseSettingsFragment() {
