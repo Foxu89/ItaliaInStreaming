@@ -7,12 +7,18 @@ import com.lagradost.cloudstream3.plugins.Plugin
 
 @CloudstreamPlugin
 class StreamITAPlugin : Plugin() {
+    companion object {
+        internal var activePlugin: StreamITAPlugin? = null
+    }
+
     override fun load(context: Context) {
+        activePlugin = this
         registerMainAPI(StreamITA())
 
         openSettings = { ctx ->
             val activity = ctx as AppCompatActivity
-            StreamITASettings(this).show(activity.supportFragmentManager, "StreamITASettings")
+            activePlugin = this
+            StreamITASettings().show(activity.supportFragmentManager, "StreamITASettings")
         }
     }
 }
