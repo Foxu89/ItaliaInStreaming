@@ -37,6 +37,7 @@
         android:orientation="vertical"
         android:padding="14dp">
 
+        <!-- Lingua -->
         <LinearLayout
             android:id="@+id/lang_row"
             android:layout_width="match_parent"
@@ -63,5 +64,88 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
         </LinearLayout>
+
+        <!-- Separator -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:background="#22FFFFFF" />
+
+        <!-- Cache -->
+        <LinearLayout
+            android:id="@+id/cache_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:id="@+id/cache_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Cache"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/cache_spinner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- Cache info -->
+        <LinearLayout
+            android:id="@+id/cache_info_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="44dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:id="@+id/cache_info_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Cache: 0 elementi • 0 MB"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/cache_clear_btn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.8"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="Svuota"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Cache description -->
+        <TextView
+            android:id="@+id/cache_description"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:alpha="0.5"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp"
+            android:text="Cache più frequente = dati aggiornati spesso ma caricamento più lento. Cache più lunga = caricamento veloce ma dati meno recenti."
+            android:textSize="10sp" />
     </LinearLayout>
 </LinearLayout>
