@@ -23,11 +23,11 @@ android {
     }
 }
 
-version = 31
+version = 32
 
 cloudstream {
     language = "it"
-    description = "Il Migliore plugin Italiano"
+    description = "#1 Plugin Italiano Completo!"
     authors = listOf("DieGon")
     
     status = 1  // 1 = OK, 0 = Down, 2 = Slow, 3 = Beta only
