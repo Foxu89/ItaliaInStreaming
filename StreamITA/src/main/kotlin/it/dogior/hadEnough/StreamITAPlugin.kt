@@ -21,7 +21,7 @@ class StreamITAPlugin : Plugin() {
         activePlugin = this
         activeSharedPref = sharedPref
 
-        registerMainAPI(StreamITA())
+        registerMainAPI(StreamITA(sharedPref))
 
         openSettings = { ctx ->
             val activity = ctx as AppCompatActivity
