@@ -236,7 +236,24 @@ class StreamITA(
     override suspend fun load(url: String): LoadResponse? {
         Log.d(TAG, "load() URL: $url")
 
-        val data = parseJson<Data>(url)
+        // Prova prima a parsare come JSON (formato Data)
+        val data: Data = try {
+            parseJson<Data>(url)
+        } catch (_: Exception) {
+            // Fallback: estrai ID da URL diretti TMDB (raccomandazioni)
+            val tmdbRegex = Regex("""themoviedb\.org/(movie|tv)/(\d+)""")
+            val match = tmdbRegex.find(url)
+            if (match != null) {
+                val type = match.groupValues[1]
+                val id = match.groupValues[2].toInt()
+                Log.d(TAG, "Estratto da URL TMDB: type=$type, id=$id")
+                Data(id, type)
+            } else {
+                Log.e(TAG, "URL non riconosciuto: $url")
+                throw ErrorLoadingException("URL non valido")
+            }
+        }
+
         val type = if (data.type == "movie") TvType.Movie else TvType.TvSeries
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) {
