@@ -27,15 +27,6 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
-
-import it.dogior.hadEnough.extractors.VixSrcExtractor
-import it.dogior.hadEnough.extractors.DropLoadExtractor
-import it.dogior.hadEnough.extractors.MixDropExtractor
-import it.dogior.hadEnough.extractors.StreamHGExtractor
-import it.dogior.hadEnough.extractors.VidSrcExtractor
-
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 class StreamITA : TmdbProvider() {
@@ -100,7 +91,7 @@ class StreamITA : TmdbProvider() {
         return newMovieSearchResponse(
             title ?: name ?: originalTitle ?: return null,
             Data(id = id, type = mediaType ?: type).toJson(),
-            TvType.Movie,  // ← COME TORRENTIO: sempre TvType.Movie!
+            TvType.Movie,
         ) {
             this.posterUrl = getImageUrl(posterPath, true)
             this.score = voteAverage?.let { Score.from10(it) }
@@ -118,7 +109,7 @@ class StreamITA : TmdbProvider() {
 
     override suspend fun load(url: String): LoadResponse? {
         Log.d(TAG, "load() URL: $url")
-        
+
         val data = parseJson<Data>(url)
         val type = if (data.type == "movie") TvType.Movie else TvType.TvSeries
         val append = "credits,videos,recommendations,external_ids"
@@ -182,6 +173,7 @@ class StreamITA : TmdbProvider() {
                 this.year = year
                 this.plot = plot
                 this.duration = res.runtime
+                this.score = rating?.let { Score.from10(it) }
                 this.actors = actors
                 this.tags = genres
                 this.recommendations = recommendations
@@ -212,12 +204,13 @@ class StreamITA : TmdbProvider() {
                     }
                 }
             }.flatten()
-            
+
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 this.posterUrl = poster
                 this.backgroundPosterUrl = bgPoster
                 this.year = year
                 this.plot = plot
+                this.score = rating?.let { Score.from10(it) }
                 this.actors = actors
                 this.tags = genres
                 this.recommendations = recommendations
@@ -242,73 +235,18 @@ class StreamITA : TmdbProvider() {
         val tmdbId = linkData.id ?: return false
         var anySuccess = false
 
-        coroutineScope {
-            if (linkData.isMovie && linkData.imdbId != null) {
-                launch {
-                    try {
-                        val guardahdUrl = "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
-                        val response = app.get(guardahdUrl)
-                        if (response.isSuccessful) {
-                            val html = response.text
-                            val dropMatch = Regex("""data-link\s*=\s*"(//[^"]*dr0pstream[^"]*|https?://[^"]*dr0pstream[^"]*)""", RegexOption.IGNORE_CASE).find(html)
-                            dropMatch?.groupValues?.get(1)?.trim()?.let { link ->
-                                val fullLink = if (link.startsWith("//")) "https:$link" else link
-                                DropLoadExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
-                                anySuccess = true
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-                launch {
-                    try {
-                        val guardahdUrl = "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
-                        val response = app.get(guardahdUrl)
-                        if (response.isSuccessful) {
-                            val html = response.text
-                            val match = Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""", RegexOption.IGNORE_CASE).find(html)
-                            match?.groupValues?.get(1)?.trim()?.let { link ->
-                                val fullLink = if (link.startsWith("//")) "https:$link" else link
-                                MixDropExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
-                                anySuccess = true
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-                launch {
-                    try {
-                        val guardahdUrl = "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=${linkData.imdbId}"
-                        val response = app.get(guardahdUrl)
-                        if (response.isSuccessful) {
-                            val html = response.text
-                            val match = Regex("""data-link\s*=\s*"(//[^"]*dhcplay[^"]*|https?://[^"]*dhcplay[^"]*)""", RegexOption.IGNORE_CASE).find(html)
-                            match?.groupValues?.get(1)?.trim()?.let { link ->
-                                val fullLink = if (link.startsWith("//")) "https:$link" else link
-                                StreamHGExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
-                                anySuccess = true
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
+        val extractors = StreamITAExtractors(
+            scope = this,
+            subtitleCallback = subtitleCallback,
+            callback = callback,
+            onSuccess = { anySuccess = true }
+        )
 
-            launch {
-                try {
-                    val url = if (linkData.season == null) "https://vixsrc.to/movie/$tmdbId"
-                    else "https://vixsrc.to/tv/$tmdbId/${linkData.season}/${linkData.episode}"
-                    VixSrcExtractor().getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
-                    anySuccess = true
-                } catch (_: Exception) {}
-            }
-
-            launch {
-                try {
-                    val url = if (linkData.season == null) "https://vidsrc.ru/movie/$tmdbId"
-                    else "https://vidsrc.ru/tv/$tmdbId/${linkData.season}/${linkData.episode}"
-                    VidSrcExtractor().getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
-                    anySuccess = true
-                } catch (_: Exception) {}
-            }
+        if (linkData.isMovie && linkData.imdbId != null) {
+            extractors.loadMovieExtractors(linkData.imdbId)
         }
+
+        extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
 
         return anySuccess
     }
