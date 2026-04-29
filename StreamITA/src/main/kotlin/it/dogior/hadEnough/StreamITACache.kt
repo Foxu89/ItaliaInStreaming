@@ -7,7 +7,7 @@ import org.json.JSONObject
 
 object StreamITACache {
     // SOSTITUISCI con il tuo URL Cloudflare Worker
-    private const val WORKER_URL = "https://streamita-cache.tuonome.workers.dev"
+    private const val WORKER_URL = "https://lingering-truth-455c.appbeta870.workers.dev"
     private const val TAG = "StreamITACache"
 
     data class CachedLinks(
