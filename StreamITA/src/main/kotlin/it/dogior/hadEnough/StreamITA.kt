@@ -385,13 +385,26 @@ class StreamITA(
                 scope = this,
                 subtitleCallback = subtitleCallback,
                 callback = callback,
-                onSuccess = { anySuccess = true }
+                onSuccess = { anySuccess = true },
+                tmdbId = if (linkData.isMovie) tmdbId else null,
+                title = if (linkData.isMovie) linkData.title else null,
+                imdbId = linkData.imdbId
             )
 
-            if (linkData.isMovie && linkData.imdbId != null) {
-                extractors.loadMovieExtractors(linkData.imdbId)
+            if (linkData.isMovie) {
+            // 1. PROVA PRIMA LA CACHE CONDIVISA
+                val cached = StreamITACache.getCachedLinks(tmdbId)
+                if (cached != null && cached.hasLinks() && !cached.isExpired()) {
+                    Log.d(TAG, "Cache HIT per TMDB ID: $tmdbId - uso link salvati")
+                    extractors.loadFromCache(cached)
+                } else if (linkData.imdbId != null) {
+                // 2. FALLBACK: cerca su guardahd e salva nella cache
+                    Log.d(TAG, "Cache MISS per TMDB ID: $tmdbId - cerco su guardahd")
+                    extractors.loadMovieExtractors(linkData.imdbId)
+                }
             }
 
+        // 3. VixSrc e VidSrc (sempre, non vanno in cache)
             extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
         }
 
