@@ -61,6 +61,9 @@ class StreamITA(
     private val showLogo: Boolean
         get() = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_LOGO, false) ?: false
 
+    private val showRating: Boolean
+        get() = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_RATING, false) ?: false
+
     private val cacheSeconds: Int
         get() = (sharedPref?.getInt(StreamITAPlugin.PREF_CACHE_HOURS, 24) ?: 24) * 3600
 
@@ -220,7 +223,7 @@ class StreamITA(
             TvType.Movie,
         ) {
             this.posterUrl = getImageUrl(posterPath, true)
-            this.score = voteAverage?.let { Score.from10(it) }
+            this.score = if (showRating) voteAverage?.let { Score.from10(it) } else null
         }
     }
 
@@ -315,7 +318,7 @@ class StreamITA(
                 this.year = year
                 this.plot = plot
                 this.duration = res.runtime
-                this.score = rating?.let { Score.from10(it) }
+                this.score = if (showRating) rating?.let { Score.from10(it) } else null
                 this.actors = actors
                 this.tags = genres
                 this.recommendations = recommendations
@@ -342,7 +345,7 @@ class StreamITA(
                         this.episode = eps.episodeNumber
                         this.posterUrl = getImageUrl(eps.stillPath)
                         this.description = eps.overview
-                        this.score = eps.voteAverage?.let { Score.from10(it) }
+                        this.score = if (showRating) eps.voteAverage?.let { Score.from10(it) } else null
                         this.runTime = eps.runtime
                         this.addDate(eps.airDate)
                     }
@@ -354,7 +357,7 @@ class StreamITA(
                 this.backgroundPosterUrl = bgPoster
                 this.year = year
                 this.plot = plot
-                this.score = rating?.let { Score.from10(it) }
+                this.score = if (showRating) rating?.let { Score.from10(it) } else null
                 this.actors = actors
                 this.tags = genres
                 this.recommendations = recommendations
@@ -391,7 +394,7 @@ class StreamITA(
             if (linkData.isMovie && linkData.imdbId != null) {
                 extractors.loadMovieExtractors(linkData.imdbId)
             }
-            
+
             extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
         }
 
