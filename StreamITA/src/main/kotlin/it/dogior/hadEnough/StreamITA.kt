@@ -392,7 +392,6 @@ class StreamITA(
                 extractors.loadMovieExtractors(linkData.imdbId)
             }
             
-            extractors.loadStreamingCommunity(tmdbId, linkData.title, linkData.season, linkData.episode)
             extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
         }
 
