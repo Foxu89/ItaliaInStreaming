@@ -270,13 +270,16 @@ class StreamITAUISettings : StreamITABaseSettingsFragment() {
     override val layoutName: String = "settings_streamita_ui"
 
     private var showLogo: Boolean = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_LOGO, false) ?: false
+    private var showRating: Boolean = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_RATING, false) ?: false
 
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         view.findViewByName<View>("ui_options_card")?.applyOutlineBackground()
+        view.findViewByName<View>("show_rating_card")?.applyOutlineBackground()
 
+        // Toggle Mostra Titoli Originali
         val logoSwitch: Switch? = view.findViewByName("show_logo_switch")
         logoSwitch?.text = ""
         logoSwitch?.isChecked = showLogo
@@ -284,9 +287,18 @@ class StreamITAUISettings : StreamITABaseSettingsFragment() {
             showLogo = isChecked
         }
 
+        // Toggle Mostra Valutazione
+        val ratingSwitch: Switch? = view.findViewByName("show_rating_switch")
+        ratingSwitch?.text = ""
+        ratingSwitch?.isChecked = showRating
+        ratingSwitch?.setOnCheckedChangeListener { _, isChecked ->
+            showRating = isChecked
+        }
+
         setupSaveButton(view) {
             sharedPref?.edit {
                 putBoolean(StreamITAPlugin.PREF_SHOW_LOGO, showLogo)
+                putBoolean(StreamITAPlugin.PREF_SHOW_RATING, showRating)
             }
             showToast("Modifiche in Interfaccia UI salvate")
             dismiss()
