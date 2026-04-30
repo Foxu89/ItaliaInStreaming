@@ -23,7 +23,7 @@ android {
     }
 }
 
-version = 41
+version = 42
 
 cloudstream {
     language = "it"
