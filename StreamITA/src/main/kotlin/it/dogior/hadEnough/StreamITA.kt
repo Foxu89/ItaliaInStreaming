@@ -1,7 +1,6 @@
 package it.dogior.hadEnough
 
 import android.content.SharedPreferences
-import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.ActorData
@@ -206,19 +205,22 @@ class StreamITA(
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        StreamITALogger.log(TAG, "Caricamento homepage: ${request.name} (pagina $page, lingua=$apiLang)")
         val resp = app.get("${request.data}&page=$page", headers = authHeaders, cacheTime = cacheSeconds).body.string()
         val type = if (request.data.contains("tv")) "tv" else "movie"
         val parsedResponse = parseJson<Results>(resp).results?.mapNotNull { media ->
             media.toSearchResponse(type = type)
         }
         val home = parsedResponse ?: throw ErrorLoadingException("Invalid Json response")
+        StreamITALogger.log(TAG, "Homepage caricata: ${home.size} elementi in ${request.name}")
         return newHomePageResponse(request.name, home)
     }
 
     private fun Media.toSearchResponse(type: String = "tv"): SearchResponse? {
         if (mediaType == "person") return null
+        val title = title ?: name ?: originalTitle ?: return null
         return newMovieSearchResponse(
-            title ?: name ?: originalTitle ?: return null,
+            title,
             Data(id = id, type = mediaType ?: type).toJson(),
             TvType.Movie,
         ) {
@@ -228,16 +230,22 @@ class StreamITA(
     }
 
     override suspend fun search(query: String): List<SearchResponse>? {
+        StreamITALogger.log(TAG, "Ricerca: '$query' (lingua=$apiLang)")
         val url = "$tmdbAPI/search/multi?language=$apiLang&query=$query&include_adult=${settingsForProvider.enableAdult}"
         val response = app.get(url, headers = authHeaders, cacheTime = cacheSeconds)
-        if (!response.isSuccessful) return null
-        return response.parsedSafe<Results>()?.results
+        if (!response.isSuccessful) {
+            StreamITALogger.log(TAG, "Ricerca fallita: HTTP ${response.code}")
+            return null
+        }
+        val results = response.parsedSafe<Results>()?.results
             ?.filter { it.mediaType == "movie" || it.mediaType == "tv" }
             ?.mapNotNull { it.toSearchResponse() }
+        StreamITALogger.log(TAG, "Ricerca completata: ${results?.size ?: 0} risultati per '$query'")
+        return results
     }
 
     override suspend fun load(url: String): LoadResponse? {
-        Log.d(TAG, "load() URL: $url")
+        StreamITALogger.log(TAG, "Load chiamato con URL: $url")
 
         val data: Data = try {
             parseJson<Data>(url)
@@ -247,15 +255,16 @@ class StreamITA(
             if (match != null) {
                 val type = match.groupValues[1]
                 val id = match.groupValues[2].toInt()
-                Log.d(TAG, "Estratto da URL TMDB: type=$type, id=$id")
+                StreamITALogger.log(TAG, "URL TMDB diretto rilevato: type=$type, id=$id")
                 Data(id, type)
             } else {
-                Log.e(TAG, "URL non riconosciuto: $url")
+                StreamITALogger.log(TAG, "URL non riconosciuto: $url")
                 throw ErrorLoadingException("URL non valido")
             }
         }
 
         val type = if (data.type == "movie") TvType.Movie else TvType.TvSeries
+        StreamITALogger.log(TAG, "Caricamento dettagli: tipo=${data.type}, id=${data.id}, lingua=$apiLang")
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) {
             "$tmdbAPI/movie/${data.id}?language=$apiLang&append_to_response=$append"
@@ -268,12 +277,12 @@ class StreamITA(
                 app.get(resUrl, headers = authHeaders, cacheTime = cacheSeconds).parsedSafe<MediaDetail>()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Errore richiesta: ${e.message}")
+            StreamITALogger.log(TAG, "Errore richiesta dettagli (${apiLang}): ${e.message}")
             null
         }
 
         if (res == null) {
-            Log.d(TAG, "Fallback EN per ID: ${data.id}")
+            StreamITALogger.log(TAG, "Fallback a EN per id=${data.id}")
             val enUrl = if (type == TvType.Movie) {
                 "$tmdbAPI/movie/${data.id}?language=en-US&append_to_response=$append"
             } else {
@@ -284,14 +293,19 @@ class StreamITA(
                     app.get(enUrl, headers = authHeaders, cacheTime = cacheSeconds).parsedSafe<MediaDetail>()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Errore EN: ${e.message}")
+                StreamITALogger.log(TAG, "Errore richiesta EN: ${e.message}")
                 null
             }
         }
 
-        if (res == null) throw ErrorLoadingException("Contenuto non disponibile")
+        if (res == null) {
+            StreamITALogger.log(TAG, "Contenuto non disponibile per id=${data.id}")
+            throw ErrorLoadingException("Contenuto non disponibile")
+        }
 
         val title = res.title ?: res.name ?: return null
+        StreamITALogger.log(TAG, "Dettagli caricati: '$title' (${data.type}, anno=${(res.releaseDate ?: res.firstAirDate)?.split("-")?.firstOrNull()})")
+
         val poster = getImageUrl(res.posterPath, true)
         val bgPoster = getImageUrl(res.backdropPath, true)
         val year = (res.releaseDate ?: res.firstAirDate)?.split("-")?.first()?.toIntOrNull()
@@ -299,7 +313,14 @@ class StreamITA(
         val rating = res.voteAverage?.toString()
         val genres = res.genres?.mapNotNull { it.name } ?: emptyList()
         val imdbId = res.imdbId ?: res.externalIds?.imdbId
-        val logoUrl = if (showLogo && data.id != null) fetchTmdbLogoUrl(type, data.id, apiLang) else null
+        val logoUrl = if (showLogo && data.id != null) {
+            StreamITALogger.log(TAG, "Caricamento logo per id=${data.id}")
+            fetchTmdbLogoUrl(type, data.id, apiLang)
+        } else null
+
+        if (logoUrl != null) {
+            StreamITALogger.log(TAG, "Logo trovato per '$title'")
+        }
 
         val actors = res.credits?.cast?.take(15)?.mapNotNull { cast ->
             val name = cast.name ?: cast.originalName ?: return@mapNotNull null
@@ -312,6 +333,7 @@ class StreamITA(
 
         return if (type == TvType.Movie) {
             val linkData = LinkData(id = data.id, title = title, year = year, isMovie = true, imdbId = imdbId)
+            StreamITALogger.log(TAG, "Film creato: '$title' (${year ?: "N/A"}), IMDb: ${imdbId ?: "N/A"}")
             newMovieLoadResponse(title, url, TvType.Movie, linkData.toJson()) {
                 this.posterUrl = poster
                 this.backgroundPosterUrl = bgPoster
@@ -328,6 +350,7 @@ class StreamITA(
             }
         } else {
             val seasons = res.seasons?.filter { it.seasonNumber != null && it.seasonNumber > 0 } ?: emptyList()
+            StreamITALogger.log(TAG, "Serie TV: '$title', ${seasons.size} stagioni")
             val episodes = seasons.mapNotNull { season ->
                 app.get(
                     "$tmdbAPI/tv/${data.id}/season/${season.seasonNumber}?language=$apiLang",
@@ -352,6 +375,7 @@ class StreamITA(
                 }
             }.flatten()
 
+            StreamITALogger.log(TAG, "Episodi caricati: ${episodes.size} totali")
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 this.posterUrl = poster
                 this.backgroundPosterUrl = bgPoster
@@ -383,21 +407,29 @@ class StreamITA(
         val tmdbId = linkData.id ?: return false
         var anySuccess = false
 
+        StreamITALogger.log(TAG, "Ricerca link streaming: tmdbId=$tmdbId, isMovie=${linkData.isMovie}, imdbId=${linkData.imdbId}")
+
         coroutineScope {
             val extractors = StreamITAExtractors(
                 scope = this,
                 subtitleCallback = subtitleCallback,
                 callback = callback,
-                onSuccess = { anySuccess = true }
+                onSuccess = {
+                    anySuccess = true
+                    StreamITALogger.log(TAG, "Link streaming trovato per tmdbId=$tmdbId")
+                }
             )
 
             if (linkData.isMovie && linkData.imdbId != null) {
+                StreamITALogger.log(TAG, "Avvio estrattori film (guardahd) per imdbId=${linkData.imdbId}")
                 extractors.loadMovieExtractors(linkData.imdbId)
             }
 
+            StreamITALogger.log(TAG, "Avvio estrattori comuni (VixSrc + VidSrc) per tmdbId=$tmdbId")
             extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
         }
 
+        StreamITALogger.log(TAG, "Risultato ricerca link: successo=$anySuccess")
         return anySuccess
     }
 
@@ -467,7 +499,7 @@ class StreamITA(
 
             if (logos.length() > 0) logoUrlAt(0) else null
         } catch (e: Exception) {
-            Log.e(TAG, "Error fetching TMDB logo: ${e.message}")
+            StreamITALogger.log(TAG, "Errore caricamento logo: ${e.message}")
             null
         }
     }
