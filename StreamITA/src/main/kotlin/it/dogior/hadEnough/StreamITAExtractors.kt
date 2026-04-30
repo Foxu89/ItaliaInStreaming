@@ -5,7 +5,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import it.dogior.hadEnough.extractors.DropLoadExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
 import it.dogior.hadEnough.extractors.StreamHGExtractor
-import it.dogior.hadEnough.extractors.StreamingCommunityExtractor
 import it.dogior.hadEnough.extractors.VidSrcExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.CoroutineScope
@@ -91,25 +90,6 @@ class StreamITAExtractors(
                 else "https://vidsrc.ru/tv/$tmdbId/$season/$episode"
                 VidSrcExtractor().getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
                 onSuccess()
-            } catch (_: Exception) {}
-        }
-    }
-
-    fun loadStreamingCommunity(tmdbId: Int, title: String?, season: Int?, episode: Int?) {
-        val query = title ?: return
-        scope.launch {
-            try {
-                val extractor = StreamingCommunityExtractor()
-                val success = extractor.searchAndGetLinks(
-                    tmdbId = tmdbId,
-                    title = query,
-                    type = if (season == null) "movie" else "tv",
-                    season = season,
-                    episode = episode,
-                    subtitleCallback = subtitleCallback,
-                    callback = callback
-                )
-                if (success) onSuccess()
             } catch (_: Exception) {}
         }
     }
