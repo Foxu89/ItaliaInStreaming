@@ -167,11 +167,9 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Applica sfondo alle card
         view.findViewByName<View>("lang_card")?.applyOutlineBackground()
         view.findViewByName<View>("cache_card")?.applyOutlineBackground()
 
-        // Pulsante svuota cache (stile rosso AnimeUnity)
         val clearCacheBtn: TextView? = view.findViewByName("clear_cache_btn")
         clearCacheBtn?.let { btn ->
             val dangerDrawable = getDrawable("outline_danger")
@@ -183,14 +181,13 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
             btn.setTextColor(Color.parseColor("#FFFF7F7F"))
         }
 
-        // Setup spinner lingua
         val langs = arrayOf("it-IT", "en-US", "es-ES", "fr-FR", "de-DE")
         val langsDisplay = arrayOf(
-            "\uD83C\uDDEE\uD83C\uDDF9  Italiano",
-            "\uD83C\uDDFA\uD83C\uDDF8  English",
-            "\uD83C\uDDEA\uD83C\uDDF8  Español",
-            "\uD83C\uDDEB\uD83C\uDDF7  Français",
-            "\uD83C\uDDE9\uD83C\uDDEA  Deutsch"
+            "Italiano",
+            "English",
+            "Espanol",
+            "Francais",
+            "Deutsch"
         )
         val langSpinner: Spinner? = view.findViewByName("lang_spinner")
         langSpinner?.adapter = ArrayAdapter(
@@ -205,7 +202,6 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
-        // Setup spinner cache
         val cacheSpinner: Spinner? = view.findViewByName("cache_spinner")
         cacheSpinner?.adapter = ArrayAdapter(
             requireContext(), android.R.layout.simple_spinner_dropdown_item, cacheDisplay
@@ -219,10 +215,8 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
             override fun onNothingSelected(p0: AdapterView<*>?) {}
         }
 
-        // Cache info
         updateCacheInfo(view)
 
-        // Pulsante svuota cache
         clearCacheBtn?.setOnClickListener {
             val cacheDir = requireContext().cacheDir
             var deletedFiles = 0
@@ -236,7 +230,6 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
             updateCacheInfo(view)
         }
 
-        // Setup save button
         setupSaveButton(view) {
             sharedPref?.edit {
                 putString(StreamITAPlugin.PREF_LANG, currentLang)
@@ -258,7 +251,7 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
         }
         val sizeMB = totalSize / 1024 / 1024
         view.findViewByName<TextView>("cache_info_text")?.text =
-            "Cache: $totalFiles elementi • $sizeMB MB"
+            "Cache: $totalFiles elementi - $sizeMB MB"
     }
 }
 
@@ -279,7 +272,6 @@ class StreamITAUISettings : StreamITABaseSettingsFragment() {
         view.findViewByName<View>("ui_options_card")?.applyOutlineBackground()
         view.findViewByName<View>("show_rating_card")?.applyOutlineBackground()
 
-        // Toggle Mostra Titoli Originali
         val logoSwitch: Switch? = view.findViewByName("show_logo_switch")
         logoSwitch?.text = ""
         logoSwitch?.isChecked = showLogo
@@ -287,7 +279,6 @@ class StreamITAUISettings : StreamITABaseSettingsFragment() {
             showLogo = isChecked
         }
 
-        // Toggle Mostra Valutazione
         val ratingSwitch: Switch? = view.findViewByName("show_rating_switch")
         ratingSwitch?.text = ""
         ratingSwitch?.isChecked = showRating
@@ -308,4 +299,37 @@ class StreamITAUISettings : StreamITABaseSettingsFragment() {
 
 class StreamITAAdvancedSettings : StreamITABaseSettingsFragment() {
     override val layoutName: String = "settings_streamita_advanced"
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        view.findViewByName<View>("log_card")?.applyOutlineBackground()
+
+        val logText: TextView? = view.findViewByName("log_text")
+        val logCountText: TextView? = view.findViewByName("log_count_text")
+        val refreshBtn: TextView? = view.findViewByName("refresh_log_btn")
+        val clearBtn: TextView? = view.findViewByName("clear_log_btn")
+
+        fun updateLogs() {
+            logText?.text = StreamITALogger.getLogs()
+            logCountText?.text = "${StreamITALogger.getLogCount()} righe"
+        }
+
+        updateLogs()
+
+        refreshBtn?.setOnClickListener {
+            updateLogs()
+        }
+
+        clearBtn?.setOnClickListener {
+            StreamITALogger.clear()
+            updateLogs()
+            showToast("Log cancellati")
+        }
+
+        setupSaveButton(view) {
+            showToast("Modifiche in Avanzate salvate")
+            dismiss()
+        }
+    }
 }
