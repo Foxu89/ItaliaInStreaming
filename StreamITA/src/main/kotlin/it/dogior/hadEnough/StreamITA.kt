@@ -30,6 +30,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import it.dogior.hadEnough.extractors.StreamingCommunityExtractor
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 class StreamITA(
