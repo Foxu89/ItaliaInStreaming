@@ -27,7 +27,6 @@ data class LinkData(
     val isMovie: Boolean = false,
     val episodeTitle: String? = null,
     val episodeOverview: String? = null,
-    val scIframeUrl: String? = null,
 )
 
 data class MediaDetail(
