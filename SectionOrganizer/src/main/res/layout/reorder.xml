@@ -41,6 +41,7 @@
                 android:layout_marginBottom="5dp"
                 android:padding="5dp"
                 android:focusable="true"
+                android:focusableInTouchMode="true"
                 android:clickable="true"
                 android:background="@drawable/outline"
                 android:nextFocusDown="@id/section_list" />
