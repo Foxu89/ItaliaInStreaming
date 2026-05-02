@@ -27,6 +27,7 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import it.dogior.hadEnough.extractors.VixCloudExtractor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -181,7 +182,7 @@ class StreamITA(
         val trailer = res.videos?.results.orEmpty().filter { it.type == "Trailer" || it.type == "Teaser" }.map { "https://www.youtube.com/watch?v=${it.key}" }
 
         return if (type == TvType.Movie) {
-            val linkData = LinkData(id = data.id, title = title, year = year, isMovie = true, imdbId = imdbId, scIframeUrl = null)
+            val linkData = LinkData(id = data.id, title = title, year = year, isMovie = true, imdbId = imdbId)
             StreamITALogger.log(TAG, "Film creato: '$title'")
             newMovieLoadResponse(title, url, TvType.Movie, linkData.toJson()) {
                 this.posterUrl = poster; this.backgroundPosterUrl = bgPoster; this.year = year; this.plot = plot; this.duration = res.runtime
@@ -195,7 +196,7 @@ class StreamITA(
                 val seasonNumber = season.seasonNumber ?: return@mapNotNull null
                 app.get("$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=$apiLang", headers = authHeaders, cacheTime = cacheSeconds)
                     .parsedSafe<MediaDetailEpisodes>()?.episodes?.map { eps ->
-                        val linkData = LinkData(id = data.id, title = title, year = year, season = eps.seasonNumber, episode = eps.episodeNumber, isMovie = false, imdbId = imdbId, scIframeUrl = null)
+                        val linkData = LinkData(id = data.id, title = title, year = year, season = eps.seasonNumber, episode = eps.episodeNumber, isMovie = false, imdbId = imdbId)
                         newEpisode(linkData.toJson()) {
                             this.name = eps.name ?: "Episodio ${eps.episodeNumber}"; this.season = eps.seasonNumber; this.episode = eps.episodeNumber
                             this.posterUrl = getImageUrl(eps.stillPath); this.description = eps.overview
