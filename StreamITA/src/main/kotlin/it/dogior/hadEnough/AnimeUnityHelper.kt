@@ -3,6 +3,7 @@ package it.dogior.hadEnough
 import android.util.Log
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+import com.lagradost.cloudstream3.utils.AppUtils.toMediaType
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
