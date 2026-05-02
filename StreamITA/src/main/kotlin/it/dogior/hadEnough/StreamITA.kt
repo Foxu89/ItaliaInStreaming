@@ -27,9 +27,7 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import it.dogior.hadEnough.extractors.VixCloudExtractor
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
@@ -245,44 +243,19 @@ class StreamITA(
 
             // ========== AnimeUnity in parallelo ==========
             launch {
-                StreamITALogger.log(TAG, "Avvio AnimeUnity in parallelo per tmdbId=$tmdbId...")
                 try {
                     val title = linkData.title ?: return@launch
-
-                    // Prova prima col titolo italiano
-                    var auResults = AnimeUnityHelper.search(title)
-
-                    // Se non trova, prova col titolo inglese da TMDB
-                    if (auResults.isEmpty() && linkData.id != null) {
-                        StreamITALogger.log(TAG, "Nessun risultato per '$title', provo titolo inglese...")
-                        val enTitle = fetchEnglishTitle(linkData.id, linkData.isMovie)
-                        if (enTitle != null && enTitle != title) {
-                            StreamITALogger.log(TAG, "Cerco AnimeUnity con titolo EN: '$enTitle'")
-                            auResults = AnimeUnityHelper.search(enTitle)
-                        }
-                    }
-
-                    if (auResults.isNotEmpty()) {
-                        val anime = auResults.first()
-                        val episodes = AnimeUnityHelper.loadEpisodes(anime.id, anime.slug)
-
-                        val targetEp = if (linkData.season == null) {
-                            episodes.firstOrNull()
-                        } else {
-                            episodes.find { it.number == linkData.episode.toString() }
-                        }
-
-                        if (targetEp != null) {
-                            val embedUrl = AnimeUnityHelper.getEmbedUrl(anime.id, anime.slug, targetEp.id)
-                            if (embedUrl != null) {
-                                VixCloudExtractor().getUrl(embedUrl, "https://www.animeunity.so/", subtitleCallback, callback)
-                                anySuccess = true
-                                StreamITALogger.log(TAG, "AnimeUnity OK: link trovato per ${anime.name} ep.${targetEp.number}")
-                            }
-                        }
-                    } else {
-                        StreamITALogger.log(TAG, "Nessun risultato AnimeUnity per '$title'")
-                    }
+                    val success = AnimeUnityScraper.loadLinks(
+                        title = title,
+                        tmdbId = linkData.id,
+                        isMovie = linkData.isMovie,
+                        season = linkData.season,
+                        episode = linkData.episode,
+                        subtitleCallback = subtitleCallback,
+                        callback = callback,
+                        fetchEnglishTitle = { id, isMov -> fetchEnglishTitle(id, isMov) }
+                    )
+                    if (success) anySuccess = true
                 } catch (e: Exception) {
                     StreamITALogger.log(TAG, "AnimeUnity fallito: ${e.message}")
                 }
