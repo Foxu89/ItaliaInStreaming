@@ -36,13 +36,7 @@ class VixSrcExtractor : ExtractorApi() {
                 )
             )
             
-            var m3u8Url = response.url
-            
-            // Sostituisci vixsrc.to → vixcloud.co nel link
-            m3u8Url = m3u8Url.replace("vixsrc.to", "vixcloud.co")
-            
-            // Forza lingua italiana
-            m3u8Url = m3u8Url.replace("lang=en", "lang=it")
+            val m3u8Url = response.url
             
             if (m3u8Url.contains("playlist") && m3u8Url.contains("token")) {
                 callback.invoke(
