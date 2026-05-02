@@ -27,13 +27,11 @@ import com.lagradost.cloudstream3.metaproviders.TmdbProvider
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import it.dogior.hadEnough.extractors.StreamingCommunityExtractor
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
-import org.jsoup.Jsoup
-import org.jsoup.parser.Parser
 
 class StreamITA(
     private val sharedPref: SharedPreferences?
@@ -62,99 +60,6 @@ class StreamITA(
     private val showLogo: Boolean get() = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_LOGO, false) ?: false
     private val showRating: Boolean get() = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_RATING, false) ?: false
     private val cacheSeconds: Int get() = (sharedPref?.getInt(StreamITAPlugin.PREF_CACHE_HOURS, 24) ?: 24) * 3600
-
-    // ==================== STREAMING COMMUNITY ====================
-
-    private var scInertiaVersion = ""
-    private val scHeaders = mutableMapOf(
-        "Cookie" to "",
-        "X-Inertia" to "true",
-        "X-Inertia-Version" to "",
-        "X-Requested-With" to "XMLHttpRequest",
-        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-    )
-
-    private data class StreamingCommunityTitle(
-        val id: Int,
-        val type: String,
-    )
-
-    private suspend fun ensureScHeaders() {
-        val hasSession = scHeaders["Cookie"]!!.isNotBlank() && scInertiaVersion.isNotBlank()
-        if (hasSession) return
-
-        StreamITALogger.log(TAG, "Ottenendo sessione StreamingCommunity...")
-        val response = app.get("https://streamingunity.dog/it/archive")
-        val cookies = response.cookies.map { "${it.key}=${it.value}" }.joinToString("; ")
-        scHeaders["Cookie"] = cookies
-
-        val dataPage = Jsoup.parse(response.text).selectFirst("#app")?.attr("data-page") ?: ""
-        scInertiaVersion = dataPage.substringAfter("\"version\":\"").substringBefore("\"")
-        scHeaders["X-Inertia-Version"] = scInertiaVersion
-        StreamITALogger.log(TAG, "Sessione SC ottenuta: version=$scInertiaVersion")
-    }
-
-    private suspend fun searchStreamingCommunity(title: String, year: Int?, isTvSeries: Boolean): StreamingCommunityTitle? {
-        ensureScHeaders()
-        val searchUrl = "https://streamingunity.dog/it/search?q=${java.net.URLEncoder.encode(title, "UTF-8")}"
-        StreamITALogger.log(TAG, "Cercando su SC: $searchUrl")
-        val text = app.get(searchUrl, headers = scHeaders, cacheTime = cacheSeconds).text
-        val json = extractScPageJson(text) ?: return null
-        return parseScSearchResults(json, title, year, isTvSeries)
-    }
-
-    private suspend fun fetchScEpisodeIframe(title: StreamingCommunityTitle, seasonNum: Int, episodeNum: Int): String? {
-        ensureScHeaders()
-        val url = "https://streamingunity.dog/it/titles/${title.id}-/season-$seasonNum"
-        StreamITALogger.log(TAG, "Caricando episodi SC: $url")
-        val text = app.get(url, headers = scHeaders, cacheTime = cacheSeconds).text
-        val json = extractScPageJson(text) ?: return null
-
-        val episodes = JSONObject(json).optJSONObject("props")?.optJSONObject("loadedSeason")
-            ?.optJSONArray("episodes") ?: return null
-
-        for (i in 0 until episodes.length()) {
-            val ep = episodes.optJSONObject(i) ?: continue
-            if (ep.optInt("number") == episodeNum) {
-                val epId = ep.optInt("id")
-                val iframeUrl = "https://streamingunity.dog/it/iframe/${title.id}?episode_id=$epId&canPlayFHD=1"
-                StreamITALogger.log(TAG, "Iframe SC trovato: $iframeUrl")
-                return iframeUrl
-            }
-        }
-        return null
-    }
-
-    private fun extractScPageJson(text: String): String? {
-        if (!text.trimStart().startsWith("<")) return text
-        val dataPage = Jsoup.parse(text).selectFirst("#app")?.attr("data-page") ?: return null
-        return Parser.unescapeEntities(dataPage, true)
-    }
-
-    private fun parseScSearchResults(jsonText: String, title: String, year: Int?, isTvSeries: Boolean): StreamingCommunityTitle? {
-        val json = JSONObject(jsonText)
-        val titles = json.optJSONObject("props")?.optJSONArray("titles") ?: json.optJSONArray("data") ?: return null
-        val expectedType = if (isTvSeries) "tv" else "movie"
-
-        for (i in 0 until titles.length()) {
-            val item = titles.optJSONObject(i) ?: continue
-            if (item.optString("type") != expectedType) continue
-            val itemName = item.optString("name")
-            if (itemName.isBlank()) continue
-
-            val titleMatch = normalizeTitle(itemName) == normalizeTitle(title)
-            val yearMatch = year == null || item.optString("release_date").substringBefore("-").toIntOrNull() == year
-
-            if (titleMatch && yearMatch) {
-                return StreamingCommunityTitle(id = item.optInt("id"), type = expectedType)
-            }
-        }
-        return null
-    }
-
-    private fun normalizeTitle(input: String): String {
-        return input.lowercase().replace(Regex("""\(\d{4}\)"""), "").replace(Regex("""[^a-z0-9]+"""), " ").trim()
-    }
 
     // ==================== SEZIONE NOMI ====================
 
@@ -276,31 +181,21 @@ class StreamITA(
         val trailer = res.videos?.results.orEmpty().filter { it.type == "Trailer" || it.type == "Teaser" }.map { "https://www.youtube.com/watch?v=${it.key}" }
 
         return if (type == TvType.Movie) {
-            val scIframeUrl = try {
-                StreamITALogger.log(TAG, "Cercando '$title' su StreamingCommunity...")
-                val scTitle = searchStreamingCommunity(title, year, isTvSeries = false)
-                if (scTitle != null) { StreamITALogger.log(TAG, "Trovato su SC: id=${scTitle.id}"); "https://streamingunity.dog/it/iframe/${scTitle.id}&canPlayFHD=1" }
-                else { StreamITALogger.log(TAG, "Non trovato su SC"); null }
-            } catch (e: Exception) { StreamITALogger.log(TAG, "Errore SC film: ${e.message}"); null }
-
-            val linkData = LinkData(id = data.id, title = title, year = year, isMovie = true, imdbId = imdbId, scIframeUrl = scIframeUrl)
-            StreamITALogger.log(TAG, "Film creato: '$title', SC: ${scIframeUrl != null}")
+            val linkData = LinkData(id = data.id, title = title, year = year, isMovie = true, imdbId = imdbId, scIframeUrl = null)
+            StreamITALogger.log(TAG, "Film creato: '$title'")
             newMovieLoadResponse(title, url, TvType.Movie, linkData.toJson()) {
                 this.posterUrl = poster; this.backgroundPosterUrl = bgPoster; this.year = year; this.plot = plot; this.duration = res.runtime
                 this.score = if (showRating) rating?.let { Score.from10(it) } else null; this.actors = actors; this.tags = genres; this.recommendations = recommendations
                 addTrailer(trailer); imdbId?.let { addImdbId(it) }; if (logoUrl != null) this.logoUrl = logoUrl
             }
         } else {
-            val scTitle = try { searchStreamingCommunity(title, year, isTvSeries = true) } catch (e: Exception) { StreamITALogger.log(TAG, "Errore SC serie: ${e.message}"); null }
-            if (scTitle != null) StreamITALogger.log(TAG, "Serie trovata su SC: id=${scTitle.id}")
             val seasons = res.seasons?.filter { it.seasonNumber != null && it.seasonNumber > 0 } ?: emptyList()
             StreamITALogger.log(TAG, "Serie TV: '$title', ${seasons.size} stagioni")
             val episodes = seasons.mapNotNull { season ->
                 val seasonNumber = season.seasonNumber ?: return@mapNotNull null
                 app.get("$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=$apiLang", headers = authHeaders, cacheTime = cacheSeconds)
                     .parsedSafe<MediaDetailEpisodes>()?.episodes?.map { eps ->
-                        val scEpisodeUrl = if (scTitle != null) try { fetchScEpisodeIframe(scTitle, seasonNumber, eps.episodeNumber ?: 0) } catch (e: Exception) { null } else null
-                        val linkData = LinkData(id = data.id, title = title, year = year, season = eps.seasonNumber, episode = eps.episodeNumber, isMovie = false, imdbId = imdbId, scIframeUrl = scEpisodeUrl)
+                        val linkData = LinkData(id = data.id, title = title, year = year, season = eps.seasonNumber, episode = eps.episodeNumber, isMovie = false, imdbId = imdbId, scIframeUrl = null)
                         newEpisode(linkData.toJson()) {
                             this.name = eps.name ?: "Episodio ${eps.episodeNumber}"; this.season = eps.seasonNumber; this.episode = eps.episodeNumber
                             this.posterUrl = getImageUrl(eps.stillPath); this.description = eps.overview
@@ -318,27 +213,69 @@ class StreamITA(
         }
     }
 
-    override suspend fun loadLinks(data: String, isCasting: Boolean, subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit): Boolean {
+    override suspend fun loadLinks(
+        data: String,
+        isCasting: Boolean,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
         val linkData = parseJson<LinkData>(data)
         val tmdbId = linkData.id ?: return false
         var anySuccess = false
-        StreamITALogger.log(TAG, "Ricerca link: tmdbId=$tmdbId, isMovie=${linkData.isMovie}, imdbId=${linkData.imdbId}")
+
+        StreamITALogger.log(TAG, "Ricerca link: tmdbId=$tmdbId, isMovie=${linkData.isMovie}")
 
         coroutineScope {
-            if (linkData.scIframeUrl != null) {
-                launch {
-                    try {
-                        StreamITALogger.log(TAG, "Provando SC: ${linkData.scIframeUrl}")
-                        StreamingCommunityExtractor().getUrl(linkData.scIframeUrl!!, "https://streamingunity.dog/", subtitleCallback, callback)
-                        anySuccess = true; StreamITALogger.log(TAG, "SC OK")
-                    } catch (e: Exception) { StreamITALogger.log(TAG, "SC fallito: ${e.message}") }
+            // ========== Estrattori normali ==========
+            val extractors = StreamITAExtractors(
+                scope = this,
+                subtitleCallback = subtitleCallback,
+                callback = callback,
+                onSuccess = {
+                    anySuccess = true
+                    StreamITALogger.log(TAG, "Link trovato da estrattori normali per tmdbId=$tmdbId")
+                }
+            )
+
+            if (linkData.isMovie && linkData.imdbId != null) {
+                extractors.loadMovieExtractors(linkData.imdbId)
+            }
+            extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
+
+            // ========== AnimeUnity in parallelo ==========
+            launch {
+                StreamITALogger.log(TAG, "Avvio AnimeUnity in parallelo per tmdbId=$tmdbId...")
+                try {
+                    val title = linkData.title ?: return@launch
+                    val auResults = AnimeUnityHelper.search(title)
+
+                    if (auResults.isNotEmpty()) {
+                        val anime = auResults.first()
+                        val episodes = AnimeUnityHelper.loadEpisodes(anime.id, anime.slug)
+
+                        val targetEp = if (linkData.season == null) {
+                            episodes.firstOrNull()
+                        } else {
+                            episodes.find { it.number == linkData.episode.toString() }
+                        }
+
+                        if (targetEp != null) {
+                            val embedUrl = AnimeUnityHelper.getEmbedUrl(anime.id, anime.slug, targetEp.id)
+                            if (embedUrl != null) {
+                                VixCloudExtractor().getUrl(embedUrl, "https://www.animeunity.so/", subtitleCallback, callback)
+                                anySuccess = true
+                                StreamITALogger.log(TAG, "AnimeUnity OK: link trovato per ${anime.name} ep.${targetEp.number}")
+                            }
+                        }
+                    } else {
+                        StreamITALogger.log(TAG, "Nessun risultato AnimeUnity per '$title'")
+                    }
+                } catch (e: Exception) {
+                    StreamITALogger.log(TAG, "AnimeUnity fallito: ${e.message}")
                 }
             }
-
-            val extractors = StreamITAExtractors(scope = this, subtitleCallback = subtitleCallback, callback = callback, onSuccess = { anySuccess = true; StreamITALogger.log(TAG, "Link trovato per tmdbId=$tmdbId") })
-            if (linkData.isMovie && linkData.imdbId != null) { StreamITALogger.log(TAG, "Avvio estrattori film per imdbId=${linkData.imdbId}"); extractors.loadMovieExtractors(linkData.imdbId) }
-            StreamITALogger.log(TAG, "Avvio estrattori comuni per tmdbId=$tmdbId"); extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
         }
+
         StreamITALogger.log(TAG, "Risultato ricerca link: successo=$anySuccess")
         return anySuccess
     }
