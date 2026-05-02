@@ -5,6 +5,7 @@ import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -54,11 +55,22 @@ class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFra
         val saveBtn = settings.findView<ImageView>("save")
         saveBtn.setImageDrawable(getDrawable("save_icon"))
         saveBtn.makeTvCompatible()
+        saveBtn.isFocusable = true
+        saveBtn.isFocusableInTouchMode = true
         saveBtn.setOnClickListener {
             sm.currentExtensions = extensions
             plugin.reload()
             showToast("Salvato")
             dismiss()
+        }
+        saveBtn.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && 
+                (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                saveBtn.performClick()
+                true
+            } else {
+                false
+            }
         }
 
         val extNameOnHomeBtn = settings.findView<Switch>("ext_name_on_home_toggle")
@@ -87,6 +99,12 @@ class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFra
             if (section.enabled == null) section.enabled = true
             checkBox.isChecked = section.enabled == true
             checkBox.setOnCheckedChangeListener { _, isChecked -> section.enabled = isChecked }
+            
+            // Rendi il contenitore cliccabile per toggle
+            sectionView.setOnClickListener {
+                checkBox.isChecked = !checkBox.isChecked
+            }
+            
             return sectionView
         }
 
@@ -100,10 +118,21 @@ class UltimaConfigureExtensions(val plugin: UltimaPlugin) : BottomSheetDialogFra
         expandImage.rotation = 90f
         extensionNameBtn.text = extension.name
         extensionDataBtn.makeTvCompatible()
+        
         extensionDataBtn.setOnClickListener {
             val isVisible = childList.isVisible
             childList.visibility = if (isVisible) View.GONE else View.VISIBLE
             expandImage.rotation = if (isVisible) 90f else 180f
+        }
+        
+        extensionDataBtn.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && 
+                (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                extensionDataBtn.performClick()
+                true
+            } else {
+                false
+            }
         }
 
         extension.sections?.forEach { section ->
