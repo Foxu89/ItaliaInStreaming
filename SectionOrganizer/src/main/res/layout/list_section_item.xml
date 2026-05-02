@@ -6,7 +6,8 @@
     android:focusable="true"
     android:clickable="true"
     android:background="@drawable/outline"
-    android:padding="8dp">
+    android:padding="8dp"
+    android:layout_marginBottom="4dp">
 
     <CheckBox
         android:id="@+id/section_checkbox"
@@ -15,5 +16,6 @@
         android:layout_weight="1"
         android:text="Nome estensione"
         android:textSize="15sp"
-        android:focusable="false" />
+        android:focusable="false"
+        android:clickable="false" />
 </LinearLayout>
