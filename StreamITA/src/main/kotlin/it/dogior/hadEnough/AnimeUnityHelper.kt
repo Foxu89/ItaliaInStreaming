@@ -1,15 +1,18 @@
 package it.dogior.hadEnough
 
 import android.util.Log
+import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.utils.ExtractorLink
+import it.dogior.hadEnough.extractors.VixCloudExtractor
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 
-object AnimeUnityHelper {
-    private const val TAG = "AnimeUnityHelper"
+object AnimeUnityScraper {
+    private const val TAG = "AnimeUnityScraper"
     private const val BASE_URL = "https://www.animeunity.so"
     private const val MAPPING_URL = "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json"
 
@@ -18,7 +21,7 @@ object AnimeUnityHelper {
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
     )
 
-    data class AnimeUnityAnime(
+    data class Anime(
         val id: Int,
         val slug: String,
         val name: String,
@@ -27,7 +30,7 @@ object AnimeUnityHelper {
         val isDub: Boolean,
     )
 
-    data class AnimeUnityEpisode(
+    data class Episode(
         val id: Int,
         val number: String,
         val name: String?,
@@ -80,7 +83,7 @@ object AnimeUnityHelper {
         }
     }
 
-    suspend fun getSyncIds(tmdbId: Int): Pair<Int?, Int?> {
+    private suspend fun getSyncIds(tmdbId: Int): Pair<Int?, Int?> {
         val mapping = getAnimeMapping()
         for (i in 0 until mapping.length()) {
             val entry = mapping.optJSONObject(i) ?: continue
@@ -94,7 +97,7 @@ object AnimeUnityHelper {
         return Pair(null, null)
     }
 
-    suspend fun search(title: String, tmdbId: Int? = null): List<AnimeUnityAnime> {
+    private suspend fun search(title: String, tmdbId: Int? = null): List<Anime> {
         ensureSession()
 
         val (anilistId, malId) = if (tmdbId != null) getSyncIds(tmdbId) else Pair(null, null)
@@ -123,7 +126,7 @@ object AnimeUnityHelper {
         val data = JSONObject(response.text)
         val records = data.optJSONArray("records") ?: JSONArray()
 
-        val allResults = mutableListOf<AnimeUnityAnime>()
+        val allResults = mutableListOf<Anime>()
         for (i in 0 until records.length()) {
             val item = records.optJSONObject(i) ?: continue
             val id = item.optInt("id")
@@ -131,7 +134,7 @@ object AnimeUnityHelper {
             val name = item.optString("name")
             if (id > 0 && slug.isNotBlank()) {
                 allResults.add(
-                    AnimeUnityAnime(
+                    Anime(
                         id = id,
                         slug = slug,
                         name = name,
@@ -167,7 +170,7 @@ object AnimeUnityHelper {
         return emptyList()
     }
 
-    suspend fun loadEpisodes(animeId: Int, slug: String): List<AnimeUnityEpisode> {
+    private suspend fun loadEpisodes(animeId: Int, slug: String): List<Episode> {
         ensureSession()
 
         val url = "$BASE_URL/anime/$animeId-$slug"
@@ -184,7 +187,7 @@ object AnimeUnityHelper {
                 val id = ep.optInt("id")
                 val number = ep.optString("number")
                 if (id > 0 && number.isNotBlank()) {
-                    AnimeUnityEpisode(id = id, number = number, name = ep.optString("name").takeIf { it.isNotBlank() })
+                    Episode(id = id, number = number, name = ep.optString("name").takeIf { it.isNotBlank() })
                 } else null
             }
         } catch (e: Exception) {
@@ -193,7 +196,7 @@ object AnimeUnityHelper {
         }
     }
 
-    suspend fun getEmbedUrl(animeId: Int, slug: String, episodeId: Int): String? {
+    private suspend fun getEmbedUrl(animeId: Int, slug: String, episodeId: Int): String? {
         ensureSession()
 
         val url = "$BASE_URL/anime/$animeId-$slug/$episodeId"
@@ -210,5 +213,64 @@ object AnimeUnityHelper {
             is String -> value.toIntOrNull()
             else -> null
         }?.takeIf { it > 0 }
+    }
+
+    /**
+     * METODO PUBBLICO: cerca su AnimeUnity e carica i link.
+     * Prova prima col titolo passato, poi col titolo inglese da TMDB.
+     */
+    suspend fun loadLinks(
+        title: String,
+        tmdbId: Int?,
+        isMovie: Boolean,
+        season: Int?,
+        episode: Int?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit,
+        fetchEnglishTitle: suspend (Int, Boolean) -> String?
+    ): Boolean {
+        StreamITALogger.log(TAG, "Avvio AnimeUnity per '$title' (tmdbId=$tmdbId)...")
+
+        // Prova prima col titolo italiano
+        var auResults = search(title, tmdbId)
+
+        // Se non trova, prova col titolo inglese da TMDB
+        if (auResults.isEmpty() && tmdbId != null) {
+            StreamITALogger.log(TAG, "Nessun risultato per '$title', provo titolo inglese...")
+            val enTitle = fetchEnglishTitle(tmdbId, isMovie)
+            if (enTitle != null && enTitle != title) {
+                StreamITALogger.log(TAG, "Cerco AnimeUnity con titolo EN: '$enTitle'")
+                auResults = search(enTitle, tmdbId)
+            }
+        }
+
+        if (auResults.isEmpty()) {
+            StreamITALogger.log(TAG, "Nessun risultato AnimeUnity")
+            return false
+        }
+
+        val anime = auResults.first()
+        val episodes = loadEpisodes(anime.id, anime.slug)
+
+        val targetEp = if (season == null) {
+            episodes.firstOrNull()
+        } else {
+            episodes.find { it.number == episode.toString() }
+        }
+
+        if (targetEp == null) {
+            StreamITALogger.log(TAG, "Episodio $season-$episode non trovato")
+            return false
+        }
+
+        val embedUrl = getEmbedUrl(anime.id, anime.slug, targetEp.id)
+        if (embedUrl == null) {
+            StreamITALogger.log(TAG, "Embed URL non trovato")
+            return false
+        }
+
+        VixCloudExtractor().getUrl(embedUrl, BASE_URL, subtitleCallback, callback)
+        StreamITALogger.log(TAG, "AnimeUnity OK: link trovato per ${anime.name} ep.${targetEp.number}")
+        return true
     }
 }
