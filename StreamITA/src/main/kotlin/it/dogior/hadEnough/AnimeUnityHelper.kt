@@ -11,6 +11,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 object AnimeUnityHelper {
     private const val TAG = "AnimeUnityHelper"
     private const val BASE_URL = "https://www.animeunity.so"
+    private const val MAPPING_URL = "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json"
 
     private val headers = mutableMapOf(
         "Host" to "www.animeunity.so",
@@ -35,6 +36,7 @@ object AnimeUnityHelper {
     private var csrfToken = ""
     private var cookieStr = ""
     private var sessionReady = false
+    private var animeMappingCache: JSONArray? = null
 
     private suspend fun ensureSession() {
         if (sessionReady) return
@@ -65,8 +67,38 @@ object AnimeUnityHelper {
         )
     }
 
-    suspend fun search(title: String): List<AnimeUnityAnime> {
+    private suspend fun getAnimeMapping(): JSONArray {
+        if (animeMappingCache != null) return animeMappingCache!!
+
+        Log.d(TAG, "Scaricando anime-list-full.json...")
+        return try {
+            val response = app.get(MAPPING_URL)
+            JSONArray(response.text).also { animeMappingCache = it }
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore download mapping: ${e.message}")
+            JSONArray()
+        }
+    }
+
+    suspend fun getSyncIds(tmdbId: Int): Pair<Int?, Int?> {
+        val mapping = getAnimeMapping()
+        for (i in 0 until mapping.length()) {
+            val entry = mapping.optJSONObject(i) ?: continue
+            if (entry.optNullableInt("themoviedb_id") == tmdbId) {
+                return Pair(
+                    entry.optNullableInt("anilist_id"),
+                    entry.optNullableInt("mal_id")
+                )
+            }
+        }
+        return Pair(null, null)
+    }
+
+    suspend fun search(title: String, tmdbId: Int? = null): List<AnimeUnityAnime> {
         ensureSession()
+
+        val (anilistId, malId) = if (tmdbId != null) getSyncIds(tmdbId) else Pair(null, null)
+        Log.d(TAG, "Sync IDs per TMDB $tmdbId: anilist=$anilistId, mal=$malId")
 
         val body = JSONObject().apply {
             put("title", title)
@@ -91,14 +123,14 @@ object AnimeUnityHelper {
         val data = JSONObject(response.text)
         val records = data.optJSONArray("records") ?: JSONArray()
 
-        val results = mutableListOf<AnimeUnityAnime>()
+        val allResults = mutableListOf<AnimeUnityAnime>()
         for (i in 0 until records.length()) {
             val item = records.optJSONObject(i) ?: continue
             val id = item.optInt("id")
             val slug = item.optString("slug")
             val name = item.optString("name")
             if (id > 0 && slug.isNotBlank()) {
-                results.add(
+                allResults.add(
                     AnimeUnityAnime(
                         id = id,
                         slug = slug,
@@ -111,8 +143,22 @@ object AnimeUnityHelper {
             }
         }
 
-        Log.d(TAG, "Trovati ${results.size} risultati per '$title'")
-        return results
+        Log.d(TAG, "Trovati ${allResults.size} risultati per '$title'")
+
+        // Match esatto per anilist_id o mal_id
+        if (anilistId != null || malId != null) {
+            val matched = allResults.filter { anime ->
+                (anilistId != null && anime.anilistId == anilistId) ||
+                (malId != null && anime.malId == malId)
+            }
+            if (matched.isNotEmpty()) {
+                Log.d(TAG, "Match esatto: ${matched.size} risultati")
+                return matched
+            }
+        }
+
+        Log.d(TAG, "Nessun match esatto trovato")
+        return emptyList()
     }
 
     suspend fun loadEpisodes(animeId: Int, slug: String): List<AnimeUnityEpisode> {
