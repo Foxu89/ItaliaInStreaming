@@ -36,7 +36,10 @@ class VixSrcExtractor : ExtractorApi() {
                 )
             )
             
-            val m3u8Url = response.url
+            var m3u8Url = response.url
+            
+            // Sostituisci vixsrc.to → vixcloud.co nel link
+            m3u8Url = m3u8Url.replace("vixsrc.to", "vixcloud.co")
             
             if (m3u8Url.contains("playlist") && m3u8Url.contains("token")) {
                 callback.invoke(
