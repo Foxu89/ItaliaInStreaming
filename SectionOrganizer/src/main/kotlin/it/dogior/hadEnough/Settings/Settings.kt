@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -50,6 +51,8 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
         val saveBtn = settings.findView<ImageView>("save")
         saveBtn.setImageDrawable(getDrawable("save_icon"))
         saveBtn.makeTvCompatible()
+        saveBtn.isFocusable = true
+        saveBtn.isFocusableInTouchMode = true
         saveBtn.setOnClickListener {
             AlertDialog.Builder(requireContext())
                 .setTitle("Riavvio necessario")
@@ -67,41 +70,85 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
                     dismiss()
                 }.show()
         }
+        saveBtn.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && 
+                (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                saveBtn.performClick()
+                true
+            } else {
+                false
+            }
+        }
 
-        val configBtn = settings.findView<ImageView>("config_img")
-        configBtn.setImageDrawable(getDrawable("edit_icon"))
-        configBtn.makeTvCompatible()
-        configBtn.setOnClickListener {
+        val configRow = settings.findView<LinearLayout>("config_row")
+        configRow.makeTvCompatible()
+        configRow.isFocusable = true
+        configRow.isFocusableInTouchMode = true
+        configRow.isClickable = true
+        configRow.setOnClickListener {
             UltimaConfigureExtensions(plugin).show(
                 activity?.supportFragmentManager ?: throw Exception("Impossibile aprire le impostazioni"),
                 ""
             )
             dismiss()
         }
+        configRow.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && 
+                (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                configRow.performClick()
+                true
+            } else {
+                false
+            }
+        }
 
-        val reorderBtn = settings.findView<ImageView>("reorder_img")
-        reorderBtn.setImageDrawable(getDrawable("edit_icon"))
-        reorderBtn.makeTvCompatible()
-        reorderBtn.setOnClickListener {
+        val reorderRow = settings.findView<LinearLayout>("reorder_row")
+        reorderRow.makeTvCompatible()
+        reorderRow.isFocusable = true
+        reorderRow.isFocusableInTouchMode = true
+        reorderRow.isClickable = true
+        reorderRow.setOnClickListener {
             UltimaReorder(plugin).show(
                 activity?.supportFragmentManager ?: throw Exception("Impossibile aprire le impostazioni"),
                 ""
             )
             dismiss()
         }
+        reorderRow.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && 
+                (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                reorderRow.performClick()
+                true
+            } else {
+                false
+            }
+        }
 
-        val guideIcon = settings.findView<ImageView>("guide_icon")
-        guideIcon.setImageDrawable(getDrawable("ic_eye"))
-        guideIcon.makeTvCompatible()
-        guideIcon.setOnClickListener {
+        val guideRow = settings.findView<LinearLayout>("guide_row")
+        guideRow.makeTvCompatible()
+        guideRow.isFocusable = true
+        guideRow.isFocusableInTouchMode = true
+        guideRow.isClickable = true
+        guideRow.setOnClickListener {
             val url = "https://github.com/DieGon7771/ItaliaInStreaming/blob/master/guide/README_SectionOrganizer.md"
             startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
+        guideRow.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && 
+                (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                guideRow.performClick()
+                true
+            } else {
+                false
+            }
+        }
 
-        val deleteBtn = settings.findView<TextView>("delete_img")
-        deleteBtn.text = "Reset"
-        deleteBtn.makeTvCompatible()
-        deleteBtn.setOnClickListener {
+        val deleteRow = settings.findView<LinearLayout>("delete_row")
+        deleteRow.makeTvCompatible()
+        deleteRow.isFocusable = true
+        deleteRow.isFocusableInTouchMode = true
+        deleteRow.isClickable = true
+        deleteRow.setOnClickListener {
             AlertDialog.Builder(requireContext())
                 .setTitle("Reset SectionOrganizer")
                 .setMessage("Questo cancellerà tutte le sezioni selezionate.")
@@ -114,6 +161,15 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
                 .setNegativeButton("Annulla", null)
                 .show()
                 .setDefaultFocus()
+        }
+        deleteRow.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && 
+                (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                deleteRow.performClick()
+                true
+            } else {
+                false
+            }
         }
 
         return settings
