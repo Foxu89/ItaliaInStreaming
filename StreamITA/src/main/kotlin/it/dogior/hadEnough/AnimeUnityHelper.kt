@@ -2,16 +2,15 @@ package it.dogior.hadEnough
 
 import android.util.Log
 import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.utils.AppUtils.parseJson
-import com.lagradost.cloudstream3.utils.AppUtils.toMediaType
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 object AnimeUnityHelper {
     private const val TAG = "AnimeUnityHelper"
     private const val BASE_URL = "https://www.animeunity.so"
-    private const val MAPPING_URL = "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json"
 
     private val headers = mutableMapOf(
         "Host" to "www.animeunity.so",
@@ -66,9 +65,6 @@ object AnimeUnityHelper {
         )
     }
 
-    /**
-     * Cerca un anime su AnimeUnity per titolo
-     */
     suspend fun search(title: String): List<AnimeUnityAnime> {
         ensureSession()
 
@@ -84,10 +80,12 @@ object AnimeUnityHelper {
             put("offset", 0)
         }
 
+        val requestBody = body.toString().toRequestBody("application/json;charset=utf-8".toMediaType())
+
         val response = app.post(
             "$BASE_URL/archivio/get-animes",
             headers = getApiHeaders(),
-            requestBody = body.toString().toRequestBody("application/json;charset=utf-8".toMediaType())
+            requestBody = requestBody
         )
 
         val data = JSONObject(response.text)
@@ -117,9 +115,6 @@ object AnimeUnityHelper {
         return results
     }
 
-    /**
-     * Carica gli episodi di un anime
-     */
     suspend fun loadEpisodes(animeId: Int, slug: String): List<AnimeUnityEpisode> {
         ensureSession()
 
@@ -146,9 +141,6 @@ object AnimeUnityHelper {
         }
     }
 
-    /**
-     * Ottiene l'URL embed VixCloud per un episodio
-     */
     suspend fun getEmbedUrl(animeId: Int, slug: String, episodeId: Int): String? {
         ensureSession()
 
@@ -166,9 +158,5 @@ object AnimeUnityHelper {
             is String -> value.toIntOrNull()
             else -> null
         }?.takeIf { it > 0 }
-    }
-
-    private fun String.toRequestBody(contentType: String): okhttp3.RequestBody {
-        return okhttp3.RequestBody.create(okhttp3.MediaType.parse(contentType), this)
     }
 }
