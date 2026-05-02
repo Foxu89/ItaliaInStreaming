@@ -57,11 +57,22 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
         val saveBtn = root.findView<ImageView>("save")
         saveBtn.setImageDrawable(getDrawable("save_icon"))
         saveBtn.makeTvCompatible()
+        saveBtn.isFocusable = true
+        saveBtn.isFocusableInTouchMode = true
         saveBtn.setOnClickListener {
             lifecycleScope.launch {
                 withContext(Dispatchers.IO) { sm.currentExtensions = extensions }
                 showToast("Salvato. Riavvia l'app per applicare le modifiche.")
                 dismiss()
+            }
+        }
+        saveBtn.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && 
+                (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                saveBtn.performClick()
+                true
+            } else {
+                false
             }
         }
 
@@ -147,6 +158,14 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
             decreaseBtn.rotation = 180f
             increaseBtn.makeTvCompatible()
             decreaseBtn.makeTvCompatible()
+            
+            increaseBtn.isFocusable = true
+            increaseBtn.isFocusableInTouchMode = true
+            increaseBtn.isClickable = true
+            
+            decreaseBtn.isFocusable = true
+            decreaseBtn.isFocusableInTouchMode = true
+            decreaseBtn.isClickable = true
 
             increaseBtn.setOnClickListener {
                 val idx = displaySections.indexOf(section)
@@ -158,6 +177,16 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
                     updateSectionList(sectionsListView, inflater, container, noSectionWarning, newList)
                 } else showToast("Già in cima")
             }
+            
+            increaseBtn.setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN && 
+                    (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    increaseBtn.performClick()
+                    true
+                } else {
+                    false
+                }
+            }
 
             decreaseBtn.setOnClickListener {
                 val idx = displaySections.indexOf(section)
@@ -168,6 +197,16 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
                     newList.forEachIndexed { index, sec -> sec.priority = newList.size - index }
                     updateSectionList(sectionsListView, inflater, container, noSectionWarning, newList)
                 } else showToast("Già in fondo")
+            }
+            
+            decreaseBtn.setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN && 
+                    (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    decreaseBtn.performClick()
+                    true
+                } else {
+                    false
+                }
             }
 
             counter -= 1
