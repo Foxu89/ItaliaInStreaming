@@ -145,7 +145,7 @@ object AnimeUnityHelper {
 
         Log.d(TAG, "Trovati ${allResults.size} risultati per '$title'")
 
-        // Match esatto per anilist_id o mal_id
+        // 1. Match esatto per anilist_id o mal_id
         if (anilistId != null || malId != null) {
             val matched = allResults.filter { anime ->
                 (anilistId != null && anime.anilistId == anilistId) ||
@@ -157,7 +157,13 @@ object AnimeUnityHelper {
             }
         }
 
-        Log.d(TAG, "Nessun match esatto trovato")
+        // 2. Fallback: prendi il primo risultato
+        if (allResults.isNotEmpty()) {
+            Log.d(TAG, "Nessun match esatto, uso il primo risultato: ${allResults[0].name}")
+            return listOf(allResults[0])
+        }
+
+        Log.d(TAG, "Nessun risultato trovato")
         return emptyList()
     }
 
