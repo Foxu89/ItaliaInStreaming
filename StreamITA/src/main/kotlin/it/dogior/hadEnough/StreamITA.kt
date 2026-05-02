@@ -248,7 +248,19 @@ class StreamITA(
                 StreamITALogger.log(TAG, "Avvio AnimeUnity in parallelo per tmdbId=$tmdbId...")
                 try {
                     val title = linkData.title ?: return@launch
-                    val auResults = AnimeUnityHelper.search(title)
+
+                    // Prova prima col titolo italiano
+                    var auResults = AnimeUnityHelper.search(title)
+
+                    // Se non trova, prova col titolo inglese da TMDB
+                    if (auResults.isEmpty() && linkData.id != null) {
+                        StreamITALogger.log(TAG, "Nessun risultato per '$title', provo titolo inglese...")
+                        val enTitle = fetchEnglishTitle(linkData.id, linkData.isMovie)
+                        if (enTitle != null && enTitle != title) {
+                            StreamITALogger.log(TAG, "Cerco AnimeUnity con titolo EN: '$enTitle'")
+                            auResults = AnimeUnityHelper.search(enTitle)
+                        }
+                    }
 
                     if (auResults.isNotEmpty()) {
                         val anime = auResults.first()
@@ -279,6 +291,21 @@ class StreamITA(
 
         StreamITALogger.log(TAG, "Risultato ricerca link: successo=$anySuccess")
         return anySuccess
+    }
+
+    private suspend fun fetchEnglishTitle(tmdbId: Int, isMovie: Boolean): String? {
+        return try {
+            val type = if (isMovie) "movie" else "tv"
+            val url = "$tmdbAPI/$type/$tmdbId?language=en-US"
+            val response = app.get(url, headers = authHeaders, cacheTime = cacheSeconds)
+            if (!response.isSuccessful) return null
+            val json = JSONObject(response.body?.string() ?: return null)
+            json.optString("title").takeIf { it.isNotBlank() }
+                ?: json.optString("name").takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            StreamITALogger.log(TAG, "Errore recupero titolo inglese: ${e.message}")
+            null
+        }
     }
 
     private suspend fun fetchTmdbLogoUrl(type: TvType, tmdbId: Int?, appLangCode: String?): String? {
