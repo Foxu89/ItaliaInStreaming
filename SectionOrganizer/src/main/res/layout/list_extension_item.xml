@@ -10,6 +10,7 @@
         android:layout_height="wrap_content"
         android:padding="10dp"
         android:focusable="true"
+        android:focusableInTouchMode="true"
         android:clickable="true"
         android:background="@drawable/outline"
         android:nextFocusDown="@id/sections_list">
