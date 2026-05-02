@@ -3,7 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:layoutDirection="ltr">
+    android:layoutDirection="ltr"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -14,6 +16,7 @@
         android:paddingBottom="20dp"
         tools:background="@color/cardview_dark_background">
 
+        <!-- Header Row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -42,13 +45,15 @@
                     android:layout_marginBottom="5dp"
                     android:padding="5dp"
                     android:focusable="true"
-                    android:nextFocusDown="@id/config_img"
-                    android:nextFocusUp="@id/save" />
+                    android:clickable="true"
+                    android:background="@drawable/outline"
+                    android:nextFocusDown="@id/config_row" />
 
             </LinearLayout>
 
         </LinearLayout>
 
+        <!-- Divider -->
         <ImageView
             android:src="@android:drawable/divider_horizontal_dark"
             android:layout_width="fill_parent"
@@ -61,10 +66,17 @@
 
         <!-- Configure Extension Sections -->
         <LinearLayout
+            android:id="@+id/config_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:focusable="true"
+            android:clickable="true"
+            android:background="@drawable/outline"
+            android:padding="10dp"
+            android:nextFocusDown="@id/reorder_row"
+            android:nextFocusUp="@id/save">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -72,32 +84,31 @@
                 android:layout_rowWeight="1"
                 android:text="Configura sezioni estensioni"
                 android:textSize="18sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:focusable="false" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <ImageView
+                android:id="@+id/config_img"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <ImageView
-                    android:id="@+id/config_img"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/reorder_img"
-                    android:nextFocusUp="@id/save" />
-
-            </LinearLayout>
+                android:padding="5dp"
+                android:focusable="false" />
 
         </LinearLayout>
 
         <!-- Reorder Sections -->
         <LinearLayout
+            android:id="@+id/reorder_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:focusable="true"
+            android:clickable="true"
+            android:background="@drawable/outline"
+            android:padding="10dp"
+            android:nextFocusDown="@id/guide_row"
+            android:nextFocusUp="@id/config_row">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -105,34 +116,31 @@
                 android:layout_rowWeight="1"
                 android:text="Riordina sezioni"
                 android:textSize="18sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:focusable="false" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <ImageView
+                android:id="@+id/reorder_img"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <ImageView
-                    android:id="@+id/reorder_img"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/guide_icon"
-                    android:nextFocusUp="@id/config_img" />
-
-            </LinearLayout>
+                android:padding="5dp"
+                android:focusable="false" />
 
         </LinearLayout>
 
-        <!-- RIMOSSA: Sezione "Cross Device Watch Sync" -->
-
         <!-- Guide Link -->
         <LinearLayout
+            android:id="@+id/guide_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:focusable="true"
+            android:clickable="true"
+            android:background="@drawable/outline"
+            android:padding="10dp"
+            android:nextFocusDown="@id/delete_row"
+            android:nextFocusUp="@id/reorder_row">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -140,26 +148,19 @@
                 android:layout_rowWeight="1"
                 android:text="Guida rapida -->"
                 android:textSize="18sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:focusable="false" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <ImageView
+                android:id="@+id/guide_icon"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <ImageView
-                    android:id="@+id/guide_icon"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/delete_img"
-                    android:nextFocusUp="@id/reorder_img" />
-
-            </LinearLayout>
+                android:padding="5dp"
+                android:focusable="false" />
 
         </LinearLayout>
 
+        <!-- Divider -->
         <ImageView
             android:src="@android:drawable/divider_horizontal_dark"
             android:layout_width="fill_parent"
@@ -172,10 +173,17 @@
 
         <!-- Reset Button -->
         <LinearLayout
+            android:id="@+id/delete_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:focusable="true"
+            android:clickable="true"
+            android:background="@drawable/outline"
+            android:padding="10dp"
+            android:nextFocusDown="@id/save"
+            android:nextFocusUp="@id/guide_row">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -183,26 +191,18 @@
                 android:layout_rowWeight="1"
                 android:text="Resetta SectionOrganizer"
                 android:textSize="18sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:focusable="false" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                android:id="@+id/delete_img"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <TextView
-                    android:id="@+id/delete_img"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="10dp"
-                    android:focusable="true"
-                    android:text="Reset"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:nextFocusDown="@id/save"
-                    android:nextFocusUp="@id/guide_icon" />
-
-            </LinearLayout>
+                android:padding="10dp"
+                android:text="Reset"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:focusable="false" />
 
         </LinearLayout>
 
