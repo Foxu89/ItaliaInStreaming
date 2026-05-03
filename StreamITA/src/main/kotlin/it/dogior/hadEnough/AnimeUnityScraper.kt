@@ -42,7 +42,6 @@ object AnimeUnityScraper {
     ) {
         val hasSub: Boolean get() = sub != null
         val hasDub: Boolean get() = dub != null
-        val best: Anime? get() = sub ?: dub
     }
 
     private var csrfToken = ""
@@ -164,14 +163,33 @@ object AnimeUnityScraper {
                 (malId != null && anime.malId == malId)
             }
             if (matched.isNotEmpty()) {
-                Log.d(TAG, "Match esatto: ${matched.size} risultati")
+                Log.d(TAG, "Match esatto sync IDs: ${matched.size} risultati")
                 return matched
             }
         }
 
-        // 2. Restituisci tutti i risultati per permettere la divisione SUB/DUB
-        Log.d(TAG, "Nessun match esatto, restituisco tutti i ${allResults.size} risultati")
-        return allResults
+        // 2. Fuzzy match per titolo normalizzato
+        val normalizedTitle = normalizeTitle(title)
+        val fuzzyMatches = allResults.filter { anime ->
+            val animeName = normalizeTitle(anime.name)
+            animeName == normalizedTitle ||
+            animeName.contains(normalizedTitle) ||
+            normalizedTitle.contains(animeName)
+        }
+
+        if (fuzzyMatches.isNotEmpty()) {
+            Log.d(TAG, "Fuzzy match titolo: ${fuzzyMatches.size} risultati")
+            return fuzzyMatches
+        }
+
+        // 3. Fallback: prendi il primo risultato
+        if (allResults.isNotEmpty()) {
+            Log.d(TAG, "Nessun match, uso primo risultato: ${allResults[0].name}")
+            return listOf(allResults[0])
+        }
+
+        Log.d(TAG, "Nessun risultato trovato")
+        return emptyList()
     }
 
     private suspend fun loadEpisodes(animeId: Int, slug: String): List<Episode> {
@@ -210,6 +228,16 @@ object AnimeUnityScraper {
         return doc.selectFirst("video-player")?.attr("embed_url")?.takeIf { it.isNotBlank() }
     }
 
+    private fun normalizeTitle(input: String): String {
+        return input
+            .lowercase()
+            .replace("&", "and")
+            .replace(Regex("""\([^)]*\)"""), " ")
+            .replace(Regex("""\b(movie|the movie|ita|sub ita|subita|tv|ona|ova|special|season|stagione)\b"""), " ")
+            .replace(Regex("""[^a-z0-9]+"""), " ")
+            .trim()
+    }
+
     private fun JSONObject.optNullableInt(name: String): Int? {
         if (!has(name) || isNull(name)) return null
         return when (val value = opt(name)) {
@@ -219,10 +247,6 @@ object AnimeUnityScraper {
         }?.takeIf { it > 0 }
     }
 
-    /**
-     * METODO PUBBLICO: cerca su AnimeUnity e carica i link.
-     * Prova SUB, poi DUB. Prova prima col titolo italiano, poi inglese.
-     */
     suspend fun loadLinks(
         title: String,
         tmdbId: Int?,
@@ -235,10 +259,8 @@ object AnimeUnityScraper {
     ): Boolean {
         StreamITALogger.log(TAG, "Avvio AnimeUnity per '$title' (tmdbId=$tmdbId)...")
 
-        // Prova prima col titolo italiano
         var auResults = search(title, tmdbId)
 
-        // Se non trova, prova col titolo inglese da TMDB
         if (auResults.isEmpty() && tmdbId != null) {
             StreamITALogger.log(TAG, "Nessun risultato per '$title', provo titolo inglese...")
             val enTitle = fetchEnglishTitle(tmdbId, isMovie)
@@ -253,16 +275,21 @@ object AnimeUnityScraper {
             return false
         }
 
-        // Dividi SUB e DUB
         val subAnime = auResults.firstOrNull { !it.isDub }
         val dubAnime = auResults.firstOrNull { it.isDub }
         val titleSources = TitleSources(sub = subAnime, dub = dubAnime)
 
         StreamITALogger.log(TAG, "SUB: ${subAnime?.name}, DUB: ${dubAnime?.name}")
 
-        // Prova SUB, poi DUB
-        val anime = titleSources.best ?: return false
-        return tryLoadFromAnime(anime, season, episode, subtitleCallback, callback)
+        var anySuccess = false
+        val animeToTry = listOfNotNull(titleSources.sub, titleSources.dub)
+
+        for (anime in animeToTry) {
+            val success = tryLoadFromAnime(anime, season, episode, subtitleCallback, callback)
+            if (success) anySuccess = true
+        }
+
+        return anySuccess
     }
 
     private suspend fun tryLoadFromAnime(
