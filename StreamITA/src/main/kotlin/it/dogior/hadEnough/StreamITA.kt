@@ -266,37 +266,33 @@ class StreamITA(
                 try {
                     val title = linkData.title ?: return@launch
                     val tmdbIdLocal = linkData.id
-
                     val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
 
-                    val awResults = AnimeWorldScraper.search(
+                    val sources = AnimeWorldScraper.searchWithSources(
                         title = title,
                         tmdbId = tmdbIdLocal,
                         englishTitle = enTitle
                     )
 
-                    if (awResults.isNotEmpty()) {
-                        val anime = awResults.first()
-                        val episodes = AnimeWorldScraper.loadEpisodes(anime.url)
+                    // Prova SUB, poi DUB
+                    val anime = sources.best ?: return@launch
+                    val episodes = AnimeWorldScraper.loadEpisodes(anime.url)
 
-                        val targetEp = if (linkData.season == null) {
-                            episodes.firstOrNull()
-                        } else {
-                            episodes.find { it.number == linkData.episode.toString() }
-                        }
+                    val targetEp = if (linkData.season == null) {
+                        episodes.firstOrNull()
+                    } else {
+                        episodes.find { it.number == linkData.episode.toString() }
+                    }
 
-                        if (targetEp != null) {
-                            val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token)
-                            if (info != null) {
-                                val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
-                                if (success) {
-                                    anySuccess = true
-                                    StreamITALogger.log(TAG, "AnimeWorld OK: link trovato per ep.${targetEp.number}")
-                                }
+                    if (targetEp != null) {
+                        val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
+                        if (info != null) {
+                            val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
+                            if (success) {
+                                anySuccess = true
+                                StreamITALogger.log(TAG, "AnimeWorld OK: link trovato per ep.${targetEp.number}")
                             }
                         }
-                    } else {
-                        StreamITALogger.log(TAG, "Nessun risultato AnimeWorld")
                     }
                 } catch (e: Exception) {
                     StreamITALogger.log(TAG, "AnimeWorld fallito: ${e.message}")
