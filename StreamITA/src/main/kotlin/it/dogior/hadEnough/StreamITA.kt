@@ -274,23 +274,26 @@ class StreamITA(
                         englishTitle = enTitle
                     )
 
-                    // Prova SUB, poi DUB
-                    val anime = sources.best ?: return@launch
-                    val episodes = AnimeWorldScraper.loadEpisodes(anime.url)
+                    // Prova sia SUB che DUB, entrambi vengono aggiunti come sorgenti
+                    val animeToTry = listOfNotNull(sources.sub, sources.dub)
 
-                    val targetEp = if (linkData.season == null) {
-                        episodes.firstOrNull()
-                    } else {
-                        episodes.find { it.number == linkData.episode.toString() }
-                    }
+                    for (anime in animeToTry) {
+                        val episodes = AnimeWorldScraper.loadEpisodes(anime.url)
 
-                    if (targetEp != null) {
-                        val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
-                        if (info != null) {
-                            val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
-                            if (success) {
-                                anySuccess = true
-                                StreamITALogger.log(TAG, "AnimeWorld OK: link trovato per ep.${targetEp.number}")
+                        val targetEp = if (linkData.season == null) {
+                            episodes.firstOrNull()
+                        } else {
+                            episodes.find { it.number == linkData.episode.toString() }
+                        }
+
+                        if (targetEp != null) {
+                            val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
+                            if (info != null) {
+                                val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
+                                if (success) {
+                                    anySuccess = true
+                                    StreamITALogger.log(TAG, "AnimeWorld OK: link trovato per ep.${targetEp.number} (${if (anime.isDub) "DUB" else "SUB"})")
+                                }
                             }
                         }
                     }
