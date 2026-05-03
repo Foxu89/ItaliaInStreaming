@@ -45,6 +45,24 @@ class MixDropExtractor : ExtractorApi() {
         
         private fun isVideoUrl(url: String): Boolean {
             val lowerUrl = url.lowercase()
+            
+            // Escludi immagini e altri file statici
+            if (lowerUrl.contains(".jpg") || 
+                lowerUrl.contains(".jpeg") || 
+                lowerUrl.contains(".png") || 
+                lowerUrl.contains(".webp") || 
+                lowerUrl.contains(".gif") ||
+                lowerUrl.contains(".svg") ||
+                lowerUrl.contains(".css") ||
+                lowerUrl.contains(".js") ||
+                lowerUrl.contains("favicon") ||
+                lowerUrl.contains("poster") ||
+                lowerUrl.contains("thumbnail") ||
+                lowerUrl.contains("image")) {
+                return false
+            }
+            
+            // Accetta solo video
             return lowerUrl.contains(".mp4") || 
                    lowerUrl.contains(".m3u8") || 
                    lowerUrl.contains("delivery") || 
