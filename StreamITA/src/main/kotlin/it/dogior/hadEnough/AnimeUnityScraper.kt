@@ -36,6 +36,15 @@ object AnimeUnityScraper {
         val name: String?,
     )
 
+    data class TitleSources(
+        val sub: Anime?,
+        val dub: Anime?,
+    ) {
+        val hasSub: Boolean get() = sub != null
+        val hasDub: Boolean get() = dub != null
+        val best: Anime? get() = sub ?: dub
+    }
+
     private var csrfToken = ""
     private var cookieStr = ""
     private var sessionReady = false
@@ -160,14 +169,9 @@ object AnimeUnityScraper {
             }
         }
 
-        // 2. Fallback: prendi il primo risultato
-        if (allResults.isNotEmpty()) {
-            Log.d(TAG, "Nessun match esatto, uso il primo risultato: ${allResults[0].name}")
-            return listOf(allResults[0])
-        }
-
-        Log.d(TAG, "Nessun risultato trovato")
-        return emptyList()
+        // 2. Restituisci tutti i risultati per permettere la divisione SUB/DUB
+        Log.d(TAG, "Nessun match esatto, restituisco tutti i ${allResults.size} risultati")
+        return allResults
     }
 
     private suspend fun loadEpisodes(animeId: Int, slug: String): List<Episode> {
@@ -217,7 +221,7 @@ object AnimeUnityScraper {
 
     /**
      * METODO PUBBLICO: cerca su AnimeUnity e carica i link.
-     * Prova prima col titolo passato, poi col titolo inglese da TMDB.
+     * Prova SUB, poi DUB. Prova prima col titolo italiano, poi inglese.
      */
     suspend fun loadLinks(
         title: String,
@@ -249,7 +253,25 @@ object AnimeUnityScraper {
             return false
         }
 
-        val anime = auResults.first()
+        // Dividi SUB e DUB
+        val subAnime = auResults.firstOrNull { !it.isDub }
+        val dubAnime = auResults.firstOrNull { it.isDub }
+        val titleSources = TitleSources(sub = subAnime, dub = dubAnime)
+
+        StreamITALogger.log(TAG, "SUB: ${subAnime?.name}, DUB: ${dubAnime?.name}")
+
+        // Prova SUB, poi DUB
+        val anime = titleSources.best ?: return false
+        return tryLoadFromAnime(anime, season, episode, subtitleCallback, callback)
+    }
+
+    private suspend fun tryLoadFromAnime(
+        anime: Anime,
+        season: Int?,
+        episode: Int?,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit,
+    ): Boolean {
         val episodes = loadEpisodes(anime.id, anime.slug)
 
         val targetEp = if (season == null) {
@@ -259,13 +281,13 @@ object AnimeUnityScraper {
         }
 
         if (targetEp == null) {
-            StreamITALogger.log(TAG, "Episodio $season-$episode non trovato")
+            StreamITALogger.log(TAG, "Episodio $season-$episode non trovato per ${anime.name}")
             return false
         }
 
         val embedUrl = getEmbedUrl(anime.id, anime.slug, targetEp.id)
         if (embedUrl == null) {
-            StreamITALogger.log(TAG, "Embed URL non trovato")
+            StreamITALogger.log(TAG, "Embed URL non trovato per ${anime.name}")
             return false
         }
 
