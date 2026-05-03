@@ -4,6 +4,7 @@ import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import it.dogior.hadEnough.extractors.VixCloudExtractor
 import org.json.JSONArray
 import org.json.JSONObject
@@ -318,8 +319,25 @@ object AnimeUnityScraper {
             return false
         }
 
-        VixCloudExtractor().getUrl(embedUrl, BASE_URL, subtitleCallback, callback)
-        StreamITALogger.log(TAG, "AnimeUnity OK: link trovato per ${anime.name} ep.${targetEp.number}")
+        val label = if (anime.isDub) "AnimeUnity [DUB]" else "AnimeUnity [SUB]"
+
+        val labeledCallback: (ExtractorLink) -> Unit = { link ->
+            callback(
+                newExtractorLink(
+                    source = link.source,
+                    name = "$label - ${link.name}",
+                    url = link.url,
+                    type = link.type,
+                ) {
+                    this.referer = link.referer
+                    this.quality = link.quality
+                    this.headers = link.headers
+                }
+            )
+        }
+
+        VixCloudExtractor().getUrl(embedUrl, BASE_URL, subtitleCallback, labeledCallback)
+        StreamITALogger.log(TAG, "AnimeUnity OK: link trovato per ${anime.name} ep.${targetEp.number} ($label)")
         return true
     }
 }
