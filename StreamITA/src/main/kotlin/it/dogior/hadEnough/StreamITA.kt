@@ -301,6 +301,18 @@ class StreamITA(
                     StreamITALogger.log(TAG, "AnimeWorld fallito: ${e.message}")
                 }
             }
+
+            // ========== Sottotitoli in parallelo ==========
+            launch {
+                try {
+                    linkData.imdbId?.let { imdbId ->
+                        StreamITASubtitles.loadWyzieSubs(imdbId, linkData.season, linkData.episode, subtitleCallback)
+                        StreamITASubtitles.loadOpenSubtitles(imdbId, linkData.season, linkData.episode, subtitleCallback)
+                    }
+                } catch (e: Exception) {
+                    StreamITALogger.log(TAG, "Sottotitoli falliti: ${e.message}")
+                }
+            }
         }
 
         StreamITALogger.log(TAG, "Risultato ricerca link: successo=$anySuccess")
