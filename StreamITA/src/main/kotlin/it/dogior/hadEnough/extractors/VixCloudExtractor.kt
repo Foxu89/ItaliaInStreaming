@@ -35,7 +35,7 @@ class VixCloudExtractor : ExtractorApi() {
         callback.invoke(
             newExtractorLink(
                 source = "VixCloud",
-                name = "AnimeUnity",
+                name = " ",
                 url = playlistUrl,
                 type = ExtractorLinkType.M3U8
             ) {
