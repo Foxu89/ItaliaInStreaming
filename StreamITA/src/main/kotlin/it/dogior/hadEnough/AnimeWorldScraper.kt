@@ -41,6 +41,15 @@ object AnimeWorldScraper {
         val label: String,
     )
 
+    data class TitleSources(
+        val sub: Anime?,
+        val dub: Anime?,
+    ) {
+        val hasSub: Boolean get() = sub != null
+        val hasDub: Boolean get() = dub != null
+        val best: Anime? get() = sub ?: dub
+    }
+
     private var mappingCache: List<MappingEntry>? = null
 
     private data class MappingEntry(
@@ -80,113 +89,125 @@ object AnimeWorldScraper {
         }
     }
 
-    suspend fun search(title: String, tmdbId: Int? = null, englishTitle: String? = null): List<Anime> {
-        // Lista di titoli da provare
+    /**
+     * Cerca con più titoli candidati e restituisce SUB e DUB separati
+     */
+    suspend fun searchWithSources(
+        title: String,
+        tmdbId: Int? = null,
+        englishTitle: String? = null,
+    ): TitleSources {
         val titlesToTry = mutableListOf(title)
         if (englishTitle != null && englishTitle != title) {
             titlesToTry.add(englishTitle)
         }
 
-        var allResults = emptyList<Anime>()
+        val allResults = mutableListOf<Anime>()
 
-        // Prova tutti i titoli
         for (searchTitle in titlesToTry) {
-            val url = "$BASE_URL/filter?sort=0&keyword=${URLEncoder.encode(searchTitle, "UTF-8")}"
-            StreamITALogger.log(TAG, "Cercando AnimeWorld: $url")
-
-            val html = app.get(url, headers = headers).text
-            val doc = Jsoup.parse(html, url)
-
-            val results = doc.select("div.film-list > .item").mapNotNull { item ->
-                val anchor = item.selectFirst("a.name[href]") ?: return@mapNotNull null
-                val titleText = anchor.text().trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                val otherTitle = anchor.attr("data-jtitle").trim().takeIf { it.isNotBlank() }
-                val itemUrl = if (anchor.attr("href").startsWith("http")) {
-                    anchor.attr("href").trimEnd('/')
-                } else {
-                    "$BASE_URL${anchor.attr("href")}".trimEnd('/')
-                }
-                val isDub = item.select(".status .dub").isNotEmpty() ||
-                    titleText.contains("(ITA)", ignoreCase = true) ||
-                    otherTitle.orEmpty().contains("(ITA)", ignoreCase = true)
-
-                Anime(url = itemUrl, title = titleText, otherTitle = otherTitle, isDub = isDub)
-            }
-
-            if (results.isNotEmpty()) {
-                allResults = results
-                break
-            }
+            val results = searchRaw(searchTitle)
+            allResults.addAll(results)
         }
 
         if (allResults.isEmpty()) {
             StreamITALogger.log(TAG, "Nessun risultato per '$title'")
-            return emptyList()
+            return TitleSources(null, null)
         }
 
-        // ========== MATCH per TMDB ID ==========
-        if (tmdbId != null) {
-            val mapping = getMapping()
-            val targetIds = mapping.filter { it.tmdbId == tmdbId }
-            val targetAnilistIds = targetIds.mapNotNull { it.anilistId }.toSet()
-            val targetMalIds = targetIds.mapNotNull { it.malId }.toSet()
+        // Deduplica per URL
+        val uniqueResults = allResults.distinctBy { it.url }
 
-            if (targetAnilistIds.isNotEmpty() || targetMalIds.isNotEmpty()) {
-                // Carica i dettagli delle prime pagine
-                val enriched = allResults.take(5).map { anime ->
-                    val pageData = loadPageData(anime.url)
-                    anime.copy(anilistId = pageData.anilistId, malId = pageData.malId)
-                }
-
-                val exactMatches = enriched.filter { anime ->
-                    (anime.anilistId != null && anime.anilistId in targetAnilistIds) ||
-                    (anime.malId != null && anime.malId in targetMalIds)
-                }
-
-                if (exactMatches.isNotEmpty()) {
-                    StreamITALogger.log(TAG, "Match esatto via mapping: ${exactMatches.size} risultati")
-                    return exactMatches
-                }
-            }
-        }
-
-        // ========== FALLBACK: fuzzy match per titolo ==========
-        StreamITALogger.log(TAG, "Nessun match esatto, provo fuzzy match per titolo...")
-
-        val enriched = allResults.take(8).map { anime ->
+        // Arricchisci con anilist/mal IDs
+        val enriched = uniqueResults.take(12).map { anime ->
             val pageData = loadPageData(anime.url)
             anime.copy(anilistId = pageData.anilistId, malId = pageData.malId)
         }
 
-        // Prova a matchare per similarità del titolo
-        val normalizedSearchTitle = normalizeTitle(title)
+        // Filtra per match
+        val filtered = if (tmdbId != null) {
+            filterByTmdbMatch(enriched, tmdbId)
+        } else {
+            filterByTitleMatch(enriched, title)
+        }
 
-        val fuzzyMatches = enriched.filter { anime ->
+        // Dividi SUB e DUB
+        val sub = filtered.firstOrNull { !it.isDub }
+        val dub = filtered.firstOrNull { it.isDub }
+
+        StreamITALogger.log(TAG, "SUB: ${sub?.title}, DUB: ${dub?.title}")
+        return TitleSources(sub = sub, dub = dub)
+    }
+
+    private suspend fun searchRaw(title: String): List<Anime> {
+        val url = "$BASE_URL/filter?sort=0&keyword=${URLEncoder.encode(title, "UTF-8")}"
+        StreamITALogger.log(TAG, "Cercando AnimeWorld: $url")
+
+        val html = app.get(url, headers = headers).text
+        val doc = Jsoup.parse(html, url)
+
+        return doc.select("div.film-list > .item").mapNotNull { item ->
+            val anchor = item.selectFirst("a.name[href]") ?: return@mapNotNull null
+            val titleText = anchor.text().trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val otherTitle = anchor.attr("data-jtitle").trim().takeIf { it.isNotBlank() }
+            val itemUrl = if (anchor.attr("href").startsWith("http")) {
+                anchor.attr("href").trimEnd('/')
+            } else {
+                "$BASE_URL${anchor.attr("href")}".trimEnd('/')
+            }
+            val isDub = item.select(".status .dub").isNotEmpty() ||
+                titleText.contains("(ITA)", ignoreCase = true) ||
+                otherTitle.orEmpty().contains("(ITA)", ignoreCase = true)
+
+            Anime(url = itemUrl, title = titleText, otherTitle = otherTitle, isDub = isDub)
+        }
+    }
+
+    private fun filterByTmdbMatch(animes: List<Anime>, tmdbId: Int): List<Anime> {
+        val targetIds = getMappingSync()
+        if (targetIds == null) {
+            StreamITALogger.log(TAG, "Mapping non disponibile, uso fuzzy match")
+            return animes
+        }
+
+        val targetAnilistIds = targetIds.mapNotNull { it.anilistId }.toSet()
+        val targetMalIds = targetIds.mapNotNull { it.malId }.toSet()
+
+        if (targetAnilistIds.isEmpty() && targetMalIds.isEmpty()) return animes
+
+        val exactMatches = animes.filter { anime ->
+            (anime.anilistId != null && anime.anilistId in targetAnilistIds) ||
+            (anime.malId != null && anime.malId in targetMalIds)
+        }
+
+        if (exactMatches.isNotEmpty()) {
+            StreamITALogger.log(TAG, "Match esatto via mapping: ${exactMatches.size}")
+            return exactMatches
+        }
+
+        StreamITALogger.log(TAG, "Nessun match esatto, uso tutti")
+        return animes
+    }
+
+    private fun getMappingSync(): List<MappingEntry>? {
+        // Prova a prendere dalla cache senza chiamare suspend
+        return mappingCache
+    }
+
+    private fun filterByTitleMatch(animes: List<Anime>, searchTitle: String): List<Anime> {
+        val normalizedSearch = normalizeTitle(searchTitle)
+
+        val matches = animes.filter { anime ->
             val animeTitle = normalizeTitle(anime.title)
-            val animeOtherTitle = anime.otherTitle?.let { normalizeTitle(it) }
+            val animeOther = anime.otherTitle?.let { normalizeTitle(it) }
 
-            // Match esatto normalizzato
-            animeTitle == normalizedSearchTitle ||
-            animeOtherTitle == normalizedSearchTitle ||
-            // Contiene
-            animeTitle.contains(normalizedSearchTitle) ||
-            normalizedSearchTitle.contains(animeTitle) ||
-            animeOtherTitle?.contains(normalizedSearchTitle) == true
+            animeTitle == normalizedSearch ||
+            animeOther == normalizedSearch ||
+            animeTitle.contains(normalizedSearch) ||
+            normalizedSearch.contains(animeTitle) ||
+            animeOther?.contains(normalizedSearch) == true
         }
 
-        if (fuzzyMatches.isNotEmpty()) {
-            StreamITALogger.log(TAG, "Fuzzy match: ${fuzzyMatches.size} risultati")
-            return fuzzyMatches
-        }
-
-        // Se ancora niente, prendi il primo risultato come fallback disperato
-        if (enriched.isNotEmpty()) {
-            StreamITALogger.log(TAG, "Nessun match, uso primo risultato: ${enriched[0].title}")
-            return listOf(enriched[0])
-        }
-
-        StreamITALogger.log(TAG, "Proprio nessun risultato trovato")
-        return emptyList()
+        return matches.ifEmpty { animes }
     }
 
     private suspend fun loadPageData(animeUrl: String): PageData {
@@ -229,7 +250,7 @@ object AnimeWorldScraper {
         }.distinctBy { normalizeNumber(it.number) ?: it.number }
     }
 
-    suspend fun getEpisodeInfo(animeUrl: String, episodeToken: String): EpisodeInfo? {
+    suspend fun getEpisodeInfo(animeUrl: String, episodeToken: String, isDub: Boolean): EpisodeInfo? {
         val infoUrl = "$BASE_URL/api/episode/info?id=${URLEncoder.encode(episodeToken, "UTF-8")}"
         StreamITALogger.log(TAG, "Info episodio: $infoUrl")
 
@@ -241,10 +262,6 @@ object AnimeWorldScraper {
         val json = JSONObject(text)
         val grabber = json.optString("grabber", "").takeIf { it.isNotBlank() } ?: return null
         val target = json.optString("target", "")
-
-        // Determina label da DUB/SUB
-        val html = app.get(animeUrl, headers = headers).text
-        val isDub = html.contains("window.animeDub = true", ignoreCase = true)
         val label = if (isDub) "AnimeWorld [DUB]" else "AnimeWorld [SUB]"
 
         return EpisodeInfo(grabber = grabber, target = target, label = label)
@@ -255,7 +272,6 @@ object AnimeWorldScraper {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        // Se è un link listeamed, usa loadExtractor
         if (episodeInfo.target.contains("listeamed.net", ignoreCase = true) ||
             episodeInfo.grabber.contains("listeamed.net", ignoreCase = true)
         ) {
@@ -267,7 +283,6 @@ object AnimeWorldScraper {
             }
         }
 
-        // Altrimenti link diretto
         callback(
             newExtractorLink(
                 source = "AnimeWorld",
