@@ -328,7 +328,7 @@ object AnimeUnityScraper {
                 callback(
                     ExtractorLink(
                         source = link.source,
-                        name = "$label - ${link.name}",
+                        name = "$label",
                         url = link.url,
                         referer = link.referer,
                         quality = link.quality,
