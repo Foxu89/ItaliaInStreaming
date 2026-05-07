@@ -301,6 +301,47 @@ class StreamITA(
                     StreamITALogger.log(TAG, "AnimeWorld fallito: ${e.message}")
                 }
             }
+            
+            // ========== AnimeSaturn in parallelo ==========
+            launch {
+                try {
+                    val title = linkData.title ?: return@launch
+                    val tmdbIdLocal = linkData.id
+                    val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
+
+                    val sources = AnimeSaturnScraper.searchWithSources(
+                        title = title,
+                        tmdbId = tmdbIdLocal,
+                        englishTitle = enTitle
+                    )
+
+                    val animeToTry = listOfNotNull(sources.sub, sources.dub)
+
+                    for (anime in animeToTry) {
+                        val episodes = AnimeSaturnScraper.loadEpisodes(anime.url)
+
+                        val targetEp = if (linkData.season == null) {
+                            episodes.firstOrNull()
+                        } else {
+                            episodes.find { it.number == linkData.episode.toString() }
+                        }
+
+                        if (targetEp != null) {
+                            val videoUrl = AnimeSaturnScraper.getEpisodeVideoUrl(targetEp.episodeUrl)
+                            if (videoUrl != null) {
+                                val label = if (anime.isDub) "[DUB]" else "[SUB]"
+                                val success = AnimeSaturnScraper.loadLinks(videoUrl, label, callback)
+                                if (success) {
+                                    anySuccess = true
+                                    StreamITALogger.log(TAG, "AnimeSaturn OK: link trovato per ep.${targetEp.number} ($label)")
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    StreamITALogger.log(TAG, "AnimeSaturn fallito: ${e.message}")
+                }
+            }
 
             // ========== Sottotitoli in parallelo ==========
             launch {
