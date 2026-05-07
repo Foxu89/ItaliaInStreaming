@@ -31,6 +31,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
+import java.net.URLEncoder
 
 class StreamITA(
     private val sharedPref: SharedPreferences?
@@ -58,7 +59,20 @@ class StreamITA(
     private val apiLang: String get() = sharedPref?.getString(StreamITAPlugin.PREF_LANG, "it-IT") ?: "it-IT"
     private val showLogo: Boolean get() = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_LOGO, false) ?: false
     private val showRating: Boolean get() = sharedPref?.getBoolean(StreamITAPlugin.PREF_SHOW_RATING, false) ?: false
-    private val cacheSeconds: Int get() = (sharedPref?.getInt(StreamITAPlugin.PREF_CACHE_HOURS, 24) ?: 24) * 3600
+
+    // ==================== CACHE HELPER ====================
+
+    private suspend fun cachedApiGet(
+        url: String,
+        cacheKey: String,
+        profile: StreamITACache.CacheProfile,
+        headers: Map<String, String> = authHeaders
+    ): String {
+        StreamITACache.get(cacheKey)?.let { return it }
+        val text = app.get(url, headers = headers).text
+        StreamITACache.put(cacheKey, text, profile)
+        return text
+    }
 
     // ==================== SEZIONE NOMI ====================
 
@@ -111,7 +125,8 @@ class StreamITA(
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         StreamITALogger.log(TAG, "Caricamento homepage: ${request.name} (pagina $page, lingua=$apiLang)")
-        val resp = app.get("${request.data}&page=$page", headers = authHeaders, cacheTime = cacheSeconds).body.string()
+        val cacheKey = "TMDB:HOME:${URLEncoder.encode(request.data, "UTF-8")}:$page:$apiLang"
+        val resp = cachedApiGet("${request.data}&page=$page", cacheKey, StreamITACache.CacheProfile.TMDB_HOME)
         val type = if (request.data.contains("tv")) "tv" else "movie"
         val parsedResponse = parseJson<Results>(resp).results?.mapNotNull { media -> media.toSearchResponse(type = type) }
         val home = parsedResponse ?: throw ErrorLoadingException("Invalid Json response")
@@ -131,9 +146,14 @@ class StreamITA(
     override suspend fun search(query: String): List<SearchResponse>? {
         StreamITALogger.log(TAG, "Ricerca: '$query' (lingua=$apiLang)")
         val url = "$tmdbAPI/search/multi?language=$apiLang&query=$query&include_adult=${settingsForProvider.enableAdult}"
-        val response = app.get(url, headers = authHeaders, cacheTime = cacheSeconds)
-        if (!response.isSuccessful) { StreamITALogger.log(TAG, "Ricerca fallita: HTTP ${response.code}"); return null }
-        val results = response.parsedSafe<Results>()?.results?.filter { it.mediaType == "movie" || it.mediaType == "tv" }?.mapNotNull { it.toSearchResponse() }
+        val cacheKey = "TMDB:SEARCH:${URLEncoder.encode(query, "UTF-8")}:$apiLang"
+        val response = try {
+            cachedApiGet(url, cacheKey, StreamITACache.CacheProfile.TMDB_SEARCH)
+        } catch (e: Exception) {
+            StreamITALogger.log(TAG, "Ricerca fallita: ${e.message}")
+            return null
+        }
+        val results = parseJson<Results>(response)?.results?.filter { it.mediaType == "movie" || it.mediaType == "tv" }?.mapNotNull { it.toSearchResponse() }
         StreamITALogger.log(TAG, "Ricerca completata: ${results?.size ?: 0} risultati per '$query'")
         return results
     }
@@ -152,11 +172,11 @@ class StreamITA(
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) "$tmdbAPI/movie/${data.id}?language=$apiLang&append_to_response=$append" else "$tmdbAPI/tv/${data.id}?language=$apiLang&append_to_response=$append"
 
-        var res = try { withTimeoutOrNull(10000) { app.get(resUrl, headers = authHeaders, cacheTime = cacheSeconds).parsedSafe<MediaDetail>() } } catch (e: Exception) { StreamITALogger.log(TAG, "Errore richiesta dettagli (${apiLang}): ${e.message}"); null }
+        var res = try { withTimeoutOrNull(10000) { parseJson<MediaDetail>(cachedApiGet(resUrl, "TMDB:DETAIL:${data.type}:${data.id}:$apiLang", StreamITACache.CacheProfile.TMDB_DETAIL)) } } catch (e: Exception) { null }
         if (res == null) {
             StreamITALogger.log(TAG, "Fallback a EN per id=${data.id}")
             val enUrl = if (type == TvType.Movie) "$tmdbAPI/movie/${data.id}?language=en-US&append_to_response=$append" else "$tmdbAPI/tv/${data.id}?language=en-US&append_to_response=$append"
-            res = try { withTimeoutOrNull(8000) { app.get(enUrl, headers = authHeaders, cacheTime = cacheSeconds).parsedSafe<MediaDetail>() } } catch (e: Exception) { StreamITALogger.log(TAG, "Errore richiesta EN: ${e.message}"); null }
+            res = try { withTimeoutOrNull(8000) { parseJson<MediaDetail>(cachedApiGet(enUrl, "TMDB:DETAIL:${data.type}:${data.id}:en-US", StreamITACache.CacheProfile.TMDB_DETAIL)) } } catch (e: Exception) { null }
         }
         if (res == null) { StreamITALogger.log(TAG, "Contenuto non disponibile per id=${data.id}"); throw ErrorLoadingException("Contenuto non disponibile") }
 
@@ -192,7 +212,7 @@ class StreamITA(
             StreamITALogger.log(TAG, "Serie TV: '$title', ${seasons.size} stagioni")
             val episodes = seasons.mapNotNull { season ->
                 val seasonNumber = season.seasonNumber ?: return@mapNotNull null
-                app.get("$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=$apiLang", headers = authHeaders, cacheTime = cacheSeconds)
+                app.get("$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=$apiLang", headers = authHeaders)
                     .parsedSafe<MediaDetailEpisodes>()?.episodes?.map { eps ->
                         val linkData = LinkData(id = data.id, title = title, year = year, season = eps.seasonNumber, episode = eps.episodeNumber, isMovie = false, imdbId = imdbId)
                         newEpisode(linkData.toJson()) {
@@ -274,7 +294,6 @@ class StreamITA(
                         englishTitle = enTitle
                     )
 
-                    // Prova sia SUB che DUB, entrambi vengono aggiunti come sorgenti
                     val animeToTry = listOfNotNull(sources.sub, sources.dub)
 
                     for (anime in animeToTry) {
@@ -301,7 +320,7 @@ class StreamITA(
                     StreamITALogger.log(TAG, "AnimeWorld fallito: ${e.message}")
                 }
             }
-            
+
             // ========== AnimeSaturn in parallelo ==========
             launch {
                 try {
@@ -363,10 +382,8 @@ class StreamITA(
     private suspend fun fetchEnglishTitle(tmdbId: Int, isMovie: Boolean): String? {
         return try {
             val type = if (isMovie) "movie" else "tv"
-            val url = "$tmdbAPI/$type/$tmdbId?language=en-US"
-            val response = app.get(url, headers = authHeaders, cacheTime = cacheSeconds)
-            if (!response.isSuccessful) return null
-            val json = JSONObject(response.body?.string() ?: return null)
+            val cacheKey = "TMDB:EN:$type:$tmdbId"
+            val json = JSONObject(cachedApiGet("$tmdbAPI/$type/$tmdbId?language=en-US", cacheKey, StreamITACache.CacheProfile.TMDB_ENGLISH_TITLE))
             json.optString("title").takeIf { it.isNotBlank() }
                 ?: json.optString("name").takeIf { it.isNotBlank() }
         } catch (e: Exception) {
@@ -380,9 +397,8 @@ class StreamITA(
         return try {
             val appLang = appLangCode?.substringBefore("-")?.lowercase()
             val url = if (type == TvType.Movie) "$tmdbAPI/movie/$tmdbId/images" else "$tmdbAPI/tv/$tmdbId/images"
-            val response = app.get(url, headers = authHeaders, cacheTime = cacheSeconds)
-            if (!response.isSuccessful) return null
-            val json = JSONObject(response.body?.string() ?: return null)
+            val cacheKey = "TMDB:LOGO:$type:$tmdbId"
+            val json = JSONObject(cachedApiGet(url, cacheKey, StreamITACache.CacheProfile.TMDB_DETAIL))
             val logos = json.optJSONArray("logos") ?: return null
             if (logos.length() == 0) return null
 
