@@ -47,25 +47,19 @@ object AnimeUnityScraper {
     private var csrfToken = ""
     private var cookieStr = ""
     private var sessionReady = false
-    private var animeMappingCache: JSONArray? = null
 
     private suspend fun ensureSession() {
         if (sessionReady) return
-
         Log.d(TAG, "Ottenendo sessione AnimeUnity...")
         val response = app.get("$BASE_URL/archivio", headers = headers)
-
         val doc = Jsoup.parse(response.text)
         csrfToken = doc.selectFirst("meta[name=csrf-token]")?.attr("content") ?: ""
-
         val cookies = response.cookies
         val parts = mutableListOf<String>()
         cookies["XSRF-TOKEN"]?.let { parts.add("XSRF-TOKEN=$it") }
         cookies["animeunity_session"]?.let { parts.add("animeunity_session=$it") }
         cookieStr = parts.joinToString("; ")
-
         sessionReady = true
-        Log.d(TAG, "Sessione AnimeUnity pronta")
     }
 
     private fun getApiHeaders(): Map<String, String> {
@@ -79,14 +73,14 @@ object AnimeUnityScraper {
     }
 
     private suspend fun getAnimeMapping(): JSONArray {
-        if (animeMappingCache != null) return animeMappingCache!!
+        val cached = StreamITACache.get("AU:MAPPING")
+        if (cached != null) return JSONArray(cached)
 
-        Log.d(TAG, "Scaricando anime-list-full.json...")
         return try {
-            val response = app.get(MAPPING_URL)
-            JSONArray(response.text).also { animeMappingCache = it }
+            val jsonText = app.get(MAPPING_URL).text
+            StreamITACache.put("AU:MAPPING", jsonText, StreamITACache.CacheProfile.ANIME_MAPPING)
+            JSONArray(jsonText)
         } catch (e: Exception) {
-            Log.e(TAG, "Errore download mapping: ${e.message}")
             JSONArray()
         }
     }
@@ -96,10 +90,7 @@ object AnimeUnityScraper {
         for (i in 0 until mapping.length()) {
             val entry = mapping.optJSONObject(i) ?: continue
             if (entry.optNullableInt("themoviedb_id") == tmdbId) {
-                return Pair(
-                    entry.optNullableInt("anilist_id"),
-                    entry.optNullableInt("mal_id")
-                )
+                return Pair(entry.optNullableInt("anilist_id"), entry.optNullableInt("mal_id"))
             }
         }
         return Pair(null, null)
@@ -107,9 +98,7 @@ object AnimeUnityScraper {
 
     private suspend fun search(title: String, tmdbId: Int? = null): List<Anime> {
         ensureSession()
-
         val (anilistId, malId) = if (tmdbId != null) getSyncIds(tmdbId) else Pair(null, null)
-        Log.d(TAG, "Sync IDs per TMDB $tmdbId: anilist=$anilistId, mal=$malId")
 
         val body = JSONObject().apply {
             put("title", title)
@@ -122,83 +111,67 @@ object AnimeUnityScraper {
             put("dubbed", 0)
             put("offset", 0)
         }
-
         val requestBody = body.toString().toRequestBody("application/json;charset=utf-8".toMediaType())
 
-        val response = app.post(
-            "$BASE_URL/archivio/get-animes",
-            headers = getApiHeaders(),
-            requestBody = requestBody
-        )
+        val responseText = try {
+            app.post("$BASE_URL/archivio/get-animes", headers = getApiHeaders(), requestBody = requestBody).text
+        } catch (e: Exception) {
+            Log.e(TAG, "Search error: ${e.message}")
+            return emptyList()
+        }
 
-        val data = JSONObject(response.text)
+        val data = JSONObject(responseText)
         val records = data.optJSONArray("records") ?: JSONArray()
-
         val allResults = mutableListOf<Anime>()
+
         for (i in 0 until records.length()) {
             val item = records.optJSONObject(i) ?: continue
             val id = item.optInt("id")
             val slug = item.optString("slug")
             val name = item.optString("name")
             if (id > 0 && slug.isNotBlank()) {
-                allResults.add(
-                    Anime(
-                        id = id,
-                        slug = slug,
-                        name = name,
-                        anilistId = item.optNullableInt("anilist_id"),
-                        malId = item.optNullableInt("mal_id"),
-                        isDub = item.optInt("dub") == 1 || name.contains("(ITA)", ignoreCase = true)
-                    )
-                )
+                allResults.add(Anime(
+                    id = id, slug = slug, name = name,
+                    anilistId = item.optNullableInt("anilist_id"),
+                    malId = item.optNullableInt("mal_id"),
+                    isDub = item.optInt("dub") == 1 || name.contains("(ITA)", ignoreCase = true)
+                ))
             }
         }
 
         Log.d(TAG, "Trovati ${allResults.size} risultati per '$title'")
 
-        // 1. Match esatto per anilist_id o mal_id
         if (anilistId != null || malId != null) {
             val matched = allResults.filter { anime ->
                 (anilistId != null && anime.anilistId == anilistId) ||
                 (malId != null && anime.malId == malId)
             }
-            if (matched.isNotEmpty()) {
-                Log.d(TAG, "Match esatto sync IDs: ${matched.size} risultati")
-                return matched
-            }
+            if (matched.isNotEmpty()) return matched
         }
 
-        // 2. Fuzzy match per titolo normalizzato
         val normalizedTitle = normalizeTitle(title)
         val fuzzyMatches = allResults.filter { anime ->
             val animeName = normalizeTitle(anime.name)
-            animeName == normalizedTitle ||
-            animeName.contains(normalizedTitle) ||
-            normalizedTitle.contains(animeName)
+            animeName == normalizedTitle || animeName.contains(normalizedTitle) || normalizedTitle.contains(animeName)
         }
+        if (fuzzyMatches.isNotEmpty()) return fuzzyMatches
 
-        if (fuzzyMatches.isNotEmpty()) {
-            Log.d(TAG, "Fuzzy match titolo: ${fuzzyMatches.size} risultati")
-            return fuzzyMatches
-        }
-
-        // 3. Fallback: prendi il primo risultato
-        if (allResults.isNotEmpty()) {
-            Log.d(TAG, "Nessun match, uso primo risultato: ${allResults[0].name}")
-            return listOf(allResults[0])
-        }
-
-        Log.d(TAG, "Nessun risultato trovato")
+        if (allResults.isNotEmpty()) return listOf(allResults[0])
         return emptyList()
     }
 
     private suspend fun loadEpisodes(animeId: Int, slug: String): List<Episode> {
         ensureSession()
-
         val url = "$BASE_URL/anime/$animeId-$slug"
-        val response = app.get(url, headers = getApiHeaders())
-        val doc = Jsoup.parse(response.text)
 
+        val html = try {
+            app.get(url, headers = getApiHeaders()).text
+        } catch (e: Exception) {
+            Log.e(TAG, "Load episodes error: ${e.message}")
+            return emptyList()
+        }
+
+        val doc = Jsoup.parse(html)
         val videoPlayer = doc.selectFirst("video-player") ?: return emptyList()
         val episodesJson = videoPlayer.attr("episodes")
 
@@ -213,29 +186,31 @@ object AnimeUnityScraper {
                 } else null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Errore parsing episodi: ${e.message}")
+            Log.e(TAG, "Parse episodes error: ${e.message}")
             emptyList()
         }
     }
 
     private suspend fun getEmbedUrl(animeId: Int, slug: String, episodeId: Int): String? {
         ensureSession()
-
         val url = "$BASE_URL/anime/$animeId-$slug/$episodeId"
-        val response = app.get(url, headers = getApiHeaders())
-        val doc = Jsoup.parse(response.text)
 
+        val html = try {
+            app.get(url, headers = getApiHeaders()).text
+        } catch (e: Exception) {
+            return null
+        }
+
+        val doc = Jsoup.parse(html)
         return doc.selectFirst("video-player")?.attr("embed_url")?.takeIf { it.isNotBlank() }
     }
 
     private fun normalizeTitle(input: String): String {
-        return input
-            .lowercase()
+        return input.lowercase()
             .replace("&", "and")
             .replace(Regex("""\([^)]*\)"""), " ")
             .replace(Regex("""\b(movie|the movie|ita|sub ita|subita|tv|ona|ova|special|season|stagione)\b"""), " ")
-            .replace(Regex("""[^a-z0-9]+"""), " ")
-            .trim()
+            .replace(Regex("""[^a-z0-9]+"""), " ").trim()
     }
 
     private fun JSONObject.optNullableInt(name: String): Int? {
@@ -248,98 +223,54 @@ object AnimeUnityScraper {
     }
 
     suspend fun loadLinks(
-        title: String,
-        tmdbId: Int?,
-        isMovie: Boolean,
-        season: Int?,
-        episode: Int?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit,
+        title: String, tmdbId: Int?, isMovie: Boolean, season: Int?, episode: Int?,
+        subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit,
         fetchEnglishTitle: suspend (Int, Boolean) -> String?
     ): Boolean {
         StreamITALogger.log(TAG, "Avvio AnimeUnity per '$title' (tmdbId=$tmdbId)...")
-
         var auResults = search(title, tmdbId)
 
         if (auResults.isEmpty() && tmdbId != null) {
-            StreamITALogger.log(TAG, "Nessun risultato per '$title', provo titolo inglese...")
             val enTitle = fetchEnglishTitle(tmdbId, isMovie)
             if (enTitle != null && enTitle != title) {
                 StreamITALogger.log(TAG, "Cerco AnimeUnity con titolo EN: '$enTitle'")
                 auResults = search(enTitle, tmdbId)
             }
         }
-
-        if (auResults.isEmpty()) {
-            StreamITALogger.log(TAG, "Nessun risultato AnimeUnity")
-            return false
-        }
+        if (auResults.isEmpty()) return false
 
         val subAnime = auResults.firstOrNull { !it.isDub }
         val dubAnime = auResults.firstOrNull { it.isDub }
         val titleSources = TitleSources(sub = subAnime, dub = dubAnime)
-
         StreamITALogger.log(TAG, "SUB: ${subAnime?.name}, DUB: ${dubAnime?.name}")
 
         var anySuccess = false
-        val animeToTry = listOfNotNull(titleSources.sub, titleSources.dub)
-
-        for (anime in animeToTry) {
-            val success = tryLoadFromAnime(anime, season, episode, subtitleCallback, callback)
-            if (success) anySuccess = true
+        for (anime in listOfNotNull(titleSources.sub, titleSources.dub)) {
+            if (tryLoadFromAnime(anime, season, episode, subtitleCallback, callback)) anySuccess = true
         }
-
         return anySuccess
     }
 
     private suspend fun tryLoadFromAnime(
-        anime: Anime,
-        season: Int?,
-        episode: Int?,
-        subtitleCallback: (SubtitleFile) -> Unit,
-        callback: (ExtractorLink) -> Unit,
+        anime: Anime, season: Int?, episode: Int?,
+        subtitleCallback: (SubtitleFile) -> Unit, callback: (ExtractorLink) -> Unit,
     ): Boolean {
         val episodes = loadEpisodes(anime.id, anime.slug)
-
-        val targetEp = if (season == null) {
-            episodes.firstOrNull()
-        } else {
-            episodes.find { it.number == episode.toString() }
-        }
-
-        if (targetEp == null) {
-            StreamITALogger.log(TAG, "Episodio $season-$episode non trovato per ${anime.name}")
-            return false
-        }
+        val targetEp = if (season == null) episodes.firstOrNull() else episodes.find { it.number == episode.toString() }
+            ?: run { StreamITALogger.log(TAG, "Episodio non trovato"); return false }
 
         val embedUrl = getEmbedUrl(anime.id, anime.slug, targetEp.id)
-        if (embedUrl == null) {
-            StreamITALogger.log(TAG, "Embed URL non trovato per ${anime.name}")
-            return false
-        }
+            ?: run { StreamITALogger.log(TAG, "Embed URL non trovato"); return false }
 
         val label = if (anime.isDub) "AnimeUnity [DUB]" else "AnimeUnity [SUB]"
-
-        VixCloudExtractor().getUrl(
-            embedUrl,
-            BASE_URL,
-            subtitleCallback,
-            { link ->
-                callback(
-                    ExtractorLink(
-                        source = link.source,
-                        name = "$label",
-                        url = link.url,
-                        referer = link.referer,
-                        quality = link.quality,
-                        type = link.type,
-                        headers = link.headers,
-                        extractorData = link.extractorData,
-                    )
-                )
-            }
-        )
-        StreamITALogger.log(TAG, "AnimeUnity OK: link trovato per ${anime.name} ep.${targetEp.number} ($label)")
+        VixCloudExtractor().getUrl(embedUrl, BASE_URL, subtitleCallback) { link ->
+            callback(ExtractorLink(
+                source = link.source, name = label, url = link.url,
+                referer = link.referer, quality = link.quality, type = link.type,
+                headers = link.headers, extractorData = link.extractorData,
+            ))
+        }
+        StreamITALogger.log(TAG, "AnimeUnity OK: ${anime.name} ep.${targetEp.number} ($label)")
         return true
     }
 }
