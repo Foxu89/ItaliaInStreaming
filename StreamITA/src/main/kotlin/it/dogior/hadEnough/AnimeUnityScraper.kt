@@ -257,10 +257,16 @@ object AnimeUnityScraper {
     ): Boolean {
         val episodes = loadEpisodes(anime.id, anime.slug)
         val targetEp = if (season == null) episodes.firstOrNull() else episodes.find { it.number == episode.toString() }
-            ?: run { StreamITALogger.log(TAG, "Episodio non trovato"); return false }
+        if (targetEp == null) {
+            StreamITALogger.log(TAG, "Episodio non trovato")
+            return false
+        }
 
         val embedUrl = getEmbedUrl(anime.id, anime.slug, targetEp.id)
-            ?: run { StreamITALogger.log(TAG, "Embed URL non trovato"); return false }
+        if (embedUrl == null) {
+            StreamITALogger.log(TAG, "Embed URL non trovato")
+            return false
+        }
 
         val label = if (anime.isDub) "AnimeUnity [DUB]" else "AnimeUnity [SUB]"
         VixCloudExtractor().getUrl(embedUrl, BASE_URL, subtitleCallback) { link ->
