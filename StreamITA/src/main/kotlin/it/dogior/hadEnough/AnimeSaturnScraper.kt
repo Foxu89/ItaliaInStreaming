@@ -13,7 +13,7 @@ import java.net.URLEncoder
 
 object AnimeSaturnScraper {
     private const val TAG = "AnimeSaturnScraper"
-    private const val BASE_URL = "https://www.animesaturn.so"
+    private const val BASE_URL = "https://www.animesaturn.cx"
     private const val MAPPING_URL = "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json"
 
     private val headers = mapOf(
