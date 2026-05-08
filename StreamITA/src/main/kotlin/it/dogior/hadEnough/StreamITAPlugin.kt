@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatActivity
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
+import java.io.File
 
 @CloudstreamPlugin
 class StreamITAPlugin : Plugin() {
@@ -23,6 +24,8 @@ class StreamITAPlugin : Plugin() {
         val sharedPref = context.getSharedPreferences("StreamITA", Context.MODE_PRIVATE)
         activePlugin = this
         activeSharedPref = sharedPref
+
+        StreamITACache.setDiskDirectory(File(context.cacheDir, "streamita_cache"))
 
         registerMainAPI(StreamITA(sharedPref))
 
