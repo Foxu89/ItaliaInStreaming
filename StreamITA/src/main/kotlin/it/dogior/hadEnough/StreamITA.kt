@@ -172,11 +172,26 @@ class StreamITA(
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) "$tmdbAPI/movie/${data.id}?language=$apiLang&append_to_response=$append" else "$tmdbAPI/tv/${data.id}?language=$apiLang&append_to_response=$append"
 
-        var res = try { withTimeoutOrNull(10000) { parseJson<MediaDetail>(cachedApiGet(resUrl, "TMDB:DETAIL:${data.type}:${data.id}:$apiLang", StreamITACache.CacheProfile.TMDB_DETAIL)) } } catch (e: Exception) { null }
+        var res = try { 
+            withTimeoutOrNull(10000) { 
+                app.get(resUrl, headers = authHeaders).parsedSafe<MediaDetail>() 
+            } 
+        } catch (e: Exception) { 
+            StreamITALogger.log(TAG, "Errore richiesta dettagli (${apiLang}): ${e.message}")
+            null 
+        }
+        
         if (res == null) {
             StreamITALogger.log(TAG, "Fallback a EN per id=${data.id}")
             val enUrl = if (type == TvType.Movie) "$tmdbAPI/movie/${data.id}?language=en-US&append_to_response=$append" else "$tmdbAPI/tv/${data.id}?language=en-US&append_to_response=$append"
-            res = try { withTimeoutOrNull(8000) { parseJson<MediaDetail>(cachedApiGet(enUrl, "TMDB:DETAIL:${data.type}:${data.id}:en-US", StreamITACache.CacheProfile.TMDB_DETAIL)) } } catch (e: Exception) { null }
+            res = try { 
+                withTimeoutOrNull(8000) { 
+                    app.get(enUrl, headers = authHeaders).parsedSafe<MediaDetail>() 
+                } 
+            } catch (e: Exception) { 
+                StreamITALogger.log(TAG, "Errore richiesta EN: ${e.message}")
+                null 
+            }
         }
         if (res == null) { StreamITALogger.log(TAG, "Contenuto non disponibile per id=${data.id}"); throw ErrorLoadingException("Contenuto non disponibile") }
 
@@ -308,6 +323,8 @@ class StreamITA(
                         if (targetEp != null) {
                             val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
                             if (info != null) {
+                            val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
+                            if (info != null) {
                                 val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
                                 if (success) {
                                     anySuccess = true
@@ -382,8 +399,10 @@ class StreamITA(
     private suspend fun fetchEnglishTitle(tmdbId: Int, isMovie: Boolean): String? {
         return try {
             val type = if (isMovie) "movie" else "tv"
+            val url = "$tmdbAPI/$type/$tmdbId?language=en-US"
             val cacheKey = "TMDB:EN:$type:$tmdbId"
-            val json = JSONObject(cachedApiGet("$tmdbAPI/$type/$tmdbId?language=en-US", cacheKey, StreamITACache.CacheProfile.TMDB_ENGLISH_TITLE))
+            val response = cachedApiGet(url, cacheKey, StreamITACache.CacheProfile.TMDB_ENGLISH_TITLE)
+            val json = JSONObject(response)
             json.optString("title").takeIf { it.isNotBlank() }
                 ?: json.optString("name").takeIf { it.isNotBlank() }
         } catch (e: Exception) {
@@ -398,7 +417,8 @@ class StreamITA(
             val appLang = appLangCode?.substringBefore("-")?.lowercase()
             val url = if (type == TvType.Movie) "$tmdbAPI/movie/$tmdbId/images" else "$tmdbAPI/tv/$tmdbId/images"
             val cacheKey = "TMDB:LOGO:$type:$tmdbId"
-            val json = JSONObject(cachedApiGet(url, cacheKey, StreamITACache.CacheProfile.TMDB_DETAIL))
+            val response = cachedApiGet(url, cacheKey, StreamITACache.CacheProfile.TMDB_DETAIL)
+            val json = JSONObject(response)
             val logos = json.optJSONArray("logos") ?: return null
             if (logos.length() == 0) return null
 
