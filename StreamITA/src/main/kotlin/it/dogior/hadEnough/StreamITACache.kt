@@ -94,13 +94,17 @@ object StreamITACache {
     @Synchronized
     fun stats(): String {
         val valid = memoryCache.count { it.value.expiresAtMs > System.currentTimeMillis() }
-        val expired = memoryCache.size - valid
+        val totalMem = memoryCache.size
         val files = diskDirectory
             ?.listFiles { file -> file.isFile && file.extension == "html" }
             .orEmpty()
-        val diskSize = files.sumOf { it.length() }
-        val sizeMB = diskSize / 1024 / 1024
-        return "Memoria: $valid validi, $expired scaduti\nDisco: ${files.size} file, $sizeMB MB"
+        val diskBytes = files.sumOf { it.length() }
+        val sizeLabel = when {
+            diskBytes >= 1024L * 1024L -> String.format("%.1f MB", diskBytes / 1024.0 / 1024.0)
+            diskBytes >= 1024L -> String.format("%.1f KB", diskBytes / 1024.0)
+            else -> "$diskBytes B"
+        }
+        return "RAM: $valid/$MAX_MEMORY_ENTRIES elementi\nMemoria: ${files.size} elementi $sizeLabel"
     }
 
     // ==================== Disco ====================
