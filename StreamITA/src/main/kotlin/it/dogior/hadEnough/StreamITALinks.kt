@@ -1,6 +1,7 @@
 package it.dogior.hadEnough
 
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.ErrorLoadingException
 import org.json.JSONObject
 
 object StreamITALinks {
