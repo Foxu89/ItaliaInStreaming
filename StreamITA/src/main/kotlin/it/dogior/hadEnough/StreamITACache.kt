@@ -1,19 +1,31 @@
 package it.dogior.hadEnough
 
-import java.util.concurrent.TimeUnit
+import java.io.File
+import java.security.MessageDigest
 
 object StreamITACache {
     private const val TAG = "StreamITACache"
+    private const val MAX_MEMORY_ENTRIES = 256
+    private const val MAX_DISK_ENTRIES = 512
 
     private data class CacheEntry(
         val text: String,
         val expiresAtMs: Long,
     )
 
-    private val memoryCache = object : LinkedHashMap<String, CacheEntry>(128, 0.75f, true) {
+    // ==================== Cache in memoria (LRU) ====================
+    private val memoryCache = object : LinkedHashMap<String, CacheEntry>(64, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CacheEntry>?): Boolean {
-            return size > 256
+            return size > MAX_MEMORY_ENTRIES
         }
+    }
+
+    // ==================== Cache su disco ====================
+    private var diskDirectory: File? = null
+
+    fun setDiskDirectory(directory: File) {
+        diskDirectory = directory
+        runCatching { directory.mkdirs() }
     }
 
     enum class CacheProfile(val ttlMs: Long) {
@@ -35,39 +47,114 @@ object StreamITACache {
         SUBTITLES(3 * 3600 * 1000L),
     }
 
+    // ==================== Metodi pubblici ====================
     @Synchronized
     fun get(key: String): String? {
-        val entry = memoryCache[key] ?: return null
-        if (entry.expiresAtMs > System.currentTimeMillis()) {
-            return entry.text
+        // 1. Cerca in memoria
+        val entry = memoryCache[key]
+        if (entry != null) {
+            if (entry.expiresAtMs > System.currentTimeMillis()) {
+                return entry.text
+            }
+            memoryCache.remove(key)
         }
-        memoryCache.remove(key)
-        return null
+
+        // 2. Cerca su disco
+        return readDisk(key)
     }
 
     @Synchronized
     fun put(key: String, text: String, profile: CacheProfile) {
         if (text.isBlank()) return
-        memoryCache[key] = CacheEntry(
-            text = text,
-            expiresAtMs = System.currentTimeMillis() + profile.ttlMs,
-        )
+        val expiresAtMs = System.currentTimeMillis() + profile.ttlMs
+        val entry = CacheEntry(text = text, expiresAtMs = expiresAtMs)
+
+        // Salva in memoria
+        memoryCache[key] = entry
+
+        // Salva su disco
+        writeDisk(key, text, expiresAtMs)
     }
 
     @Synchronized
     fun remove(key: String) {
         memoryCache.remove(key)
+        runCatching { cacheFile(key)?.delete() }
     }
 
     @Synchronized
     fun clear() {
         memoryCache.clear()
+        val directory = diskDirectory ?: return
+        directory.listFiles { file -> file.isFile && file.extension == "html" }
+            .orEmpty()
+            .forEach { runCatching { it.delete() } }
     }
 
     @Synchronized
     fun stats(): String {
         val valid = memoryCache.count { it.value.expiresAtMs > System.currentTimeMillis() }
         val expired = memoryCache.size - valid
-        return "Cache: $valid validi, $expired scaduti (max 256)"
+        val files = diskDirectory
+            ?.listFiles { file -> file.isFile && file.extension == "html" }
+            .orEmpty()
+        val diskSize = files.sumOf { it.length() }
+        val sizeMB = diskSize / 1024 / 1024
+        return "Memoria: $valid validi, $expired scaduti\nDisco: ${files.size} file, $sizeMB MB"
+    }
+
+    // ==================== Disco ====================
+    private fun readDisk(key: String): String? {
+        val file = cacheFile(key) ?: return null
+        val raw = runCatching { file.readText() }.getOrNull() ?: return null
+        val separator = raw.indexOf('\n')
+        if (separator <= 0) {
+            runCatching { file.delete() }
+            return null
+        }
+
+        val expiresAtMs = raw.substring(0, separator).toLongOrNull()
+        if (expiresAtMs == null) {
+            runCatching { file.delete() }
+            return null
+        }
+
+        val text = raw.substring(separator + 1)
+        if (expiresAtMs <= System.currentTimeMillis()) {
+            runCatching { file.delete() }
+            return null
+        }
+
+        // Riporta in memoria
+        memoryCache[key] = CacheEntry(text, expiresAtMs)
+        return text
+    }
+
+    private fun writeDisk(key: String, text: String, expiresAtMs: Long) {
+        val directory = diskDirectory ?: return
+        runCatching {
+            directory.mkdirs()
+            cacheFile(key)?.writeText("$expiresAtMs\n$text")
+            trimDisk(directory)
+        }
+    }
+
+    private fun cacheFile(key: String): File? {
+        val directory = diskDirectory ?: return null
+        return File(directory, "${sha256(key)}.html")
+    }
+
+    private fun trimDisk(directory: File) {
+        val files = directory.listFiles { file -> file.isFile && file.extension == "html" }.orEmpty()
+        if (files.size <= MAX_DISK_ENTRIES) return
+
+        files.sortedBy { it.lastModified() }
+            .take(files.size - MAX_DISK_ENTRIES)
+            .forEach { runCatching { it.delete() } }
+    }
+
+    private fun sha256(value: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 }
