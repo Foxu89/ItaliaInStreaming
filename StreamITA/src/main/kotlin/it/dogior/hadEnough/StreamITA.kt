@@ -323,8 +323,6 @@ class StreamITA(
                         if (targetEp != null) {
                             val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
                             if (info != null) {
-                            val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
-                            if (info != null) {
                                 val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
                                 if (success) {
                                     anySuccess = true
