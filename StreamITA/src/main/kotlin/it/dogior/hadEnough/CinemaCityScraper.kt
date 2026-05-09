@@ -23,10 +23,6 @@ object CinemaCityScraper {
 
     private val cfKiller = CloudflareKiller()
 
-    /**
-     * Cerca un film/serie su CinemaCity per IMDB ID
-     * e restituisce i link video estratti.
-     */
     suspend fun loadLinks(
         imdbId: String,
         season: Int? = null,
@@ -37,7 +33,7 @@ object CinemaCityScraper {
         StreamITALogger.log(TAG, "Avvio CinemaCity per $imdbId...")
 
         try {
-            // 1. Search per IMDB ID
+            // 1. Search per IMDB ID (con CloudflareKiller)
             val searchUrl = "$BASE_URL/?do=search&subaction=search&search_start=0&full_search=0&story=$imdbId"
             val searchResponse = app.get(searchUrl, headers = headers, interceptor = cfKiller)
             val searchDoc = Jsoup.parse(searchResponse.text)
@@ -52,7 +48,7 @@ object CinemaCityScraper {
             val fullUrl = if (contentUrl.startsWith("http")) contentUrl else "$BASE_URL$contentUrl"
             StreamITALogger.log(TAG, "Trovato: $fullUrl")
 
-            // 2. Carica la pagina del contenuto
+            // 2. Carica la pagina del contenuto (senza CloudflareKiller)
             val pageResponse = app.get(fullUrl, headers = headers)
             val doc = Jsoup.parse(pageResponse.text)
 
@@ -70,26 +66,19 @@ object CinemaCityScraper {
                 decoded.substringAfter("new Playerjs(").substringBeforeLast(");")
             )
 
-            // 4. Estrai i link video
-            val rawFile = playerJson.opt("file") ?: run {
-                StreamITALogger.log(TAG, "Campo 'file' mancante")
-                return false
-            }
-
+            // 4. Estrai file
+            val rawFile = playerJson.opt("file") ?: return false
             val fileArray: JSONArray = when (rawFile) {
                 is JSONArray -> rawFile
-                is String -> {
-                    if (rawFile.startsWith("[")) JSONArray(rawFile)
+                is String -> if (rawFile.startsWith("[")) JSONArray(rawFile)
                     else JSONArray().put(JSONObject().put("file", rawFile))
-                }
                 else -> return false
             }
 
-            // 5. Se è una serie TV, cerca la stagione/episodio
+            // 5. Film o Serie TV?
             if (season != null && episode != null) {
-                extractSeriesLinks(fileArray, season, episode, fullUrl, callback)
+                return extractSeriesLinks(fileArray, season, episode, fullUrl, callback)
             } else {
-                // Film
                 val movieFile = fileArray.optJSONObject(0)?.optString("file")
                 if (!movieFile.isNullOrBlank()) {
                     callback(
@@ -103,7 +92,7 @@ object CinemaCityScraper {
                             this.quality = Qualities.P1080.value
                         }
                     )
-                    StreamITALogger.log(TAG, "CinemaCity OK: link film trovato")
+                    StreamITALogger.log(TAG, "CinemaCity OK")
                     return true
                 }
             }
@@ -116,9 +105,49 @@ object CinemaCityScraper {
 
     private fun extractSeriesLinks(
         fileArray: JSONArray,
-        season: Int,
-        episode: Int,
+        targetSeason: Int,
+        targetEpisode: Int,
         referer: String,
         callback: (ExtractorLink) -> Unit,
-    ) {
-        val seasonRegex = Regex("Season\\s*(\\d+)", RegexOption.IGNORE
+    ): Boolean {
+        val seasonRegex = Regex("Season\\s*(\\d+)", RegexOption.IGNORE_CASE)
+        val episodeRegex = Regex("Episode\\s*(\\d+)", RegexOption.IGNORE_CASE)
+
+        for (i in 0 until fileArray.length()) {
+            val seasonJson = fileArray.optJSONObject(i) ?: continue
+            val seasonNumber = seasonRegex.find(seasonJson.optString("title"))
+                ?.groupValues?.get(1)?.toIntOrNull() ?: continue
+
+            if (seasonNumber != targetSeason) continue
+
+            val episodes = seasonJson.optJSONArray("folder") ?: continue
+            for (j in 0 until episodes.length()) {
+                val epJson = episodes.optJSONObject(j) ?: continue
+                val episodeNumber = episodeRegex.find(epJson.optString("title"))
+                    ?.groupValues?.get(1)?.toIntOrNull() ?: continue
+
+                if (episodeNumber != targetEpisode) continue
+
+                val file = epJson.optString("file")
+                if (file.isNotBlank()) {
+                    callback(
+                        newExtractorLink(
+                            source = "CinemaCity",
+                            name = "CinemaCity S${targetSeason}E${targetEpisode}",
+                            url = file,
+                            type = INFER_TYPE,
+                        ) {
+                            this.referer = referer
+                            this.quality = Qualities.P1080.value
+                        }
+                    )
+                    StreamITALogger.log(TAG, "CinemaCity OK: S${targetSeason}E${targetEpisode}")
+                    return true
+                }
+            }
+        }
+
+        StreamITALogger.log(TAG, "Episodio S${targetSeason}E${targetEpisode} non trovato")
+        return false
+    }
+}
