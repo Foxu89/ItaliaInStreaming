@@ -7,7 +7,6 @@ import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -71,7 +70,7 @@ object CinemaCityScraper {
             val fileArray: JSONArray = when (rawFile) {
                 is JSONArray -> rawFile
                 is String -> if (rawFile.startsWith("[")) JSONArray(rawFile)
-                    else JSONArray().put(JSONObject().put("file", rawFile))
+                else JSONArray().put(JSONObject().put("file", rawFile))
                 else -> return false
             }
 
@@ -82,15 +81,14 @@ object CinemaCityScraper {
                 val movieFile = fileArray.optJSONObject(0)?.optString("file")
                 if (!movieFile.isNullOrBlank()) {
                     callback(
-                        newExtractorLink(
+                        ExtractorLink(
                             source = "CinemaCity",
                             name = "CinemaCity",
                             url = movieFile,
+                            referer = BASE_URL,
+                            quality = Qualities.P1080.value,
                             type = INFER_TYPE,
-                        ) {
-                            this.referer = BASE_URL
-                            this.quality = Qualities.P1080.value
-                        }
+                        )
                     )
                     StreamITALogger.log(TAG, "CinemaCity OK")
                     return true
@@ -131,15 +129,14 @@ object CinemaCityScraper {
                 val file = epJson.optString("file")
                 if (file.isNotBlank()) {
                     callback(
-                        newExtractorLink(
+                        ExtractorLink(
                             source = "CinemaCity",
                             name = "CinemaCity S${targetSeason}E${targetEpisode}",
                             url = file,
+                            referer = referer,
+                            quality = Qualities.P1080.value,
                             type = INFER_TYPE,
-                        ) {
-                            this.referer = referer
-                            this.quality = Qualities.P1080.value
-                        }
+                        )
                     )
                     StreamITALogger.log(TAG, "CinemaCity OK: S${targetSeason}E${targetEpisode}")
                     return true
