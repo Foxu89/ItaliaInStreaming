@@ -377,6 +377,24 @@ class StreamITA(
                 }
             }
 
+            // ========== CinemaCity in parallelo ==========
+            launch {
+                try {
+                    linkData.imdbId?.let { imdbId ->
+                        val success = CinemaCityScraper.loadLinks(
+                            imdbId = imdbId,
+                            season = linkData.season,
+                            episode = linkData.episode,
+                            subtitleCallback = subtitleCallback,
+                            callback = callback,
+                        )
+                        if (success) anySuccess = true
+                    }
+                } catch (e: Exception) {
+                    StreamITALogger.log(TAG, "CinemaCity fallito: ${e.message}")
+                }
+            }
+
             // ========== Sottotitoli in parallelo ==========
             launch {
                 try {
