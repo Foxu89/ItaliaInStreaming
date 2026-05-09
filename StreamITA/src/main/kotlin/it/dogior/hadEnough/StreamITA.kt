@@ -381,13 +381,15 @@ class StreamITA(
             launch {
                 try {
                     linkData.imdbId?.let { imdbId ->
-                        val success = CinemaCityScraper.loadLinks(
-                            imdbId = imdbId,
-                            season = linkData.season,
-                            episode = linkData.episode,
-                            subtitleCallback = subtitleCallback,
-                            callback = callback,
-                        )
+                        val success = withTimeoutOrNull(60000) { // 60 secondi per Cloudflare
+                            CinemaCityScraper.loadLinks(
+                                imdbId = imdbId,
+                                season = linkData.season,
+                                episode = linkData.episode,
+                                subtitleCallback = subtitleCallback,
+                                callback = callback,
+                            )
+                        } ?: false
                         if (success) anySuccess = true
                     }
                 } catch (e: Exception) {
