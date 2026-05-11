@@ -8,14 +8,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
-import org.jsoup.nodes.Document
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
+import org.json.JSONObject
+import kotlin.io.encoding.Base64
 
 class CalcioStreaming : MainAPI() {
     override var lang = "it"
@@ -28,12 +25,9 @@ class CalcioStreaming : MainAPI() {
     val cfKiller = CloudflareKiller()
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val document = app.get(
-            "$mainUrl/partite-streaming.html"
-        ).document
-        val sections =
-            document.select("div.slider-title")
-                .filter { it -> it.select("div.owl-carousel").isNotEmpty() }
+        val document = app.get("$mainUrl/partite-streaming.html").document
+        val sections = document.select("div.slider-title")
+            .filter { it -> it.select("div.owl-carousel").isNotEmpty() }
         if (sections.isEmpty()) throw ErrorLoadingException()
 
         return newHomePageResponse(sections.mapNotNull { it ->
@@ -48,102 +42,84 @@ class CalcioStreaming : MainAPI() {
                 }
             }
             if (shows.isEmpty()) return@mapNotNull null
-            HomePageList(
-                categoryName,
-                shows,
-                isHorizontalImages = true
-            )
+            HomePageList(categoryName, shows, isHorizontalImages = true)
         }, false)
     }
 
     override suspend fun load(url: String): LoadResponse {
         val document = app.get(url).document
-        val posterUrl =
-            document.select("div.background-image.bg-image").attr("style").substringAfter("url(")
-                .substringBefore(");")
+        val posterUrl = document.select("div.background-image.bg-image").attr("style")
+            .substringAfter("url(").substringBefore(");")
         val infoBlock = document.select(".info-wrap")
         val title = infoBlock.select("h1").text()
         val description = infoBlock.select("div.info-span > span").toList().joinToString(" - ")
         return newLiveStreamLoadResponse(name = title, url = url, dataUrl = url) {
-            this.posterUrl = fixUrl(posterUrl)
-                .replace("//uploads", "/uploads")
+            this.posterUrl = fixUrl(posterUrl).replace("//uploads", "/uploads")
             this.plot = description
         }
     }
 
-    private suspend fun extractVideoStreamWithWebView(url: String): String? {
-        return suspendCancellableCoroutine { continuation ->
-            val latch = CountDownLatch(1)
-            var extractedUrl: String? = null
-            var found = false
+    private fun getStreamUrl(html: String): String? {
+        val configMatch = Regex("""window\._econfig\s*=\s*['"]([^'"]+)['"]""").find(html)
+            ?: return null
 
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                try {
-                    val context = runCatching {
-                        val activityThreadClass = Class.forName("android.app.ActivityThread")
-                        val currentActivityThreadMethod =
-                            activityThreadClass.getMethod("currentActivityThread")
-                        val activityThread = currentActivityThreadMethod.invoke(null)
-                        val getApplicationMethod = activityThreadClass.getMethod("getApplication")
-                        (getApplicationMethod.invoke(activityThread) as? android.app.Application)
-                            ?: throw Exception("No Application context")
-                    }.getOrNull() ?: run {
-                        continuation.resume(null)
-                        return@post
-                    }
+        return try {
+            val encodedConfig = configMatch.groupValues[1]
+            val decodedConfig = Base64
+                .decode(encodedConfig + "=".repeat((-encodedConfig.length % 4 + 4) % 4))
+                .toString(Charsets.ISO_8859_1)
 
-                    val webView = android.webkit.WebView(context)
-                    webView.settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        userAgentString =
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                    }
+            val partOrder = listOf(2, 0, 3, 1)
+            val partLength = (decodedConfig.length + 3) / 4
+            val encodedParts = mutableListOf<String>()
+            var offset = 0
 
-                    webView.webViewClient = object : android.webkit.WebViewClient() {
-                        override fun shouldInterceptRequest(
-                            view: android.webkit.WebView?,
-                            request: android.webkit.WebResourceRequest?
-                        ): android.webkit.WebResourceResponse? {
-                            val requestUrl = request?.url.toString()
-
-                            if (!found && requestUrl.contains(".m3u8") && requestUrl.contains("/hls/")) {
-                                found = true
-                                extractedUrl = requestUrl
-                                Log.d("CalcioStreaming", "!!! TROVATO m3u8: $requestUrl")
-
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    webView.stopLoading()
-                                    webView.destroy()
-                                    latch.countDown()
-                                    continuation.resume(requestUrl)
-                                }
-                            }
-
-                            return super.shouldInterceptRequest(view, request)
-                        }
-                    }
-
-                    webView.loadUrl(url)
-
-                    // Timeout dopo 15 secondi
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        if (!found) {
-                            Log.w("CalcioStreaming", "Timeout sniffing per $url")
-                            webView.stopLoading()
-                            webView.destroy()
-                            latch.countDown()
-                            continuation.resume(null)
-                        }
-                    }, 20000)
-
-                } catch (e: Exception) {
-                    Log.e("CalcioStreaming", "Errore WebView: ${e.message}")
-                    continuation.resume(null)
-                }
+            repeat(4) {
+                val part = decodedConfig.substring(
+                    offset, minOf(offset + partLength, decodedConfig.length)
+                )
+                offset += partLength
+                encodedParts.add(part.take(3) + part.drop(4))
             }
 
-            latch.await(25, TimeUnit.SECONDS)
+            val decodedParts = Array(4) { "" }
+            encodedParts.forEachIndexed { index, part ->
+                val padded = part + "=".repeat((-part.length % 4 + 4) % 4)
+                decodedParts[partOrder[index]] = Base64.decode(padded)
+                    .toString(Charsets.ISO_8859_1)
+            }
+
+            val joinedConfig = decodedParts.joinToString("")
+            val configJson = Base64
+                .decode(joinedConfig + "=".repeat((-joinedConfig.length % 4 + 4) % 4))
+                .toString(Charsets.UTF_8)
+
+            val config = JSONObject(configJson)
+            config.optString("stream_url_nop2p").ifEmpty { null }
+                ?: config.optString("stream_url").ifEmpty { null }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun extractVideoStream(
+        url: String, ref: String, n: Int
+    ): Pair<String, String>? {
+        if (url.toHttpUrlOrNull() == null) return null
+        if (n > 10) return null
+
+        val doc = app.get(url).document
+        val link = doc.selectFirst("iframe")?.attr("src") ?: return null
+        val newPage = app.get(
+            fixUrl(link),
+            referer = ref,
+            headers = mapOf("Sec-Fetch-Dest" to "iframe")
+        ).document
+        val streamUrl = getStreamUrl(newPage.toString())
+        return if (newPage.select("script").size >= 6 && !streamUrl.isNullOrEmpty()) {
+            streamUrl to fixUrl(link)
+        } else {
+            extractVideoStream(url = link, ref = url, n = n + 1)
         }
     }
 
@@ -161,17 +137,17 @@ class CalcioStreaming : MainAPI() {
             return false
         }
 
-        // Avvia tutte le WebView in parallelo
+        // Estrai tutti i link in parallelo
         val results = coroutineScope {
             buttons.map { button ->
                 async(Dispatchers.IO) {
                     val lang = button.text().trim()
                     val phpUrl = button.attr("data-link")
                     Log.d("CalcioStreaming", "Provando: $lang -> $phpUrl")
-                    val m3u8 = extractVideoStreamWithWebView(phpUrl)
-                    if (m3u8 != null) {
-                        Log.d("CalcioStreaming", "OK $lang: $m3u8")
-                        Link(lang, m3u8, phpUrl)
+                    val link = extractVideoStream(phpUrl, phpUrl.substringBefore("channels"), 1)
+                    if (link != null) {
+                        Log.d("CalcioStreaming", "OK $lang: ${link.first}")
+                        Link(lang, link.first, link.second)
                     } else {
                         Log.w("CalcioStreaming", "Fallito per $lang")
                         null
@@ -190,6 +166,10 @@ class CalcioStreaming : MainAPI() {
                 ) {
                     this.quality = 0
                     this.referer = link.ref
+                    this.headers = mapOf(
+                        "Referer" to link.ref,
+                        "Origin" to mainUrl
+                    )
                 }
             )
         }
@@ -200,8 +180,7 @@ class CalcioStreaming : MainAPI() {
     override fun getVideoInterceptor(extractorLink: ExtractorLink): Interceptor {
         return object : Interceptor {
             override fun intercept(chain: Interceptor.Chain): Response {
-                val response = cfKiller.intercept(chain)
-                return response
+                return cfKiller.intercept(chain)
             }
         }
     }
