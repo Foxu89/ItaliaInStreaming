@@ -9,8 +9,8 @@ include(
   /**  "AnimeSaturn",
     "AnimeUnity",
     "AnimeWorld",
-    "Arte",
-    "CalcioStreaming",**/
+    "Arte",**/
+    "CalcioStreaming",
 //    "CB01",
 //    "CorsaroNero",
 //    "DaddyLive",
