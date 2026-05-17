@@ -117,15 +117,16 @@
                 android:background="@drawable/outline"
                 android:gravity="center">
 
-            <TextView
-                android:id="@+id/ext_vixsrc_timeout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/ext_vixsrc_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -208,15 +209,16 @@
                 android:background="@drawable/outline"
                 android:gravity="center">
 
-            <TextView
-                android:id="@+id/ext_vidsrc_timeout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/ext_vidsrc_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -299,15 +301,16 @@
                 android:background="@drawable/outline"
                 android:gravity="center">
 
-            <TextView
-                android:id="@+id/ext_streamhg_timeout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/ext_streamhg_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -390,15 +393,16 @@
                 android:background="@drawable/outline"
                 android:gravity="center">
 
-            <TextView
-                android:id="@+id/ext_mixdrop_timeout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/ext_mixdrop_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -481,15 +485,16 @@
                 android:background="@drawable/outline"
                 android:gravity="center">
 
-            <TextView
-                android:id="@+id/ext_dropload_timeout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/ext_dropload_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -572,15 +577,16 @@
                 android:background="@drawable/outline"
                 android:gravity="center">
 
-            <TextView
-                android:id="@+id/ext_cinemacity_timeout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/ext_cinemacity_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -663,15 +669,16 @@
                 android:background="@drawable/outline"
                 android:gravity="center">
 
-            <TextView
-                android:id="@+id/ext_animeunity_timeout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/ext_animeunity_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -754,15 +761,16 @@
                 android:background="@drawable/outline"
                 android:gravity="center">
 
-            <TextView
-                android:id="@+id/ext_animeworld_timeout"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/ext_animeworld_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -857,6 +865,5 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-        </LinearLayout>
     </ScrollView>
 </LinearLayout>
