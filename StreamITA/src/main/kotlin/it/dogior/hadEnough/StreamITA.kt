@@ -418,13 +418,15 @@ class StreamITA(
 
             // ========== Sottotitoli in parallelo ==========
             launch {
-                try {
-                    linkData.imdbId?.let { imdbId ->
-                        StreamITASubtitles.loadWyzieSubs(imdbId, linkData.season, linkData.episode, subtitleCallback)
-                        StreamITASubtitles.loadOpenSubtitles(imdbId, linkData.season, linkData.episode, subtitleCallback)
+                if (sharedPref?.getBoolean(StreamITAPlugin.extractorEnabledKey("subtitle"), true) == true) {
+                    try {
+                        linkData.imdbId?.let { imdbId ->
+                            StreamITASubtitles.loadWyzieSubs(imdbId, linkData.season, linkData.episode, subtitleCallback)
+                            StreamITASubtitles.loadOpenSubtitles(imdbId, linkData.season, linkData.episode, subtitleCallback)
+                        }
+                    } catch (e: Exception) {
+                        StreamITALogger.log(TAG, "Sottotitoli falliti: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    StreamITALogger.log(TAG, "Sottotitoli falliti: ${e.message}")
                 }
             }
         }

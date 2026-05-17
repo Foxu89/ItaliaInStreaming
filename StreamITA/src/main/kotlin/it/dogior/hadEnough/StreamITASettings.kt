@@ -232,6 +232,7 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
         ExtractorEntry("animeunity", true, 30),
         ExtractorEntry("animeworld", true, 30),
         ExtractorEntry("animesaturn", true, 30),
+        ExtractorEntry("subtitle", true, 15),
     )
 
     private val enabledState = mutableMapOf<String, Boolean>()

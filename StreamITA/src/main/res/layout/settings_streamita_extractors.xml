@@ -865,6 +865,62 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
+
+    <!-- Subtitle -->
+    <LinearLayout
+        android:id="@+id/ext_subtitle_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_subtitle_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_subtitle_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Subtitle"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_subtitle_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Cercatore sottotitoli"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_subtitle_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+    </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </LinearLayout>
