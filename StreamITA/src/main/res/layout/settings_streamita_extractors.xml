@@ -113,8 +113,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_vixsrc_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView
@@ -205,8 +205,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_vidsrc_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView
@@ -297,8 +297,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_streamhg_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView
@@ -389,8 +389,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_mixdrop_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView
@@ -481,8 +481,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_dropload_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView
@@ -573,8 +573,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_cinemacity_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView
@@ -665,8 +665,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_animeunity_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView
@@ -757,8 +757,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_animeworld_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView
@@ -849,8 +849,8 @@
 
             <LinearLayout
                 android:layout_width="60dp"
+                android:id="@+id/ext_animesaturn_timeout_bg"
                 android:layout_height="36dp"
-                android:background="@drawable/outline"
                 android:gravity="center">
 
                 <TextView

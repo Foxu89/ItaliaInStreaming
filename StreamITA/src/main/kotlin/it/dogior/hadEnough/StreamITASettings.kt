@@ -51,12 +51,7 @@ abstract class StreamITABaseSettingsFragment : BottomSheetDialogFragment() {
         savedInstanceState: Bundle?
     ): View? {
         val layoutId = res.getIdentifier(layoutName, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-        val pluginInflater = inflater.cloneInContext(
-            object : android.content.ContextWrapper(inflater.context) {
-                override fun getResources(): android.content.res.Resources = res
-            }
-        )
-        return pluginInflater.inflate(res.getLayout(layoutId), container, false)
+        return inflater.inflate(res.getLayout(layoutId), container, false)
     }
 
     protected fun <T : View> View.findViewByName(name: String): T? {
@@ -249,6 +244,7 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
         for (entry in extractors) {
             val card = view.findViewByName<View>("ext_${entry.key}_card") ?: continue
             card.applyOutlineBackground()
+            view.findViewByName<View>("ext_${entry.key}_timeout_bg")?.applyOutlineBackground()
 
             val enabled = sharedPref?.getBoolean(
                 StreamITAPlugin.extractorEnabledKey(entry.key), entry.defaultEnabled
