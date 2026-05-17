@@ -224,7 +224,6 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
 
     private val extractors = listOf(
         ExtractorEntry("vixsrc", true, 15),
-        ExtractorEntry("vixcloud", false, 15),
         ExtractorEntry("vidsrc", true, 15),
         ExtractorEntry("streamhg", true, 15),
         ExtractorEntry("mixdrop", true, 30),

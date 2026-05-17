@@ -29,6 +29,15 @@
             android:contentDescription="Salva" />
     </RelativeLayout>
 
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
     <!-- VixSrc -->
     <LinearLayout
         android:id="@+id/ext_vixsrc_card"
@@ -102,95 +111,16 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
+            <LinearLayout
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center">
+
             <TextView
                 android:id="@+id/ext_vixsrc_timeout"
-                android:layout_width="60dp"
-                android:layout_height="36dp"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- VixCloud -->
-    <LinearLayout
-        android:id="@+id/ext_vixcloud_card"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:orientation="vertical"
-        android:padding="14dp">
-
-        <LinearLayout
-            android:id="@+id/ext_vixcloud_row"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:minHeight="52dp"
-            android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="10dp">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/ext_vixcloud_label"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="VixCloud"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/ext_vixcloud_description"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:alpha="0.6"
-                    android:text="Estrattore HTTP diretto (vixcloud.co)"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
-            <Switch
-                android:id="@+id/ext_vixcloud_switch"
-                android:layout_width="42dp"
-                android:layout_height="wrap_content"
-                android:minHeight="0dp"
-                android:showText="false"
-                android:switchMinWidth="28dp"
-                android:text="" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/ext_vixcloud_timeout_row"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="10dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:alpha="0.6"
-                android:text="Timeout (secondi)"
-                android:textSize="12sp" />
-
-            <TextView
-                android:id="@+id/ext_vixcloud_timeout"
-                android:layout_width="60dp"
-                android:layout_height="36dp"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:clickable="true"
                 android:focusable="true"
@@ -272,10 +202,16 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/ext_vidsrc_timeout"
+            <LinearLayout
                 android:layout_width="60dp"
                 android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center">
+
+            <TextView
+                android:id="@+id/ext_vidsrc_timeout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:clickable="true"
                 android:focusable="true"
@@ -357,10 +293,16 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/ext_streamhg_timeout"
+            <LinearLayout
                 android:layout_width="60dp"
                 android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center">
+
+            <TextView
+                android:id="@+id/ext_streamhg_timeout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:clickable="true"
                 android:focusable="true"
@@ -442,10 +384,16 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/ext_mixdrop_timeout"
+            <LinearLayout
                 android:layout_width="60dp"
                 android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center">
+
+            <TextView
+                android:id="@+id/ext_mixdrop_timeout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:clickable="true"
                 android:focusable="true"
@@ -527,10 +475,16 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/ext_dropload_timeout"
+            <LinearLayout
                 android:layout_width="60dp"
                 android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center">
+
+            <TextView
+                android:id="@+id/ext_dropload_timeout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:clickable="true"
                 android:focusable="true"
@@ -612,10 +566,16 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/ext_cinemacity_timeout"
+            <LinearLayout
                 android:layout_width="60dp"
                 android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center">
+
+            <TextView
+                android:id="@+id/ext_cinemacity_timeout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:clickable="true"
                 android:focusable="true"
@@ -697,10 +657,16 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/ext_animeunity_timeout"
+            <LinearLayout
                 android:layout_width="60dp"
                 android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center">
+
+            <TextView
+                android:id="@+id/ext_animeunity_timeout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:clickable="true"
                 android:focusable="true"
@@ -782,10 +748,16 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/ext_animeworld_timeout"
+            <LinearLayout
                 android:layout_width="60dp"
                 android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center">
+
+            <TextView
+                android:id="@+id/ext_animeworld_timeout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:clickable="true"
                 android:focusable="true"
@@ -867,15 +839,24 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/ext_animesaturn_timeout"
+            <LinearLayout
                 android:layout_width="60dp"
                 android:layout_height="36dp"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:padding="4dp"
-                android:textSize="12sp" />
+                android:background="@drawable/outline"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/ext_animesaturn_timeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="4dp"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
 </LinearLayout>
