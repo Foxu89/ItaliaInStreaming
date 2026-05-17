@@ -51,7 +51,12 @@ abstract class StreamITABaseSettingsFragment : BottomSheetDialogFragment() {
         savedInstanceState: Bundle?
     ): View? {
         val layoutId = res.getIdentifier(layoutName, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-        return inflater.inflate(res.getLayout(layoutId), container, false)
+        val pluginInflater = inflater.cloneInContext(
+            object : android.content.ContextWrapper(inflater.context) {
+                override fun getResources(): android.content.res.Resources = res
+            }
+        )
+        return pluginInflater.inflate(res.getLayout(layoutId), container, false)
     }
 
     protected fun <T : View> View.findViewByName(name: String): T? {
