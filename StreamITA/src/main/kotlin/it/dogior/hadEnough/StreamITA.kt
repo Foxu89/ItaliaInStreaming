@@ -268,7 +268,8 @@ class StreamITA(
                 onSuccess = {
                     anySuccess = true
                     StreamITALogger.log(TAG, "Link trovato da estrattori normali per tmdbId=$tmdbId")
-                }
+                },
+                sharedPref = sharedPref
             )
 
             if (linkData.isMovie && linkData.imdbId != null) {
@@ -277,123 +278,141 @@ class StreamITA(
             extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
 
             // ========== AnimeUnity in parallelo ==========
-            launch {
-                try {
-                    val title = linkData.title ?: return@launch
-                    val success = AnimeUnityScraper.loadLinks(
-                        title = title,
-                        tmdbId = linkData.id,
-                        isMovie = linkData.isMovie,
-                        season = linkData.season,
-                        episode = linkData.episode,
-                        subtitleCallback = subtitleCallback,
-                        callback = callback,
-                        fetchEnglishTitle = { id, isMov -> fetchEnglishTitle(id, isMov) }
-                    )
-                    if (success) anySuccess = true
-                } catch (e: Exception) {
-                    StreamITALogger.log(TAG, "AnimeUnity fallito: ${e.message}")
-                }
-            }
-
-            // ========== AnimeWorld in parallelo ==========
-            launch {
-                try {
-                    val title = linkData.title ?: return@launch
-                    val tmdbIdLocal = linkData.id
-                    val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
-
-                    val sources = AnimeWorldScraper.searchWithSources(
-                        title = title,
-                        tmdbId = tmdbIdLocal,
-                        englishTitle = enTitle
-                    )
-
-                    val animeToTry = listOfNotNull(sources.sub, sources.dub)
-
-                    for (anime in animeToTry) {
-                        val episodes = AnimeWorldScraper.loadEpisodes(anime.url)
-
-                        val targetEp = if (linkData.season == null) {
-                            episodes.firstOrNull()
-                        } else {
-                            episodes.find { it.number == linkData.episode.toString() }
-                        }
-
-                        if (targetEp != null) {
-                            val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
-                            if (info != null) {
-                                val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
-                                if (success) {
-                                    anySuccess = true
-                                    StreamITALogger.log(TAG, "AnimeWorld OK: link trovato per ep.${targetEp.number} (${if (anime.isDub) "DUB" else "SUB"})")
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    StreamITALogger.log(TAG, "AnimeWorld fallito: ${e.message}")
-                }
-            }
-
-            // ========== AnimeSaturn in parallelo ==========
-            launch {
-                try {
-                    val title = linkData.title ?: return@launch
-                    val tmdbIdLocal = linkData.id
-                    val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
-
-                    val sources = AnimeSaturnScraper.searchWithSources(
-                        title = title,
-                        tmdbId = tmdbIdLocal,
-                        englishTitle = enTitle
-                    )
-
-                    val animeToTry = listOfNotNull(sources.sub, sources.dub)
-
-                    for (anime in animeToTry) {
-                        val episodes = AnimeSaturnScraper.loadEpisodes(anime.url)
-
-                        val targetEp = if (linkData.season == null) {
-                            episodes.firstOrNull()
-                        } else {
-                            episodes.find { it.number == linkData.episode.toString() }
-                        }
-
-                        if (targetEp != null) {
-                            val videoUrl = AnimeSaturnScraper.getEpisodeVideoUrl(targetEp.episodeUrl)
-                            if (videoUrl != null) {
-                                val label = if (anime.isDub) "[DUB]" else "[SUB]"
-                                val success = AnimeSaturnScraper.loadLinks(videoUrl, label, callback)
-                                if (success) {
-                                    anySuccess = true
-                                    StreamITALogger.log(TAG, "AnimeSaturn OK: link trovato per ep.${targetEp.number} ($label)")
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    StreamITALogger.log(TAG, "AnimeSaturn fallito: ${e.message}")
-                }
-            }
-
-            // ========== CinemaCity in parallelo ==========
-            launch {
-                try {
-                    linkData.imdbId?.let { imdbId ->
-                        val success = withTimeoutOrNull(60000) { // 60 secondi per Cloudflare
-                            CinemaCityScraper.loadLinks(
-                                imdbId = imdbId,
+            if (isExtractorEnabled("animeunity", true)) {
+                launch {
+                    try {
+                        val timeout = extractorTimeoutMs("animeunity", 30)
+                        withTimeoutOrNull(timeout) {
+                            val title = linkData.title ?: return@withTimeoutOrNull
+                            val success = AnimeUnityScraper.loadLinks(
+                                title = title,
+                                tmdbId = linkData.id,
+                                isMovie = linkData.isMovie,
                                 season = linkData.season,
                                 episode = linkData.episode,
                                 subtitleCallback = subtitleCallback,
                                 callback = callback,
+                                fetchEnglishTitle = { id, isMov -> fetchEnglishTitle(id, isMov) }
                             )
-                        } ?: false
-                        if (success) anySuccess = true
+                            if (success) anySuccess = true
+                        }
+                    } catch (e: Exception) {
+                        StreamITALogger.log(TAG, "AnimeUnity fallito: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    StreamITALogger.log(TAG, "CinemaCity fallito: ${e.message}")
+                }
+            }
+
+            // ========== AnimeWorld in parallelo ==========
+            if (isExtractorEnabled("animeworld", true)) {
+                launch {
+                    try {
+                        val timeout = extractorTimeoutMs("animeworld", 30)
+                        withTimeoutOrNull(timeout) {
+                            val title = linkData.title ?: return@withTimeoutOrNull
+                            val tmdbIdLocal = linkData.id
+                            val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
+
+                            val sources = AnimeWorldScraper.searchWithSources(
+                                title = title,
+                                tmdbId = tmdbIdLocal,
+                                englishTitle = enTitle
+                            )
+
+                            val animeToTry = listOfNotNull(sources.sub, sources.dub)
+
+                            for (anime in animeToTry) {
+                                val episodes = AnimeWorldScraper.loadEpisodes(anime.url)
+
+                                val targetEp = if (linkData.season == null) {
+                                    episodes.firstOrNull()
+                                } else {
+                                    episodes.find { it.number == linkData.episode.toString() }
+                                }
+
+                                if (targetEp != null) {
+                                    val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
+                                    if (info != null) {
+                                        val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
+                                        if (success) {
+                                            anySuccess = true
+                                            StreamITALogger.log(TAG, "AnimeWorld OK: link trovato per ep.${targetEp.number} (${if (anime.isDub) "DUB" else "SUB"})")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        StreamITALogger.log(TAG, "AnimeWorld fallito: ${e.message}")
+                    }
+                }
+            }
+
+            // ========== AnimeSaturn in parallelo ==========
+            if (isExtractorEnabled("animesaturn", true)) {
+                launch {
+                    try {
+                        val timeout = extractorTimeoutMs("animesaturn", 30)
+                        withTimeoutOrNull(timeout) {
+                            val title = linkData.title ?: return@withTimeoutOrNull
+                            val tmdbIdLocal = linkData.id
+                            val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
+
+                            val sources = AnimeSaturnScraper.searchWithSources(
+                                title = title,
+                                tmdbId = tmdbIdLocal,
+                                englishTitle = enTitle
+                            )
+
+                            val animeToTry = listOfNotNull(sources.sub, sources.dub)
+
+                            for (anime in animeToTry) {
+                                val episodes = AnimeSaturnScraper.loadEpisodes(anime.url)
+
+                                val targetEp = if (linkData.season == null) {
+                                    episodes.firstOrNull()
+                                } else {
+                                    episodes.find { it.number == linkData.episode.toString() }
+                                }
+
+                                if (targetEp != null) {
+                                    val videoUrl = AnimeSaturnScraper.getEpisodeVideoUrl(targetEp.episodeUrl)
+                                    if (videoUrl != null) {
+                                        val label = if (anime.isDub) "[DUB]" else "[SUB]"
+                                        val success = AnimeSaturnScraper.loadLinks(videoUrl, label, callback)
+                                        if (success) {
+                                            anySuccess = true
+                                            StreamITALogger.log(TAG, "AnimeSaturn OK: link trovato per ep.${targetEp.number} ($label)")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        StreamITALogger.log(TAG, "AnimeSaturn fallito: ${e.message}")
+                    }
+                }
+            }
+
+            // ========== CinemaCity in parallelo ==========
+            if (isExtractorEnabled("cinemacity", true)) {
+                launch {
+                    try {
+                        val timeout = extractorTimeoutMs("cinemacity", 60)
+                        linkData.imdbId?.let { imdbId ->
+                            val success = withTimeoutOrNull(timeout) {
+                                CinemaCityScraper.loadLinks(
+                                    imdbId = imdbId,
+                                    season = linkData.season,
+                                    episode = linkData.episode,
+                                    subtitleCallback = subtitleCallback,
+                                    callback = callback,
+                                )
+                            } ?: false
+                            if (success) anySuccess = true
+                        }
+                    } catch (e: Exception) {
+                        StreamITALogger.log(TAG, "CinemaCity fallito: ${e.message}")
+                    }
                 }
             }
 
@@ -454,6 +473,20 @@ class StreamITA(
             for (i in 0 until logos.length()) { if (!isSvg(i)) return logoUrlAt(i) }
             if (logos.length() > 0) logoUrlAt(0) else null
         } catch (e: Exception) { StreamITALogger.log(TAG, "Errore caricamento logo: ${e.message}"); null }
+    }
+
+    private fun isExtractorEnabled(name: String, default: Boolean): Boolean {
+        return sharedPref?.getBoolean(
+            StreamITAPlugin.extractorEnabledKey(name), default
+        ) ?: default
+    }
+
+    private fun extractorTimeoutMs(name: String, defaultSeconds: Int): Long {
+        val saved = sharedPref?.getString(
+            StreamITAPlugin.extractorTimeoutKey(name), null
+        )
+        val seconds = saved?.toLongOrNull()?.takeIf { it > 0 } ?: defaultSeconds.toLong()
+        return seconds * 1000L
     }
 
     private fun getImageUrl(link: String?, getOriginal: Boolean = false): String? {

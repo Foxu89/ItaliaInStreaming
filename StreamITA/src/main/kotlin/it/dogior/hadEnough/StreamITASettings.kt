@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.Spinner
 import android.widget.Switch
@@ -214,6 +215,99 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
 
 class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
     override val layoutName: String = "settings_streamita_extractors"
+
+    private data class ExtractorEntry(
+        val key: String,
+        val defaultEnabled: Boolean,
+        val defaultTimeout: Int
+    )
+
+    private val extractors = listOf(
+        ExtractorEntry("vixsrc", true, 15),
+        ExtractorEntry("vixcloud", false, 15),
+        ExtractorEntry("vidsrc", true, 15),
+        ExtractorEntry("streamhg", true, 15),
+        ExtractorEntry("mixdrop", true, 30),
+        ExtractorEntry("dropload", true, 15),
+        ExtractorEntry("cinemacity", true, 60),
+        ExtractorEntry("animeunity", true, 30),
+        ExtractorEntry("animeworld", true, 30),
+        ExtractorEntry("animesaturn", true, 30),
+    )
+
+    private val enabledState = mutableMapOf<String, Boolean>()
+    private val timeoutState = mutableMapOf<String, String>()
+
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        for (entry in extractors) {
+            val card = view.findViewByName<View>("ext_${entry.key}_card") ?: continue
+            card.applyOutlineBackground()
+
+            val enabled = sharedPref?.getBoolean(
+                StreamITAPlugin.extractorEnabledKey(entry.key), entry.defaultEnabled
+            ) ?: entry.defaultEnabled
+            enabledState[entry.key] = enabled
+
+            val savedTimeout = sharedPref?.getString(
+                StreamITAPlugin.extractorTimeoutKey(entry.key), null
+            )
+            timeoutState[entry.key] = savedTimeout ?: ""
+
+            val switch = view.findViewByName<Switch>("ext_${entry.key}_switch")
+            switch?.text = ""
+            switch?.isChecked = enabled
+            switch?.setOnCheckedChangeListener { _, isChecked ->
+                enabledState[entry.key] = isChecked
+            }
+
+            val timeoutInput = view.findViewByName<EditText>("ext_${entry.key}_timeout")
+            timeoutInput?.setText(if (savedTimeout != null) savedTimeout else "")
+            timeoutInput?.hint = entry.defaultTimeout.toString()
+            timeoutInput?.setOnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus) {
+                    val text = timeoutInput?.text?.toString()?.trim() ?: ""
+                    if (text.isNotEmpty()) {
+                        val num = text.toIntOrNull()
+                        if (num == null || num <= 0) {
+                            timeoutInput?.text = null
+                            timeoutState[entry.key] = ""
+                        } else {
+                            timeoutState[entry.key] = text
+                        }
+                    } else {
+                        timeoutState[entry.key] = ""
+                    }
+                }
+            }
+        }
+
+        setupSaveButton(view) {
+            val editor = sharedPref?.edit()
+            if (editor != null) {
+                for (entry in extractors) {
+                    val enabled = enabledState[entry.key] ?: entry.defaultEnabled
+                    editor.putBoolean(
+                        StreamITAPlugin.extractorEnabledKey(entry.key), enabled
+                    )
+
+                    val timeoutStr = timeoutState[entry.key] ?: ""
+                    if (timeoutStr.isNotEmpty() && timeoutStr.toIntOrNull() != null && (timeoutStr.toIntOrNull() ?: 0) > 0) {
+                        editor.putString(
+                            StreamITAPlugin.extractorTimeoutKey(entry.key), timeoutStr
+                        )
+                    } else {
+                        editor.remove(StreamITAPlugin.extractorTimeoutKey(entry.key))
+                    }
+                }
+                editor.apply()
+            }
+            showToast("Modifiche in Estrattori salvate")
+            dismiss()
+        }
+    }
 }
 
 class StreamITAUISettings : StreamITABaseSettingsFragment() {

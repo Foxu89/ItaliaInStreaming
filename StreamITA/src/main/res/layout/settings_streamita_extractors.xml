@@ -18,15 +18,864 @@
             android:text="Estrattori"
             android:textSize="24sp"
             android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/save_btn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:background="@android:color/transparent"
+            android:contentDescription="Salva" />
     </RelativeLayout>
 
-    <TextView
-        android:id="@+id/empty_message"
+    <!-- VixSrc -->
+    <LinearLayout
+        android:id="@+id/ext_vixsrc_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:alpha="0.6"
-        android:gravity="center"
-        android:text="Nessuna opzione disponibile"
-        android:textSize="14sp" />
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_vixsrc_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_vixsrc_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="VixSrc"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_vixsrc_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Estrattore basato su WebView (vixsrc.to)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_vixsrc_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_vixsrc_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_vixsrc_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- VixCloud -->
+    <LinearLayout
+        android:id="@+id/ext_vixcloud_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_vixcloud_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_vixcloud_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="VixCloud"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_vixcloud_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Estrattore HTTP diretto (vixcloud.co)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_vixcloud_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_vixcloud_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_vixcloud_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- VidSrc -->
+    <LinearLayout
+        android:id="@+id/ext_vidsrc_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_vidsrc_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_vidsrc_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="VidSrc"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_vidsrc_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Estrattore WebView (vidsrc.ru)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_vidsrc_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_vidsrc_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_vidsrc_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- StreamHG -->
+    <LinearLayout
+        android:id="@+id/ext_streamhg_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_streamhg_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_streamhg_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="StreamHG"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_streamhg_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Estrattore WebView (dhcplay.com)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_streamhg_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_streamhg_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_streamhg_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- MixDrop -->
+    <LinearLayout
+        android:id="@+id/ext_mixdrop_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_mixdrop_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_mixdrop_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="MixDrop"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_mixdrop_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Estrattore WebView con auto-click (mixdrop.top)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_mixdrop_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_mixdrop_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_mixdrop_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- DropLoad -->
+    <LinearLayout
+        android:id="@+id/ext_dropload_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_dropload_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_dropload_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="DropLoad"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_dropload_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Estrattore WebView (dr0pstream.com)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_dropload_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_dropload_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_dropload_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- CinemaCity -->
+    <LinearLayout
+        android:id="@+id/ext_cinemacity_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_cinemacity_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_cinemacity_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="CinemaCity"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_cinemacity_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Estrattore PlayerJS (cinemacity.cc)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_cinemacity_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_cinemacity_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_cinemacity_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- AnimeUnity -->
+    <LinearLayout
+        android:id="@+id/ext_animeunity_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_animeunity_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_animeunity_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="AnimeUnity"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_animeunity_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Scraper anime (animeunity.so)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_animeunity_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_animeunity_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_animeunity_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- AnimeWorld -->
+    <LinearLayout
+        android:id="@+id/ext_animeworld_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_animeworld_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_animeworld_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="AnimeWorld"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_animeworld_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Scraper anime (animeworld.ac)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_animeworld_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_animeworld_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_animeworld_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- AnimeSaturn -->
+    <LinearLayout
+        android:id="@+id/ext_animesaturn_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:id="@+id/ext_animesaturn_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="52dp"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ext_animesaturn_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="AnimeSaturn"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ext_animesaturn_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Scraper anime (animesaturn.cx)"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_animesaturn_switch"
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:minHeight="0dp"
+                android:showText="false"
+                android:switchMinWidth="28dp"
+                android:text="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ext_animesaturn_timeout_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:alpha="0.6"
+                android:text="Timeout (secondi)"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/ext_animesaturn_timeout"
+                android:layout_width="60dp"
+                android:layout_height="36dp"
+                android:background="@drawable/outline"
+                android:gravity="center"
+                android:inputType="number"
+                android:padding="4dp"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

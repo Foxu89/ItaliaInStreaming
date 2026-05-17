@@ -226,4 +226,15 @@
             android:text="Apri"
             android:textStyle="bold" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/footer_signature"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:alpha="0.5"
+        android:gravity="center"
+        android:paddingBottom="8dp"
+        android:text="Developed by DieGon7771"
+        android:textSize="11sp" />
 </LinearLayout>
