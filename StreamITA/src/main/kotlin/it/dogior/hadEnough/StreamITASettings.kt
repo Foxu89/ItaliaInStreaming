@@ -263,24 +263,33 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
                 enabledState[entry.key] = isChecked
             }
 
-            val timeoutInput = view.findViewByName<EditText>("ext_${entry.key}_timeout")
-            timeoutInput?.setText(if (savedTimeout != null) savedTimeout else "")
-            timeoutInput?.hint = entry.defaultTimeout.toString()
-            timeoutInput?.setOnFocusChangeListener { _, hasFocus ->
-                if (!hasFocus) {
-                    val text = timeoutInput?.text?.toString()?.trim() ?: ""
-                    if (text.isNotEmpty()) {
-                        val num = text.toIntOrNull()
-                        if (num == null || num <= 0) {
-                            timeoutInput?.text = null
-                            timeoutState[entry.key] = ""
-                        } else {
+            val timeoutView = view.findViewByName<TextView>("ext_${entry.key}_timeout")
+            val displayText = savedTimeout ?: entry.defaultTimeout.toString()
+            timeoutView?.text = displayText
+            timeoutView?.setOnClickListener {
+                val ctx = context ?: return@setOnClickListener
+                val input = EditText(ctx)
+                input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                input.setText(timeoutState[entry.key]?.takeIf { it.isNotEmpty() } ?: entry.defaultTimeout.toString())
+                input.setSelection(input.text.length)
+                input.gravity = android.view.Gravity.CENTER
+
+                AlertDialog.Builder(ctx)
+                    .setTitle("Timeout - ${entry.key.replaceFirstChar { it.uppercaseChar() }}")
+                    .setMessage("Inserisci il timeout in secondi")
+                    .setView(input)
+                    .setPositiveButton("OK") { _, _ ->
+                        val text = input.text.toString().trim()
+                        if (text.isNotEmpty() && text.toIntOrNull() != null && (text.toIntOrNull() ?: 0) > 0) {
                             timeoutState[entry.key] = text
+                            timeoutView.text = text
+                        } else {
+                            timeoutState[entry.key] = ""
+                            timeoutView.text = entry.defaultTimeout.toString()
                         }
-                    } else {
-                        timeoutState[entry.key] = ""
                     }
-                }
+                    .setNegativeButton("Annulla", null)
+                    .show()
             }
         }
 

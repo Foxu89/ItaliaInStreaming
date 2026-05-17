@@ -102,13 +102,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_vixsrc_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -187,13 +188,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_vixcloud_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -272,13 +274,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_vidsrc_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -357,13 +360,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_streamhg_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -442,13 +446,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_mixdrop_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -527,13 +532,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_dropload_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -612,13 +618,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_cinemacity_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -697,13 +704,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_animeunity_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -782,13 +790,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_animeworld_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -867,13 +876,14 @@
                 android:text="Timeout (secondi)"
                 android:textSize="12sp" />
 
-            <EditText
+            <TextView
                 android:id="@+id/ext_animesaturn_timeout"
                 android:layout_width="60dp"
                 android:layout_height="36dp"
                 android:background="@drawable/outline"
                 android:gravity="center"
-                android:inputType="number"
+                android:clickable="true"
+                android:focusable="true"
                 android:padding="4dp"
                 android:textSize="12sp" />
         </LinearLayout>
