@@ -6,7 +6,7 @@ import java.util.Locale
 
 object StreamITALogger {
     private val logs = mutableListOf<String>()
-    private const val MAX_LINES = 500
+    private const val MAX_LINES = 5000
     
     private val dateFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.ITALY)
 
