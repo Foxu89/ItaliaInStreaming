@@ -7,6 +7,7 @@ import it.dogior.hadEnough.extractors.DropLoadExtractor
 import it.dogior.hadEnough.extractors.MixDropExtractor
 import it.dogior.hadEnough.extractors.StreamHGExtractor
 import it.dogior.hadEnough.extractors.VidSrcExtractor
+import it.dogior.hadEnough.extractors.VidxGoExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -101,7 +102,7 @@ class StreamITAExtractors(
         }
     }
 
-    fun loadCommonExtractors(tmdbId: Int, season: Int?, episode: Int?) {
+    fun loadCommonExtractors(tmdbId: Int, imdbId: String?, season: Int?, episode: Int?) {
         if (isEnabled("vixsrc")) {
             scope.launch {
                 try {
@@ -124,6 +125,24 @@ class StreamITAExtractors(
                         val url = if (season == null) "https://vidsrc.ru/movie/$tmdbId"
                         else "https://vidsrc.ru/tv/$tmdbId/$season/$episode"
                         VidSrcExtractor().getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
+                        onSuccess()
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        if (imdbId != null && isEnabled("vidxgo")) {
+            scope.launch {
+                try {
+                    val timeout = getTimeoutMs("vidxgo", 20)
+                    withTimeoutOrNull(timeout) {
+                        val rawId = imdbId.replace("tt", "")
+                        val url = if (season == null || episode == null) {
+                            "https://v.vidxgo.co/$rawId"
+                        } else {
+                            "https://v.vidxgo.co/$rawId/$season/$episode"
+                        }
+                        VidxGoExtractor().getUrl(url, "https://v.vidxgo.co/", subtitleCallback, callback)
                         onSuccess()
                     }
                 } catch (_: Exception) {}

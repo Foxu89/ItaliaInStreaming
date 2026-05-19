@@ -275,7 +275,7 @@ class StreamITA(
             if (linkData.isMovie && linkData.imdbId != null) {
                 extractors.loadMovieExtractors(linkData.imdbId)
             }
-            extractors.loadCommonExtractors(tmdbId, linkData.season, linkData.episode)
+            extractors.loadCommonExtractors(tmdbId, linkData.imdbId, linkData.season, linkData.episode)
 
             // ========== AnimeUnity in parallelo ==========
             if (isExtractorEnabled("animeunity", true)) {
