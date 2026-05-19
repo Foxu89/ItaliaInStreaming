@@ -12,15 +12,18 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.lagradost.cloudstream3.SubtitleFile
-import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import it.dogior.hadEnough.StreamITALogger.log
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.zip.GZIPInputStream
 import kotlin.coroutines.resume
 
 class VidxGoExtractor : ExtractorApi() {
@@ -69,6 +72,26 @@ class VidxGoExtractor : ExtractorApi() {
             }
             return lowerUrl.contains(".m3u8") || lowerUrl.contains("master.m3u8") ||
                    lowerUrl.contains("playlist.m3u8") || (lowerUrl.contains("media") && lowerUrl.contains("your"))
+        }
+        
+        private fun getInputStreamWithDecompression(connection: HttpURLConnection): InputStream {
+            var inputStream = connection.inputStream
+            val contentEncoding = connection.contentEncoding
+            if (contentEncoding != null) {
+                when {
+                    contentEncoding.contains("gzip", ignoreCase = true) -> {
+                        inputStream = GZIPInputStream(inputStream)
+                        log("VidxGo", "📦 Decompressione GZIP")
+                    }
+                    contentEncoding.contains("zstd", ignoreCase = true) -> {
+                        log("VidxGo", "⚠️ Zstd non supportato, uso stream diretto")
+                    }
+                    contentEncoding.contains("deflate", ignoreCase = true) -> {
+                        log("VidxGo", "📦 Decompressione DEFLATE")
+                    }
+                }
+            }
+            return inputStream
         }
     }
 
@@ -176,19 +199,27 @@ class VidxGoExtractor : ExtractorApi() {
                             }
                             
                             try {
-                                val response = app.get(
-                                    url = requestUrl,
-                                    headers = CUSTOM_HEADERS,
-                                    timeout = 15
-                                )
+                                val connection = URL(requestUrl).openConnection() as HttpURLConnection
+                                CUSTOM_HEADERS.forEach { (key, value) ->
+                                    connection.setRequestProperty(key, value)
+                                }
+                                connection.instanceFollowRedirects = true
+                                connection.connectTimeout = 10000
+                                connection.readTimeout = 10000
                                 
-                                val inputStream = response.byteStream()
-                                val contentType = response.headers["Content-Type"] ?: "text/html"
+                                val responseCode = connection.responseCode
                                 
                                 if (requestUrl == targetUrl) {
-                                    log("VidxGo", "📊 Status per $targetUrl: ${response.code}")
+                                    log("VidxGo", "📊 Status per $targetUrl: $responseCode")
                                 }
                                 
+                                val inputStream = if (responseCode in 200..299) {
+                                    getInputStreamWithDecompression(connection)
+                                } else {
+                                    connection.errorStream
+                                }
+                                
+                                val contentType = connection.contentType ?: "text/html"
                                 return WebResourceResponse(contentType, "utf-8", inputStream)
                                 
                             } catch (e: Exception) {
@@ -201,16 +232,12 @@ class VidxGoExtractor : ExtractorApi() {
                             super.onPageFinished(view, url)
                             log("VidxGo", "📄 Pagina caricata: ${url?.take(80)}")
                             
-                            // ============================================================
-                            // STAMPA HTML COMPLETO (senza troncamento)
-                            // ============================================================
+                            // Stampa HTML
                             view?.evaluateJavascript(
                                 "document.documentElement.outerHTML"
                             ) { html ->
-                                if (html.isNotEmpty() && html != "null") {
+                                if (html.isNotEmpty() && html != "null" && html != "undefined") {
                                     log("StreamITA", "========== HTML PAGE START ==========")
-                                    
-                                    // Dividi in chunk da 3000 caratteri per leggibilità
                                     val chunkSize = 3000
                                     var index = 0
                                     while (index < html.length) {
@@ -218,47 +245,37 @@ class VidxGoExtractor : ExtractorApi() {
                                         log("StreamITA", "[${index + 1}-${end}]:\n${html.substring(index, end)}")
                                         index = end
                                     }
-                                    
                                     log("StreamITA", "========== HTML PAGE END (${html.length} caratteri) ==========")
                                 } else {
-                                    log("StreamITA", "⚠️ HTML vuoto o non accessibile")
+                                    log("StreamITA", "⚠️ HTML non disponibile")
                                 }
                             }
                             
-                            // ============================================================
-                            // CLICK PERIODICI
-                            // ============================================================
+                            // Click periodici
                             val handler = Handler(Looper.getMainLooper())
                             val clicker = object : Runnable {
                                 override fun run() {
                                     if (!found && clickCount < 10) {
                                         webView.evaluateJavascript("""
                                             (function() {
-                                                // Rimuovi overlay
                                                 var overlay = document.getElementById('resumeOverlay');
                                                 if (overlay) overlay.style.display = 'none';
                                                 
-                                                // Prova a far partire il video direttamente
                                                 var video = document.querySelector('video');
                                                 if (video) { video.muted = true; video.play(); }
                                                 
-                                                // Clicca "Dall'inizio"
                                                 var resumeBtn = document.getElementById('resumeFromStart');
                                                 if (resumeBtn) resumeBtn.click();
                                                 
-                                                // Clicca "Riprendi"
                                                 var continueBtn = document.getElementById('resumeContinue');
                                                 if (continueBtn) continueBtn.click();
                                                 
-                                                // Clicca play centrale
                                                 var playCenter = document.querySelector('.play-pause-center, #playPauseCenter');
                                                 if (playCenter) playCenter.click();
                                                 
-                                                // Clicca play button
                                                 var playBtn = document.querySelector('#playBtn, .btn-play');
                                                 if (playBtn) playBtn.click();
                                                 
-                                                // Cerca bottoni con testo
                                                 var allButtons = document.querySelectorAll('button, a, div[role="button"]');
                                                 for (var i = 0; i < allButtons.length; i++) {
                                                     var btn = allButtons[i];
@@ -268,7 +285,6 @@ class VidxGoExtractor : ExtractorApi() {
                                                     }
                                                 }
                                                 
-                                                // Cerca elementi con classe play
                                                 var playElements = document.querySelectorAll('[class*="play"], [class*="Play"]');
                                                 for (var i = 0; i < playElements.length; i++) {
                                                     playElements[i].click();
