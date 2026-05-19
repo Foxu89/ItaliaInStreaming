@@ -12,15 +12,13 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.lagradost.cloudstream3.SubtitleFile
+import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import it.dogior.hadEnough.StreamITALogger.log
 import kotlinx.coroutines.suspendCancellableCoroutine
-import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -66,11 +64,11 @@ class VidxGoExtractor : ExtractorApi() {
             val lowerUrl = url.lowercase()
             if (lowerUrl.contains(".jpg") || lowerUrl.contains(".png") || lowerUrl.contains(".css") ||
                 lowerUrl.contains(".js") || lowerUrl.contains("favicon") || lowerUrl.contains("poster") ||
-                lowerUrl.contains("backdrop")) {
+                lowerUrl.contains("backdrop") || lowerUrl.contains("thumbnail")) {
                 return false
             }
             return lowerUrl.contains(".m3u8") || lowerUrl.contains("master.m3u8") ||
-                   lowerUrl.contains("playlist.m3u8") || lowerUrl.contains("media") && lowerUrl.contains("your")
+                   lowerUrl.contains("playlist.m3u8") || (lowerUrl.contains("media") && lowerUrl.contains("your"))
         }
     }
 
@@ -106,13 +104,14 @@ class VidxGoExtractor : ExtractorApi() {
                     this.headers = mapOf(
                         "User-Agent" to USER_AGENT,
                         "Referer" to REFERER,
-                        "Origin" to "https://v.vidxgo.co"
+                        "Origin" to "https://v.vidxgo.co",
+                        "Accept" to "*/*"
                     )
                     this.referer = REFERER
                 }
             )
         } else {
-            log("VidxGo", "❌ Nessun M3U8 trovato")
+            log("VidxGo", "❌ Nessun M3U8 trovato dopo ${TIMEOUT_SECONDS}s")
         }
     }
     
@@ -142,6 +141,7 @@ class VidxGoExtractor : ExtractorApi() {
                         userAgentString = USER_AGENT
                         mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                         setSupportMultipleWindows(false)
+                        cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                     }
                     
                     webView.webChromeClient = object : WebChromeClient() {
@@ -163,9 +163,6 @@ class VidxGoExtractor : ExtractorApi() {
                         ): WebResourceResponse? {
                             val requestUrl = request?.url.toString()
                             
-                            log("VidxGo", "🔍 Intercettata: ${requestUrl.take(100)}")
-                            
-                            // Se è un video, catturalo
                             if (!found && isVideoUrl(requestUrl)) {
                                 found = true
                                 log("VidxGo", "🔥 VIDEO TROVATO: $requestUrl")
@@ -178,32 +175,20 @@ class VidxGoExtractor : ExtractorApi() {
                                 return WebResourceResponse("text/plain", "utf-8", "".byteInputStream())
                             }
                             
-                            // ============================================================
-                            // FORZA GLI HEADERS SU OGNI RICHIESTA (come Python)
-                            // ============================================================
                             try {
-                                val connection = URL(requestUrl).openConnection() as HttpURLConnection
-                                CUSTOM_HEADERS.forEach { (key, value) ->
-                                    connection.setRequestProperty(key, value)
-                                }
-                                connection.instanceFollowRedirects = true
-                                connection.connectTimeout = 10000
-                                connection.readTimeout = 10000
+                                val response = app.get(
+                                    url = requestUrl,
+                                    headers = CUSTOM_HEADERS,
+                                    timeout = 15
+                                )
                                 
-                                val responseCode = connection.responseCode
-                                val responseMessage = connection.responseMessage
+                                val inputStream = response.byteStream()
+                                val contentType = response.headers["Content-Type"] ?: "text/html"
                                 
                                 if (requestUrl == targetUrl) {
-                                    log("VidxGo", "📊 Status per $requestUrl: $responseCode $responseMessage")
+                                    log("VidxGo", "📊 Status per $targetUrl: ${response.code}")
                                 }
                                 
-                                val inputStream = if (responseCode in 200..299) {
-                                    connection.inputStream
-                                } else {
-                                    connection.errorStream
-                                }
-                                
-                                val contentType = connection.contentType ?: "text/html"
                                 return WebResourceResponse(contentType, "utf-8", inputStream)
                                 
                             } catch (e: Exception) {
@@ -216,39 +201,64 @@ class VidxGoExtractor : ExtractorApi() {
                             super.onPageFinished(view, url)
                             log("VidxGo", "📄 Pagina caricata: ${url?.take(80)}")
                             
-                            // Stampa HTML
+                            // ============================================================
+                            // STAMPA HTML COMPLETO (senza troncamento)
+                            // ============================================================
                             view?.evaluateJavascript(
                                 "document.documentElement.outerHTML"
                             ) { html ->
-                                val truncated = if (html.length > 2000) html.take(2000) + "\n... (${html.length - 2000} caratteri in più)" else html
-                                log("StreamITA", "📄 HTML PAGE:\n$truncated")
+                                if (html.isNotEmpty() && html != "null") {
+                                    log("StreamITA", "========== HTML PAGE START ==========")
+                                    
+                                    // Dividi in chunk da 3000 caratteri per leggibilità
+                                    val chunkSize = 3000
+                                    var index = 0
+                                    while (index < html.length) {
+                                        val end = minOf(index + chunkSize, html.length)
+                                        log("StreamITA", "[${index + 1}-${end}]:\n${html.substring(index, end)}")
+                                        index = end
+                                    }
+                                    
+                                    log("StreamITA", "========== HTML PAGE END (${html.length} caratteri) ==========")
+                                } else {
+                                    log("StreamITA", "⚠️ HTML vuoto o non accessibile")
+                                }
                             }
                             
-                            // Click periodici
+                            // ============================================================
+                            // CLICK PERIODICI
+                            // ============================================================
                             val handler = Handler(Looper.getMainLooper())
                             val clicker = object : Runnable {
                                 override fun run() {
                                     if (!found && clickCount < 10) {
                                         webView.evaluateJavascript("""
                                             (function() {
+                                                // Rimuovi overlay
                                                 var overlay = document.getElementById('resumeOverlay');
                                                 if (overlay) overlay.style.display = 'none';
                                                 
+                                                // Prova a far partire il video direttamente
                                                 var video = document.querySelector('video');
                                                 if (video) { video.muted = true; video.play(); }
                                                 
+                                                // Clicca "Dall'inizio"
                                                 var resumeBtn = document.getElementById('resumeFromStart');
                                                 if (resumeBtn) resumeBtn.click();
                                                 
+                                                // Clicca "Riprendi"
                                                 var continueBtn = document.getElementById('resumeContinue');
                                                 if (continueBtn) continueBtn.click();
                                                 
+                                                // Clicca play centrale
                                                 var playCenter = document.querySelector('.play-pause-center, #playPauseCenter');
                                                 if (playCenter) playCenter.click();
                                                 
+                                                // Clicca play button
                                                 var playBtn = document.querySelector('#playBtn, .btn-play');
                                                 if (playBtn) playBtn.click();
                                                 
+                                                // Cerca bottoni con testo
                                                 var allButtons = document.querySelectorAll('button, a, div[role="button"]');
                                                 for (var i = 0; i < allButtons.length; i++) {
                                                     var btn = allButtons[i];
@@ -258,6 +268,7 @@ class VidxGoExtractor : ExtractorApi() {
                                                     }
                                                 }
                                                 
+                                                // Cerca elementi con classe play
                                                 var playElements = document.querySelectorAll('[class*="play"], [class*="Play"]');
                                                 for (var i = 0; i < playElements.length; i++) {
                                                     playElements[i].click();
@@ -276,11 +287,11 @@ class VidxGoExtractor : ExtractorApi() {
                     }
                     
                     log("VidxGo", "📡 Caricamento: $targetUrl")
-                    webView.loadUrl(targetUrl)  // Non servono headers qui, li forza shouldInterceptRequest
+                    webView.loadUrl(targetUrl)
                     
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!found) {
-                            log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s")
+                            log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s (click: $clickCount)")
                             webView.stopLoading()
                             webView.destroy()
                             latch.countDown()
