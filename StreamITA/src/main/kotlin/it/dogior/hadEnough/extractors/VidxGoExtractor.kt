@@ -1,5 +1,6 @@
 package it.dogior.hadEnough.extractors
 
+import android.util.Base64
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorApi
@@ -7,7 +8,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import it.dogior.hadEnough.StreamITALogger.log
-import kotlinx.coroutines.withTimeoutOrNull
 
 class VidxGoExtractor : ExtractorApi() {
     override val name = "VidxGo"
@@ -35,78 +35,49 @@ class VidxGoExtractor : ExtractorApi() {
         
         private fun extractM3u8FromHtml(html: String): String? {
             try {
-                // ============================================================
-                // 1. Trova TUTTI gli script nella pagina
-                // ============================================================
                 val scriptRegex = Regex("""<script\b[^>]*>([\s\S]*?)</script>""", RegexOption.IGNORE_CASE)
                 val scripts = scriptRegex.findAll(html).map { it.groupValues[1] }.toList()
                 
                 log("VidxGo", "🔍 Trovati ${scripts.size} script")
                 
-                if (scripts.size <= 5) {
-                    log("VidxGo", "❌ Script insufficienti: ${scripts.size}")
-                    return null
+                val pattern = Regex("""var\s+(\w+)\s*=\s*'([^']*)'\s*,\s*(\w+)\s*=\s*atob\(\s*'([^']*)'""")
+                
+                for ((idx, script) in scripts.withIndex()) {
+                    val match = pattern.find(script)
+                    if (match != null) {
+                        val key = match.groupValues[2]
+                        val base64Str = match.groupValues[4]
+                        
+                        log("VidxGo", "✅ Trovato script #$idx")
+                        log("VidxGo", "🔑 Key: $key")
+                        
+                        val decoded = Base64.decode(base64Str, Base64.DEFAULT)
+                        
+                        val decrypted = ByteArray(decoded.size)
+                        for (i in decoded.indices) {
+                            decrypted[i] = (decoded[i].toInt() xor key[i % key.length].code).toByte()
+                        }
+                        
+                        val decryptedText = String(decrypted, Charsets.UTF_8)
+                        
+                        val urlPattern = Regex("""currentSrc[^"]*["'](https:[^"']+\.m3u8[^"']*)""")
+                        val urlMatch = urlPattern.find(decryptedText)
+                        
+                        if (urlMatch != null) {
+                            return urlMatch.groupValues[1].replace("\\", "")
+                        }
+                        
+                        val altUrlPattern = Regex("""(https?://[^\s"']+\.m3u8[^\s"']*)""")
+                        val altMatch = altUrlPattern.find(decryptedText)
+                        if (altMatch != null) {
+                            return altMatch.groupValues[1].replace("\\", "")
+                        }
+                    }
                 }
                 
-                // ============================================================
-                // 2. Prendi il 6° script (index 5) - come nel codice TypeScript
-                // ============================================================
-                val targetScript = scripts[5]
-                log("VidxGo", "📜 Script target (index 5): ${targetScript.take(200)}...")
-                
-                // ============================================================
-                // 3. Cerca var NOME='KEY', d=atob('BASE64')
-                // ============================================================
-                val keyRegex = Regex("""var\s+\w+\s*=\s*'([^']*)'\s*,\s*d\s*=\s*atob\(\s*'([^']*)'""")
-                val match = keyRegex.find(targetScript)
-                
-                if (match == null) {
-                    log("VidxGo", "❌ Pattern key/base64 non trovato")
-                    return null
-                }
-                
-                val key = match.groupValues[1]
-                val base64 = match.groupValues[2]
-                
-                log("VidxGo", "🔑 Key: $key")
-                log("VidxGo", "📦 Base64 length: ${base64.length}")
-                
-                // ============================================================
-                // 4. Decodifica base64
-                // ============================================================
-                val decoded = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
-                log("VidxGo", "🔓 Decoded length: ${decoded.size}")
-                
-                // ============================================================
-                // 5. XOR con la key
-                // ============================================================
-                val decrypted = ByteArray(decoded.size)
-                for (i in decoded.indices) {
-                    decrypted[i] = (decoded[i].toInt() xor key[i % key.length].code).toByte()
-                }
-                
-                val decryptedText = String(decrypted, Charsets.UTF_8)
-                log("VidxGo", "📝 Decrypted preview: ${decryptedText.take(300)}")
-                
-                // ============================================================
-                // 6. Cerca currentSrc per trovare l'm3u8
-                // ============================================================
-                val urlRegex = Regex("""currentSrc.+?"(https:[^";]+)"""")
-                val urlMatch = urlRegex.find(decryptedText)
-                
-                if (urlMatch == null) {
-                    log("VidxGo", "❌ currentSrc URL non trovato")
-                    return null
-                }
-                
-                var m3u8Url = urlMatch.groupValues[1]
-                m3u8Url = m3u8Url.replace("\\", "")
-                
-                log("VidxGo", "🎯 M3U8 TROVATO: $m3u8Url")
-                return m3u8Url
-                
+                return null
             } catch (e: Exception) {
-                log("VidxGo", "❌ Errore decodifica: ${e.message}")
+                log("VidxGo", "❌ Errore: ${e.message}")
                 return null
             }
         }
@@ -119,47 +90,32 @@ class VidxGoExtractor : ExtractorApi() {
         callback: (ExtractorLink) -> Unit,
     ) {
         // ============================================================
-        // Estrae l'ID numerico dall'URL
+        // SUPPORTA SIA FILM CHE SERIE TV
+        // Formati supportati:
+        // - "https://v.vidxgo.co/1375666" (film)
+        // - "https://v.vidxgo.co/4574334/1/1" (serie TV)
+        // - "tt1375666"
+        // - "1375666"
+        // - "tt4574334-1-1"
         // ============================================================
-        val regex = Regex("""(\d+)""")
-        val match = regex.find(url)
-        val rawId = match?.value
         
-        if (rawId == null) {
-            log("VidxGo", "❌ Nessun ID numerico trovato in: $url")
-            return
-        }
-        
-        val targetUrl = "$mainUrl/$rawId"
+        val targetUrl = buildTargetUrl(url)
         log("VidxGo", "🎬 URL: $targetUrl")
         
-        // ============================================================
-        // Scarica l'HTML della pagina
-        // ============================================================
-        val response = withTimeoutOrNull(15000L) {
-            try {
-                app.get(targetUrl, headers = CUSTOM_HEADERS, timeout = 15)
-            } catch (e: Exception) {
-                log("VidxGo", "❌ Errore download: ${e.message}")
-                null
-            }
-        }
+        val response = app.get(targetUrl, headers = CUSTOM_HEADERS)
         
-        if (response == null || !response.isSuccessful) {
-            log("VidxGo", "❌ Risposta non valida: ${response?.code}")
+        if (!response.isSuccessful) {
+            log("VidxGo", "❌ HTTP ${response.code}")
             return
         }
         
         val html = response.text
-        log("VidxGo", "📄 HTML scaricato: ${html.length} caratteri")
+        log("VidxGo", "📄 HTML: ${html.length} caratteri")
         
-        // ============================================================
-        // Estrai l'm3u8 dall'HTML
-        // ============================================================
         val m3u8Url = extractM3u8FromHtml(html)
         
         if (m3u8Url != null) {
-            log("VidxGo", "🎯 M3U8 TROVATO: $m3u8Url")
+            log("VidxGo", "🎯 TROVATO: $m3u8Url")
             callback.invoke(
                 newExtractorLink(
                     source = name,
@@ -168,16 +124,45 @@ class VidxGoExtractor : ExtractorApi() {
                     type = ExtractorLinkType.M3U8
                 ) {
                     this.headers = mapOf(
-                        "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-                        "Referer" to mainUrl + "/",
+                        "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/139.0.0.0 Safari/537.36",
+                        "Referer" to "$mainUrl/",
                         "Origin" to mainUrl,
                         "Accept" to "*/*"
                     )
-                    this.referer = mainUrl + "/"
+                    this.referer = "$mainUrl/"
                 }
             )
         } else {
-            log("VidxGo", "❌ Nessun M3U8 trovato nell'HTML")
+            log("VidxGo", "❌ Nessun M3U8 trovato")
+        }
+    }
+    
+    private fun buildTargetUrl(url: String): String {
+        // Se è già un URL valido di vidxgo, lo restituisco
+        if (url.startsWith(mainUrl)) {
+            return url
+        }
+        
+        // Estrae l'ID numerico (tt1375666 -> 1375666)
+        val idRegex = Regex("""(\d+)""")
+        val idMatch = idRegex.find(url)
+        val rawId = idMatch?.value
+        
+        if (rawId == null) {
+            log("VidxGo", "❌ Nessun ID trovato in: $url")
+            return url
+        }
+        
+        // Cerca se ci sono stagione/episodio nel formato "tt4574334-1-1" o "4574334-1-1"
+        val seasonEpisodeRegex = Regex("""(?:tt)?\d+[-/](\d+)[-/](\d+)""")
+        val seMatch = seasonEpisodeRegex.find(url)
+        
+        return if (seMatch != null) {
+            val season = seMatch.groupValues[1]
+            val episode = seMatch.groupValues[2]
+            "$mainUrl/$rawId/$season/$episode"
+        } else {
+            "$mainUrl/$rawId"
         }
     }
 }
