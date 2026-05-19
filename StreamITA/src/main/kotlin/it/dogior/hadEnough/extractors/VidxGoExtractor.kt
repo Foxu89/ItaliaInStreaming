@@ -31,7 +31,7 @@ class VidxGoExtractor : ExtractorApi() {
     override val requiresReferer = false
 
     companion object {
-        private const val TIMEOUT_SECONDS = 40L
+        private const val TIMEOUT_SECONDS = 45L
         private const val REFERER = "https://altadefinizione.you/"
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36"
         
@@ -101,10 +101,7 @@ class VidxGoExtractor : ExtractorApi() {
                     url = videoUrl,
                     type = ExtractorLinkType.M3U8
                 ) {
-                    this.headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to REFERER
-                    )
+                    this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to REFERER)
                     this.referer = REFERER
                 }
             )
@@ -117,12 +114,12 @@ class VidxGoExtractor : ExtractorApi() {
         return suspendCancellableCoroutine { continuation ->
             val latch = CountDownLatch(1)
             var found = false
+            var retryCount = 0
             var statusCode: Int? = null
             
             Handler(Looper.getMainLooper()).post {
                 try {
                     val context = getApplicationContext() ?: run {
-                        log("VidxGo", "❌ Context null")
                         continuation.resume(null)
                         return@post
                     }
@@ -162,11 +159,6 @@ class VidxGoExtractor : ExtractorApi() {
                         ): WebResourceResponse? {
                             val requestUrl = request?.url.toString()
                             
-                            // Log solo richieste interessanti
-                            if (requestUrl.contains(".m3u8") || requestUrl.contains("master.m3u8")) {
-                                log("VidxGo", "🔍 Richiesta video: ${requestUrl.take(120)}")
-                            }
-                            
                             if (!found && isVideoUrl(requestUrl)) {
                                 found = true
                                 log("VidxGo", "🔥🔥🔥 VIDEO TROVATO: $requestUrl")
@@ -179,92 +171,86 @@ class VidxGoExtractor : ExtractorApi() {
                                 return WebResourceResponse("text/plain", "utf-8", "".byteInputStream())
                             }
                             
-                            // Forza gli headers su TUTTE le richieste
-                            try {
-                                val connection = URL(requestUrl).openConnection() as HttpURLConnection
-                                CUSTOM_HEADERS.forEach { (key, value) ->
-                                    connection.setRequestProperty(key, value)
-                                }
-                                connection.instanceFollowRedirects = true
-                                connection.connectTimeout = 10000
-                                connection.readTimeout = 10000
-                                
-                                // Logga lo status della pagina principale
-                                if (statusCode == null && requestUrl == targetUrl) {
-                                    statusCode = connection.responseCode
-                                    log("VidxGo", "📊 STATUS CODE: $statusCode per $targetUrl")
-                                    
-                                    // Se è 403, logga il corpo per debug
-                                    if (statusCode == 403) {
-                                        val errorStream = connection.errorStream
-                                        val errorText = errorStream?.bufferedReader()?.use { it.readText() }?.take(300)
-                                        log("VidxGo", "❌ 403 Response: $errorText")
+                            // Forza headers per la richiesta principale
+                            if (statusCode == null && requestUrl == targetUrl) {
+                                try {
+                                    val connection = URL(requestUrl).openConnection() as HttpURLConnection
+                                    CUSTOM_HEADERS.forEach { (key, value) ->
+                                        connection.setRequestProperty(key, value)
                                     }
+                                    statusCode = connection.responseCode
+                                    log("VidxGo", "📊 Status: $statusCode")
+                                } catch (e: Exception) {
+                                    log("VidxGo", "⚠️ Errore status: ${e.message}")
                                 }
-                                
-                                val inputStream = if (connection.responseCode in 200..299) {
-                                    connection.inputStream
-                                } else {
-                                    connection.errorStream
-                                }
-                                
-                                val contentType = connection.contentType ?: "text/html"
-                                return WebResourceResponse(contentType, "utf-8", inputStream)
-                                
-                            } catch (e: Exception) {
-                                log("VidxGo", "⚠️ Errore fetch ${requestUrl.take(80)}: ${e.message}")
-                                return null
                             }
+                            
+                            return super.shouldInterceptRequest(view, request)
                         }
                         
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             log("VidxGo", "📄 Pagina caricata: ${url?.take(80)}")
                             
-                            if (statusCode == 403) {
-                                log("VidxGo", "❌ La pagina ha dato 403 - headers non accettati")
-                            }
-                            
-                            // Script per cliccare i pulsanti
-                            val clickScript = """
-                                (function() {
-                                    var overlay = document.getElementById('resumeOverlay');
-                                    if (overlay) overlay.style.display = 'none';
+                            // ATTESA 2 SECONDI prima del primo tentativo (fondamentale!)
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                val clickScript = """
+                                    (function() {
+                                        console.log('VidxGo: Tentativo ${retryCount + 1}');
+                                        
+                                        // Rimuovi overlay
+                                        var overlay = document.getElementById('resumeOverlay');
+                                        if (overlay) {
+                                            overlay.style.display = 'none';
+                                        }
+                                        
+                                        // CERCA "DALL'INIZIO"
+                                        var resumeBtn = document.getElementById('resumeFromStart');
+                                        if (resumeBtn) {
+                                            resumeBtn.click();
+                                            return 'clicked_resumeFromStart';
+                                        }
+                                        
+                                        // CERCA "RIPRENDI"
+                                        var continueBtn = document.getElementById('resumeContinue');
+                                        if (continueBtn) {
+                                            continueBtn.click();
+                                            return 'clicked_resumeContinue';
+                                        }
+                                        
+                                        // CERCA PLAY CENTRALE
+                                        var playBtn = document.querySelector('.play-pause-center, #playPauseCenter');
+                                        if (playBtn) {
+                                            playBtn.click();
+                                            return 'clicked_centerPlay';
+                                        }
+                                        
+                                        // VERIFICA SE L'OVERLAY ESISTE
+                                        var overlayExists = document.getElementById('resumeOverlay') ? 'yes' : 'no';
+                                        return 'nothing_found (overlay: ' + overlayExists + ')';
+                                    })();
+                                """.trimIndent()
+                                
+                                view?.evaluateJavascript(clickScript) { result ->
+                                    log("VidxGo", "📝 JS: $result")
                                     
-                                    var resumeBtn = document.getElementById('resumeFromStart');
-                                    if (resumeBtn) {
-                                        resumeBtn.click();
-                                        return 'clicked_resumeFromStart';
+                                    if (result.contains("nothing_found") && retryCount < 6) {
+                                        retryCount++
+                                        Handler(Looper.getMainLooper()).postDelayed({
+                                            view?.evaluateJavascript(clickScript, null)
+                                        }, 2500)
                                     }
-                                    
-                                    var continueBtn = document.getElementById('resumeContinue');
-                                    if (continueBtn) {
-                                        continueBtn.click();
-                                        return 'clicked_resumeContinue';
-                                    }
-                                    
-                                    var playBtn = document.querySelector('.play-pause-center, #playPauseCenter');
-                                    if (playBtn) {
-                                        playBtn.click();
-                                        return 'clicked_centerPlay';
-                                    }
-                                    
-                                    return 'nothing_found';
-                                })();
-                            """.trimIndent()
-                            
-                            view?.evaluateJavascript(clickScript) { result ->
-                                log("VidxGo", "📝 JS: $result")
-                            }
+                                }
+                            }, 2000)  // ATTESA 2 SECONDI!
                         }
                     }
                     
-                    log("VidxGo", "📡 Caricamento WebView: $targetUrl")
+                    log("VidxGo", "📡 Caricamento: $targetUrl")
                     webView.loadUrl(targetUrl)
                     
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!found) {
-                            log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s (status: $statusCode)")
+                            log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s (tentativi click: $retryCount)")
                             webView.destroy()
                             latch.countDown()
                             continuation.resume(null)
