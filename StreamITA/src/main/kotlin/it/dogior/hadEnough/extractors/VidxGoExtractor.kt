@@ -18,6 +18,9 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import it.dogior.hadEnough.StreamITALogger.log
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
@@ -77,14 +80,6 @@ class VidxGoExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ) {
-        // ============================================================
-        // ESTRAZIONE CORRETTA DELL'ID NUMERICO
-        // Supporta:
-        // - "tt1375666"
-        // - "1375666"  
-        // - "https://v.vidxgo.co/1375666"
-        // - "https://v.vidxgo.co/1375666/1/1"
-        // ============================================================
         val regex = Regex("""(\d+)""")
         val match = regex.find(url)
         val rawId = match?.value
@@ -94,9 +89,7 @@ class VidxGoExtractor : ExtractorApi() {
             return
         }
         
-        // Costruisce l'URL finale
         val targetUrl = "https://v.vidxgo.co/$rawId"
-        
         log("VidxGo", "🎬 ID: $rawId → URL: $targetUrl")
         
         val videoUrl = extractWithWebView(targetUrl)
@@ -126,7 +119,6 @@ class VidxGoExtractor : ExtractorApi() {
     private suspend fun extractWithWebView(targetUrl: String): String? {
         return suspendCancellableCoroutine { continuation ->
             val latch = CountDownLatch(1)
-            var extractedUrl: String? = null
             var found = false
             var clickCount = 0
             
@@ -171,11 +163,12 @@ class VidxGoExtractor : ExtractorApi() {
                         ): WebResourceResponse? {
                             val requestUrl = request?.url.toString()
                             
+                            log("VidxGo", "🔍 Intercettata: ${requestUrl.take(100)}")
+                            
+                            // Se è un video, catturalo
                             if (!found && isVideoUrl(requestUrl)) {
                                 found = true
-                                extractedUrl = requestUrl
                                 log("VidxGo", "🔥 VIDEO TROVATO: $requestUrl")
-                                
                                 Handler(Looper.getMainLooper()).post {
                                     webView.stopLoading()
                                     webView.destroy()
@@ -185,14 +178,45 @@ class VidxGoExtractor : ExtractorApi() {
                                 return WebResourceResponse("text/plain", "utf-8", "".byteInputStream())
                             }
                             
-                            return super.shouldInterceptRequest(view, request)
+                            // ============================================================
+                            // FORZA GLI HEADERS SU OGNI RICHIESTA (come Python)
+                            // ============================================================
+                            try {
+                                val connection = URL(requestUrl).openConnection() as HttpURLConnection
+                                CUSTOM_HEADERS.forEach { (key, value) ->
+                                    connection.setRequestProperty(key, value)
+                                }
+                                connection.instanceFollowRedirects = true
+                                connection.connectTimeout = 10000
+                                connection.readTimeout = 10000
+                                
+                                val responseCode = connection.responseCode
+                                val responseMessage = connection.responseMessage
+                                
+                                if (requestUrl == targetUrl) {
+                                    log("VidxGo", "📊 Status per $requestUrl: $responseCode $responseMessage")
+                                }
+                                
+                                val inputStream = if (responseCode in 200..299) {
+                                    connection.inputStream
+                                } else {
+                                    connection.errorStream
+                                }
+                                
+                                val contentType = connection.contentType ?: "text/html"
+                                return WebResourceResponse(contentType, "utf-8", inputStream)
+                                
+                            } catch (e: Exception) {
+                                log("VidxGo", "⚠️ Errore fetch: ${e.message}")
+                                return null
+                            }
                         }
                         
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             log("VidxGo", "📄 Pagina caricata: ${url?.take(80)}")
                             
-                            // Stampa HTML nel log
+                            // Stampa HTML
                             view?.evaluateJavascript(
                                 "document.documentElement.outerHTML"
                             ) { html ->
@@ -252,7 +276,7 @@ class VidxGoExtractor : ExtractorApi() {
                     }
                     
                     log("VidxGo", "📡 Caricamento: $targetUrl")
-                    webView.loadUrl(targetUrl, CUSTOM_HEADERS)
+                    webView.loadUrl(targetUrl)  // Non servono headers qui, li forza shouldInterceptRequest
                     
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!found) {
