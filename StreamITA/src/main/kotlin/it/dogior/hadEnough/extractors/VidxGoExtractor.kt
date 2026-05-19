@@ -29,12 +29,10 @@ class VidxGoExtractor : ExtractorApi() {
     override val requiresReferer = false
 
     companion object {
-        private const val TAG = "VidxGoExtractor"
         private const val TIMEOUT_SECONDS = 35L
         private const val REFERER = "https://altadefinizione.you/"
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36"
         
-        // Headers COMPLETI
         private val CUSTOM_HEADERS = mapOf(
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
             "Accept-Encoding" to "gzip, deflate, br, zstd",
@@ -60,7 +58,7 @@ class VidxGoExtractor : ExtractorApi() {
                 val getApplicationMethod = activityThreadClass.getMethod("getApplication")
                 getApplicationMethod.invoke(activityThread) as? Application
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to get Application context: ${e.message}")
+                Log.e("VidxGoExtractor", "Failed to get Application context: ${e.message}")
                 null
             }
         }
@@ -68,35 +66,18 @@ class VidxGoExtractor : ExtractorApi() {
         private fun isVideoUrl(url: String): Boolean {
             val lowerUrl = url.lowercase()
             
-            // Escludi immagini e file statici
-            if (lowerUrl.contains(".jpg") || 
-                lowerUrl.contains(".jpeg") || 
-                lowerUrl.contains(".png") || 
-                lowerUrl.contains(".webp") || 
-                lowerUrl.contains(".gif") ||
-                lowerUrl.contains(".css") ||
-                lowerUrl.contains(".js") ||
-                lowerUrl.contains("favicon") ||
-                lowerUrl.contains("poster") ||
-                lowerUrl.contains("backdrop") ||
-                lowerUrl.contains("thumbnail")) {
+            if (lowerUrl.contains(".jpg") || lowerUrl.contains(".jpeg") || 
+                lowerUrl.contains(".png") || lowerUrl.contains(".webp") || 
+                lowerUrl.contains(".gif") || lowerUrl.contains(".css") ||
+                lowerUrl.contains(".js") || lowerUrl.contains("favicon") ||
+                lowerUrl.contains("poster") || lowerUrl.contains("backdrop")) {
                 return false
             }
             
-            // Cerca master.m3u8 (priorità massima)
-            if (lowerUrl.contains("master.m3u8")) return true
-            
-            // Cerca qualsiasi .m3u8
-            if (lowerUrl.contains(".m3u8")) return true
-            
-            // Cerca domini di streaming validi
-            if (lowerUrl.contains("d2b.your")) return true
-            if (lowerUrl.contains("media-") && lowerUrl.contains("your")) return true
-            
-            // Cerca delivery CDN
-            if (lowerUrl.contains("delivery") && lowerUrl.contains("cloudfront")) return true
-            
-            return false
+            return lowerUrl.contains("master.m3u8") ||
+                   lowerUrl.contains(".m3u8") ||
+                   (lowerUrl.contains("d2b.your")) ||
+                   (lowerUrl.contains("media-") && lowerUrl.contains("your"))
         }
     }
 
@@ -106,11 +87,33 @@ class VidxGoExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ) {
-        // Estrae l'ID numerico (tt33504773 -> 33504773)
-        val rawId = url.replace("tt", "").replace(Regex("""/.*"""), "")
-        val targetUrl = "https://v.vidxgo.co/$rawId"
+        // ============================================================
+        // ESTRAZIONE ID - Supporta tutti i formati:
+        // - "tt1375666"
+        // - "1375666"  
+        // - "https://v.vidxgo.co/1375666"
+        // - "https://v.vidxgo.co/1375666/1/1"
+        // ============================================================
+        val regex = Regex("""(\d+)""")
+        val match = regex.find(url)
+        val rawId = match?.value
         
-        log("VidxGo", "🎬 TARGET URL: $targetUrl")
+        if (rawId == null) {
+            log("VidxGo", "❌ Nessun ID numerico trovato in: $url")
+            return
+        }
+        
+        // Controlla se l'URL contiene già stagione/episodio
+        val seasonEpisodeMatch = Regex("""/(\d+)/(\d+)$""").find(url)
+        val targetUrl = if (seasonEpisodeMatch != null) {
+            // Serie TV: mantieni stagione/episodio
+            "https://v.vidxgo.co/$rawId/${seasonEpisodeMatch.groupValues[1]}/${seasonEpisodeMatch.groupValues[2]}"
+        } else {
+            // Film
+            "https://v.vidxgo.co/$rawId"
+        }
+        
+        log("VidxGo", "🎬 ID: $rawId → URL: $targetUrl")
         
         val videoUrl = extractWithWebView(targetUrl)
 
@@ -130,7 +133,6 @@ class VidxGoExtractor : ExtractorApi() {
                         "Accept" to "*/*"
                     )
                     this.referer = REFERER
-                    this.quality = 2  // HD
                 }
             )
         } else {
@@ -141,7 +143,6 @@ class VidxGoExtractor : ExtractorApi() {
     private suspend fun extractWithWebView(targetUrl: String): String? {
         return suspendCancellableCoroutine { continuation ->
             val latch = CountDownLatch(1)
-            var extractedUrl: String? = null
             var found = false
             
             Handler(Looper.getMainLooper()).post {
@@ -153,7 +154,6 @@ class VidxGoExtractor : ExtractorApi() {
                     
                     @SuppressLint("SetJavaScriptEnabled")
                     val webView = WebView(context)
-                    
                     webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
                     
                     webView.settings.apply {
@@ -164,10 +164,9 @@ class VidxGoExtractor : ExtractorApi() {
                         mediaPlaybackRequiresUserGesture = false
                         userAgentString = USER_AGENT
                         mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                        setSupportMultipleWindows(false)  // ← BLOCCA POP-UP (come MixDrop)
+                        setSupportMultipleWindows(false)
                     }
                     
-                    // Blocca apertura nuove finestre (pop-up pubblicitari)
                     webView.webChromeClient = object : WebChromeClient() {
                         override fun onCreateWindow(
                             view: WebView?,
@@ -189,7 +188,6 @@ class VidxGoExtractor : ExtractorApi() {
                             
                             if (!found && isVideoUrl(requestUrl)) {
                                 found = true
-                                extractedUrl = requestUrl
                                 log("VidxGo", "🔥🔥🔥 VIDEO TROVATO: $requestUrl")
                                 
                                 Handler(Looper.getMainLooper()).post {
@@ -200,7 +198,6 @@ class VidxGoExtractor : ExtractorApi() {
                                 }
                                 return WebResourceResponse("text/plain", "utf-8", "".byteInputStream())
                             }
-                            
                             return super.shouldInterceptRequest(view, request)
                         }
                         
@@ -208,32 +205,23 @@ class VidxGoExtractor : ExtractorApi() {
                             super.onPageFinished(view, url)
                             log("VidxGo", "📄 Pagina caricata: ${url?.take(80)}")
                             
-                            // Inietta JavaScript per cliccare "Dall'inizio"
                             val clickScript = """
                                 (function() {
-                                    console.log('VidxGo: Cerco pulsanti...');
-                                    
-                                    // Rimuovi overlay di resume
                                     var overlay = document.getElementById('resumeOverlay');
-                                    if (overlay) {
-                                        overlay.style.display = 'none';
-                                    }
+                                    if (overlay) overlay.style.display = 'none';
                                     
-                                    // Clicca "Dall'inizio"
                                     var resumeBtn = document.getElementById('resumeFromStart');
                                     if (resumeBtn) {
                                         resumeBtn.click();
                                         return 'clicked_resumeFromStart';
                                     }
                                     
-                                    // Clicca "Riprendi"
                                     var continueBtn = document.getElementById('resumeContinue');
                                     if (continueBtn) {
                                         continueBtn.click();
                                         return 'clicked_resumeContinue';
                                     }
                                     
-                                    // Clicca play centrale
                                     var playBtn = document.querySelector('.play-pause-center, #playPauseCenter');
                                     if (playBtn) {
                                         playBtn.click();
@@ -250,14 +238,12 @@ class VidxGoExtractor : ExtractorApi() {
                         }
                     }
                     
-                    log("VidxGo", "📡 Caricamento WebView: $targetUrl")
+                    log("VidxGo", "📡 Caricamento: $targetUrl")
                     webView.loadUrl(targetUrl, CUSTOM_HEADERS)
                     
-                    // Timeout
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!found) {
                             log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s")
-                            webView.stopLoading()
                             webView.destroy()
                             latch.countDown()
                             continuation.resume(null)
@@ -265,11 +251,10 @@ class VidxGoExtractor : ExtractorApi() {
                     }, TimeUnit.SECONDS.toMillis(TIMEOUT_SECONDS))
                     
                 } catch (e: Exception) {
-                    log("VidxGo", "❌ Errore WebView: ${e.message}")
+                    log("VidxGo", "❌ Errore: ${e.message}")
                     continuation.resume(null)
                 }
             }
-            
             latch.await(TIMEOUT_SECONDS + 5, TimeUnit.SECONDS)
         }
     }
