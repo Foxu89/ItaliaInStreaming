@@ -77,9 +77,27 @@ class VidxGoExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ) {
-        val rawId = url.replace("tt", "").replace(Regex("""/.*"""), "")
+        // ============================================================
+        // ESTRAZIONE CORRETTA DELL'ID NUMERICO
+        // Supporta:
+        // - "tt1375666"
+        // - "1375666"  
+        // - "https://v.vidxgo.co/1375666"
+        // - "https://v.vidxgo.co/1375666/1/1"
+        // ============================================================
+        val regex = Regex("""(\d+)""")
+        val match = regex.find(url)
+        val rawId = match?.value
+        
+        if (rawId == null) {
+            log("VidxGo", "❌ Nessun ID numerico trovato in: $url")
+            return
+        }
+        
+        // Costruisce l'URL finale
         val targetUrl = "https://v.vidxgo.co/$rawId"
-        log("VidxGo", "🎬 URL: $targetUrl")
+        
+        log("VidxGo", "🎬 ID: $rawId → URL: $targetUrl")
         
         val videoUrl = extractWithWebView(targetUrl)
 
@@ -174,13 +192,11 @@ class VidxGoExtractor : ExtractorApi() {
                             super.onPageFinished(view, url)
                             log("VidxGo", "📄 Pagina caricata: ${url?.take(80)}")
                             
-                            // ============================================================
-                            // STAMPA HTML NEL LOG STREAMITA
-                            // ============================================================
+                            // Stampa HTML nel log
                             view?.evaluateJavascript(
                                 "document.documentElement.outerHTML"
                             ) { html ->
-                                val truncated = if (html.length > 3000) html.take(3000) + "\n... (${html.length - 3000} caratteri in più)" else html
+                                val truncated = if (html.length > 2000) html.take(2000) + "\n... (${html.length - 2000} caratteri in più)" else html
                                 log("StreamITA", "📄 HTML PAGE:\n$truncated")
                             }
                             
