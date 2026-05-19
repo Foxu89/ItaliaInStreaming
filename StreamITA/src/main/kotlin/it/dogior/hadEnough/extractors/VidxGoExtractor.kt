@@ -31,7 +31,7 @@ class VidxGoExtractor : ExtractorApi() {
     override val requiresReferer = false
 
     companion object {
-        private const val TIMEOUT_SECONDS = 45L
+        private const val TIMEOUT_SECONDS = 60L
         private const val REFERER = "https://altadefinizione.you/"
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36"
         
@@ -171,7 +171,6 @@ class VidxGoExtractor : ExtractorApi() {
                                 return WebResourceResponse("text/plain", "utf-8", "".byteInputStream())
                             }
                             
-                            // Forza headers per la richiesta principale
                             if (statusCode == null && requestUrl == targetUrl) {
                                 try {
                                     val connection = URL(requestUrl).openConnection() as HttpURLConnection
@@ -179,9 +178,9 @@ class VidxGoExtractor : ExtractorApi() {
                                         connection.setRequestProperty(key, value)
                                     }
                                     statusCode = connection.responseCode
-                                    log("VidxGo", "📊 Status: $statusCode")
+                                    log("VidxGo", "📊 Status Code: $statusCode")
                                 } catch (e: Exception) {
-                                    log("VidxGo", "⚠️ Errore status: ${e.message}")
+                                    log("VidxGo", "⚠️ Status error: ${e.message}")
                                 }
                             }
                             
@@ -190,67 +189,133 @@ class VidxGoExtractor : ExtractorApi() {
                         
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            log("VidxGo", "📄 Pagina caricata: ${url?.take(80)}")
+                            log("VidxGo", "📄 Page loaded: ${url?.take(80)}")
+                            log("VidxGo", "📊 Final Status: $statusCode")
                             
-                            // ATTESA 2 SECONDI prima del primo tentativo (fondamentale!)
+                            // ============================================================
+                            // DEBUG 1: Stampa HTML (primi 2000 caratteri)
+                            // ============================================================
+                            view?.evaluateJavascript(
+                                "document.documentElement.outerHTML.substring(0, 2000)"
+                            ) { html ->
+                                log("VidxGo", "📄 HTML DEBUG (first 2000): ${html.take(2000)}")
+                            }
+                            
+                            // ============================================================
+                            // DEBUG 2: Cerca TUTTI i pulsanti possibili
+                            // ============================================================
+                            val debugScript = """
+                                (function() {
+                                    var results = {};
+                                    
+                                    // Cerca per ID
+                                    var ids = ['resumeOverlay', 'resumeFromStart', 'resumeContinue', 'playPauseCenter', 'playBtn'];
+                                    for (var i = 0; i < ids.length; i++) {
+                                        var el = document.getElementById(ids[i]);
+                                        results[ids[i]] = el ? 'FOUND' : 'NOT_FOUND';
+                                    }
+                                    
+                                    // Cerca per classi
+                                    var classes = ['.resume-btn', '.resume-overlay', '.play-pause-center', '.btn-play'];
+                                    for (var i = 0; i < classes.length; i++) {
+                                        var el = document.querySelector(classes[i]);
+                                        results[classes[i]] = el ? 'FOUND' : 'NOT_FOUND';
+                                    }
+                                    
+                                    // Testi dei bottoni
+                                    var buttons = document.querySelectorAll('button');
+                                    var buttonTexts = [];
+                                    for (var i = 0; i < buttons.length; i++) {
+                                        buttonTexts.push(buttons[i].innerText);
+                                    }
+                                    results['button_texts'] = buttonTexts.join(' | ');
+                                    
+                                    // Overlay display
+                                    var overlay = document.getElementById('resumeOverlay');
+                                    results['overlay_display'] = overlay ? overlay.style.display : 'no_overlay';
+                                    
+                                    results['total_buttons'] = buttons.length;
+                                    results['current_url'] = window.location.href;
+                                    
+                                    return JSON.stringify(results);
+                                })();
+                            """.trimIndent()
+                            
+                            view?.evaluateJavascript(debugScript) { result ->
+                                log("VidxGo", "🔍 DEBUG: $result")
+                            }
+                            
+                            // ============================================================
+                            // TENTATIVI DI CLICK (con ritardo)
+                            // ============================================================
                             Handler(Looper.getMainLooper()).postDelayed({
                                 val clickScript = """
                                     (function() {
-                                        console.log('VidxGo: Tentativo ${retryCount + 1}');
-                                        
-                                        // Rimuovi overlay
+                                        // 1. Rimuovi overlay
                                         var overlay = document.getElementById('resumeOverlay');
-                                        if (overlay) {
-                                            overlay.style.display = 'none';
-                                        }
+                                        if (overlay) overlay.style.display = 'none';
                                         
-                                        // CERCA "DALL'INIZIO"
+                                        // 2. Clicca "Dall'inizio"
                                         var resumeBtn = document.getElementById('resumeFromStart');
                                         if (resumeBtn) {
                                             resumeBtn.click();
                                             return 'clicked_resumeFromStart';
                                         }
                                         
-                                        // CERCA "RIPRENDI"
+                                        // 3. Clicca "Riprendi"
                                         var continueBtn = document.getElementById('resumeContinue');
                                         if (continueBtn) {
                                             continueBtn.click();
                                             return 'clicked_resumeContinue';
                                         }
                                         
-                                        // CERCA PLAY CENTRALE
-                                        var playBtn = document.querySelector('.play-pause-center, #playPauseCenter');
-                                        if (playBtn) {
-                                            playBtn.click();
-                                            return 'clicked_centerPlay';
+                                        // 4. Clicca play centrale
+                                        var playCenter = document.querySelector('.play-pause-center, #playPauseCenter');
+                                        if (playCenter) {
+                                            playCenter.click();
+                                            return 'clicked_playCenter';
                                         }
                                         
-                                        // VERIFICA SE L'OVERLAY ESISTE
-                                        var overlayExists = document.getElementById('resumeOverlay') ? 'yes' : 'no';
-                                        return 'nothing_found (overlay: ' + overlayExists + ')';
+                                        // 5. Clicca play button
+                                        var playBtn = document.querySelector('#playBtn, .btn-play');
+                                        if (playBtn) {
+                                            playBtn.click();
+                                            return 'clicked_playBtn';
+                                        }
+                                        
+                                        // 6. Forza video
+                                        var video = document.querySelector('video');
+                                        if (video) {
+                                            video.muted = true;
+                                            video.play();
+                                            return 'video_played';
+                                        }
+                                        
+                                        var allButtons = document.querySelectorAll('button').length;
+                                        return 'nothing_found - total_buttons: ' + allButtons;
                                     })();
                                 """.trimIndent()
                                 
                                 view?.evaluateJavascript(clickScript) { result ->
-                                    log("VidxGo", "📝 JS: $result")
+                                    log("VidxGo", "📝 CLICK ATTEMPT ${retryCount + 1}: $result")
                                     
-                                    if (result.contains("nothing_found") && retryCount < 6) {
+                                    if (result.contains("nothing_found") && retryCount < 10) {
                                         retryCount++
                                         Handler(Looper.getMainLooper()).postDelayed({
                                             view?.evaluateJavascript(clickScript, null)
-                                        }, 2500)
+                                        }, 3000)
                                     }
                                 }
-                            }, 2000)  // ATTESA 2 SECONDI!
+                            }, 3000)  // Attesa 3 secondi
                         }
                     }
                     
-                    log("VidxGo", "📡 Caricamento: $targetUrl")
+                    log("VidxGo", "📡 Loading: $targetUrl")
                     webView.loadUrl(targetUrl)
                     
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!found) {
-                            log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s (tentativi click: $retryCount)")
+                            log("VidxGo", "⏰ Timeout after ${TIMEOUT_SECONDS}s (clicks: $retryCount)")
                             webView.destroy()
                             latch.countDown()
                             continuation.resume(null)
@@ -258,7 +323,7 @@ class VidxGoExtractor : ExtractorApi() {
                     }, TimeUnit.SECONDS.toMillis(TIMEOUT_SECONDS))
                     
                 } catch (e: Exception) {
-                    log("VidxGo", "❌ Errore: ${e.message}")
+                    log("VidxGo", "❌ Error: ${e.message}")
                     continuation.resume(null)
                 }
             }
