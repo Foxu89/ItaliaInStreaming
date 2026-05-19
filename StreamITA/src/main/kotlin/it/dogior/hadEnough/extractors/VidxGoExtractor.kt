@@ -18,7 +18,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import it.dogior.hadEnough.StreamITALogger.log
 import kotlinx.coroutines.suspendCancellableCoroutine
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.CountDownLatch
@@ -31,10 +30,11 @@ class VidxGoExtractor : ExtractorApi() {
     override val requiresReferer = false
 
     companion object {
-        private const val TIMEOUT_SECONDS = 60L
+        private const val TIMEOUT_SECONDS = 45L
         private const val REFERER = "https://altadefinizione.you/"
-        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36"
+        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
         
+        // HEADERS COMPLETI DALLA TUA CATTURA
         private val CUSTOM_HEADERS = mapOf(
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
             "Accept-Encoding" to "gzip, deflate, br, zstd",
@@ -101,7 +101,12 @@ class VidxGoExtractor : ExtractorApi() {
                     url = videoUrl,
                     type = ExtractorLinkType.M3U8
                 ) {
-                    this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to REFERER)
+                    this.headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to REFERER,
+                        "Origin" to "https://v.vidxgo.co",
+                        "Accept" to "*/*"
+                    )
                     this.referer = REFERER
                 }
             )
@@ -115,7 +120,6 @@ class VidxGoExtractor : ExtractorApi() {
             val latch = CountDownLatch(1)
             var found = false
             var retryCount = 0
-            var statusCode: Int? = null
             
             Handler(Looper.getMainLooper()).post {
                 try {
@@ -171,119 +175,65 @@ class VidxGoExtractor : ExtractorApi() {
                                 return WebResourceResponse("text/plain", "utf-8", "".byteInputStream())
                             }
                             
-                            if (statusCode == null && requestUrl == targetUrl) {
-                                try {
-                                    val connection = URL(requestUrl).openConnection() as HttpURLConnection
-                                    CUSTOM_HEADERS.forEach { (key, value) ->
-                                        connection.setRequestProperty(key, value)
-                                    }
-                                    statusCode = connection.responseCode
-                                    log("VidxGo", "📊 Status Code: $statusCode")
-                                } catch (e: Exception) {
-                                    log("VidxGo", "⚠️ Status error: ${e.message}")
+                            // FORZA HEADERS su OGNI richiesta
+                            try {
+                                val connection = URL(requestUrl).openConnection() as HttpURLConnection
+                                CUSTOM_HEADERS.forEach { (key, value) ->
+                                    connection.setRequestProperty(key, value)
                                 }
+                                connection.instanceFollowRedirects = true
+                                connection.connectTimeout = 10000
+                                connection.readTimeout = 10000
+                                
+                                val responseCode = connection.responseCode
+                                
+                                if (requestUrl == targetUrl) {
+                                    log("VidxGo", "📊 Status: $responseCode")
+                                }
+                                
+                                val inputStream = if (responseCode in 200..299) {
+                                    connection.inputStream
+                                } else {
+                                    connection.errorStream
+                                }
+                                
+                                val contentType = connection.contentType ?: "text/html"
+                                return WebResourceResponse(contentType, "utf-8", inputStream)
+                                
+                            } catch (e: Exception) {
+                                return null
                             }
-                            
-                            return super.shouldInterceptRequest(view, request)
                         }
                         
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             log("VidxGo", "📄 Page loaded: ${url?.take(80)}")
-                            log("VidxGo", "📊 Final Status: $statusCode")
                             
-                            // ============================================================
-                            // DEBUG 1: Stampa HTML (primi 2000 caratteri)
-                            // ============================================================
-                            view?.evaluateJavascript(
-                                "document.documentElement.outerHTML.substring(0, 2000)"
-                            ) { html ->
-                                log("VidxGo", "📄 HTML DEBUG (first 2000): ${html.take(2000)}")
-                            }
-                            
-                            // ============================================================
-                            // DEBUG 2: Cerca TUTTI i pulsanti possibili
-                            // ============================================================
-                            val debugScript = """
-                                (function() {
-                                    var results = {};
-                                    
-                                    // Cerca per ID
-                                    var ids = ['resumeOverlay', 'resumeFromStart', 'resumeContinue', 'playPauseCenter', 'playBtn'];
-                                    for (var i = 0; i < ids.length; i++) {
-                                        var el = document.getElementById(ids[i]);
-                                        results[ids[i]] = el ? 'FOUND' : 'NOT_FOUND';
-                                    }
-                                    
-                                    // Cerca per classi
-                                    var classes = ['.resume-btn', '.resume-overlay', '.play-pause-center', '.btn-play'];
-                                    for (var i = 0; i < classes.length; i++) {
-                                        var el = document.querySelector(classes[i]);
-                                        results[classes[i]] = el ? 'FOUND' : 'NOT_FOUND';
-                                    }
-                                    
-                                    // Testi dei bottoni
-                                    var buttons = document.querySelectorAll('button');
-                                    var buttonTexts = [];
-                                    for (var i = 0; i < buttons.length; i++) {
-                                        buttonTexts.push(buttons[i].innerText);
-                                    }
-                                    results['button_texts'] = buttonTexts.join(' | ');
-                                    
-                                    // Overlay display
-                                    var overlay = document.getElementById('resumeOverlay');
-                                    results['overlay_display'] = overlay ? overlay.style.display : 'no_overlay';
-                                    
-                                    results['total_buttons'] = buttons.length;
-                                    results['current_url'] = window.location.href;
-                                    
-                                    return JSON.stringify(results);
-                                })();
-                            """.trimIndent()
-                            
-                            view?.evaluateJavascript(debugScript) { result ->
-                                log("VidxGo", "🔍 DEBUG: $result")
-                            }
-                            
-                            // ============================================================
-                            // TENTATIVI DI CLICK (con ritardo)
-                            // ============================================================
+                            // Script per cliccare
                             Handler(Looper.getMainLooper()).postDelayed({
                                 val clickScript = """
                                     (function() {
-                                        // 1. Rimuovi overlay
                                         var overlay = document.getElementById('resumeOverlay');
                                         if (overlay) overlay.style.display = 'none';
                                         
-                                        // 2. Clicca "Dall'inizio"
                                         var resumeBtn = document.getElementById('resumeFromStart');
                                         if (resumeBtn) {
                                             resumeBtn.click();
                                             return 'clicked_resumeFromStart';
                                         }
                                         
-                                        // 3. Clicca "Riprendi"
                                         var continueBtn = document.getElementById('resumeContinue');
                                         if (continueBtn) {
                                             continueBtn.click();
                                             return 'clicked_resumeContinue';
                                         }
                                         
-                                        // 4. Clicca play centrale
                                         var playCenter = document.querySelector('.play-pause-center, #playPauseCenter');
                                         if (playCenter) {
                                             playCenter.click();
                                             return 'clicked_playCenter';
                                         }
                                         
-                                        // 5. Clicca play button
-                                        var playBtn = document.querySelector('#playBtn, .btn-play');
-                                        if (playBtn) {
-                                            playBtn.click();
-                                            return 'clicked_playBtn';
-                                        }
-                                        
-                                        // 6. Forza video
                                         var video = document.querySelector('video');
                                         if (video) {
                                             video.muted = true;
@@ -291,22 +241,20 @@ class VidxGoExtractor : ExtractorApi() {
                                             return 'video_played';
                                         }
                                         
-                                        var allButtons = document.querySelectorAll('button').length;
-                                        return 'nothing_found - total_buttons: ' + allButtons;
+                                        return 'nothing_found';
                                     })();
                                 """.trimIndent()
                                 
                                 view?.evaluateJavascript(clickScript) { result ->
-                                    log("VidxGo", "📝 CLICK ATTEMPT ${retryCount + 1}: $result")
-                                    
-                                    if (result.contains("nothing_found") && retryCount < 10) {
+                                    log("VidxGo", "📝 JS: $result")
+                                    if (!found && result.contains("nothing_found") && retryCount < 10) {
                                         retryCount++
                                         Handler(Looper.getMainLooper()).postDelayed({
                                             view?.evaluateJavascript(clickScript, null)
                                         }, 3000)
                                     }
                                 }
-                            }, 3000)  // Attesa 3 secondi
+                            }, 2000)
                         }
                     }
                     
@@ -315,7 +263,7 @@ class VidxGoExtractor : ExtractorApi() {
                     
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!found) {
-                            log("VidxGo", "⏰ Timeout after ${TIMEOUT_SECONDS}s (clicks: $retryCount)")
+                            log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s")
                             webView.destroy()
                             latch.countDown()
                             continuation.resume(null)
