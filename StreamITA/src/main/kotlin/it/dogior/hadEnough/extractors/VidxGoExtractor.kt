@@ -6,7 +6,11 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import android.webkit.*
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -66,7 +70,8 @@ class VidxGoExtractor : ExtractorApi() {
                 return false
             }
             return lowerUrl.contains(".m3u8") || lowerUrl.contains("master.m3u8") || 
-                   (lowerUrl.contains("media-") && lowerUrl.contains("your"))
+                   (lowerUrl.contains("media-") && lowerUrl.contains("your")) ||
+                   lowerUrl.contains("d2b.your")
         }
     }
 
@@ -96,7 +101,10 @@ class VidxGoExtractor : ExtractorApi() {
                     url = videoUrl,
                     type = ExtractorLinkType.M3U8
                 ) {
-                    this.headers = mapOf("User-Agent" to USER_AGENT, "Referer" to REFERER)
+                    this.headers = mapOf(
+                        "User-Agent" to USER_AGENT,
+                        "Referer" to REFERER
+                    )
                     this.referer = REFERER
                 }
             )
@@ -114,6 +122,7 @@ class VidxGoExtractor : ExtractorApi() {
             Handler(Looper.getMainLooper()).post {
                 try {
                     val context = getApplicationContext() ?: run {
+                        log("VidxGo", "❌ Context null")
                         continuation.resume(null)
                         return@post
                     }
@@ -131,6 +140,7 @@ class VidxGoExtractor : ExtractorApi() {
                         userAgentString = USER_AGENT
                         mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                         setSupportMultipleWindows(false)
+                        cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
                     }
                     
                     webView.webChromeClient = object : WebChromeClient() {
@@ -145,9 +155,6 @@ class VidxGoExtractor : ExtractorApi() {
                         }
                     }
                     
-                    // ============================================================
-                    // FORZA GLI HEADERS SU OGNI RICHIESTA
-                    // ============================================================
                     webView.webViewClient = object : WebViewClient() {
                         override fun shouldInterceptRequest(
                             view: WebView?,
@@ -155,9 +162,11 @@ class VidxGoExtractor : ExtractorApi() {
                         ): WebResourceResponse? {
                             val requestUrl = request?.url.toString()
                             
-                            log("VidxGo", "🔍 Intercettata: ${requestUrl.take(100)}")
+                            // Log solo richieste interessanti
+                            if (requestUrl.contains(".m3u8") || requestUrl.contains("master.m3u8")) {
+                                log("VidxGo", "🔍 Richiesta video: ${requestUrl.take(120)}")
+                            }
                             
-                            // Se è un video, catturalo
                             if (!found && isVideoUrl(requestUrl)) {
                                 found = true
                                 log("VidxGo", "🔥🔥🔥 VIDEO TROVATO: $requestUrl")
@@ -170,32 +179,40 @@ class VidxGoExtractor : ExtractorApi() {
                                 return WebResourceResponse("text/plain", "utf-8", "".byteInputStream())
                             }
                             
-                            // FORZA GLI HEADERS per questa richiesta
+                            // Forza gli headers su TUTTE le richieste
                             try {
                                 val connection = URL(requestUrl).openConnection() as HttpURLConnection
                                 CUSTOM_HEADERS.forEach { (key, value) ->
                                     connection.setRequestProperty(key, value)
                                 }
                                 connection.instanceFollowRedirects = true
+                                connection.connectTimeout = 10000
+                                connection.readTimeout = 10000
                                 
-                                val status = connection.responseCode
+                                // Logga lo status della pagina principale
                                 if (statusCode == null && requestUrl == targetUrl) {
-                                    statusCode = status
-                                    log("VidxGo", "📊 STATUS CODE per $requestUrl: $status")
+                                    statusCode = connection.responseCode
+                                    log("VidxGo", "📊 STATUS CODE: $statusCode per $targetUrl")
+                                    
+                                    // Se è 403, logga il corpo per debug
+                                    if (statusCode == 403) {
+                                        val errorStream = connection.errorStream
+                                        val errorText = errorStream?.bufferedReader()?.use { it.readText() }?.take(300)
+                                        log("VidxGo", "❌ 403 Response: $errorText")
+                                    }
                                 }
                                 
-                                val inputStream = if (status in 200..299) {
+                                val inputStream = if (connection.responseCode in 200..299) {
                                     connection.inputStream
                                 } else {
-                                    log("VidxGo", "❌ Status $status per $requestUrl")
                                     connection.errorStream
                                 }
                                 
-                                val contentType = connection.contentType
+                                val contentType = connection.contentType ?: "text/html"
                                 return WebResourceResponse(contentType, "utf-8", inputStream)
                                 
                             } catch (e: Exception) {
-                                log("VidxGo", "⚠️ Errore fetch: ${e.message}")
+                                log("VidxGo", "⚠️ Errore fetch ${requestUrl.take(80)}: ${e.message}")
                                 return null
                             }
                         }
@@ -203,13 +220,14 @@ class VidxGoExtractor : ExtractorApi() {
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             log("VidxGo", "📄 Pagina caricata: ${url?.take(80)}")
-                            log("VidxGo", "📊 Status finale: $statusCode")
+                            
+                            if (statusCode == 403) {
+                                log("VidxGo", "❌ La pagina ha dato 403 - headers non accettati")
+                            }
                             
                             // Script per cliccare i pulsanti
                             val clickScript = """
                                 (function() {
-                                    console.log('VidxGo: Cerco pulsanti...');
-                                    
                                     var overlay = document.getElementById('resumeOverlay');
                                     if (overlay) overlay.style.display = 'none';
                                     
@@ -242,13 +260,11 @@ class VidxGoExtractor : ExtractorApi() {
                     }
                     
                     log("VidxGo", "📡 Caricamento WebView: $targetUrl")
-                    log("VidxGo", "📋 Headers: ${CUSTOM_HEADERS.keys.joinToString()}")
                     webView.loadUrl(targetUrl)
                     
-                    // Timeout
                     Handler(Looper.getMainLooper()).postDelayed({
                         if (!found) {
-                            log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s (statusCode: $statusCode)")
+                            log("VidxGo", "⏰ Timeout dopo ${TIMEOUT_SECONDS}s (status: $statusCode)")
                             webView.destroy()
                             latch.countDown()
                             continuation.resume(null)
@@ -256,7 +272,7 @@ class VidxGoExtractor : ExtractorApi() {
                     }, TimeUnit.SECONDS.toMillis(TIMEOUT_SECONDS))
                     
                 } catch (e: Exception) {
-                    log("VidxGo", "❌ Errore WebView: ${e.message}")
+                    log("VidxGo", "❌ Errore: ${e.message}")
                     continuation.resume(null)
                 }
             }
