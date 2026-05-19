@@ -15,11 +15,9 @@ class VidxGoExtractor : ExtractorApi() {
     override val requiresReferer = false
 
     companion object {
-        private const val REFERER = "https://altadefinizione.you/"
-        private const val USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0"
-        
-        private val CUSTOM_HEADERS = mapOf(
-            "User-Agent" to USER_AGENT,
+        // Headers per la richiesta HTML (pagina del player)
+        private val HTML_HEADERS = mapOf(
+            "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64; rv:150.0) Gecko/20100101 Firefox/150.0",
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language" to "en-US,en;q=0.9",
             "Sec-GPC" to "1",
@@ -29,8 +27,27 @@ class VidxGoExtractor : ExtractorApi() {
             "Sec-Fetch-Mode" to "navigate",
             "Sec-Fetch-Site" to "none",
             "DNT" to "1",
-            "Referer" to REFERER,
+            "Referer" to "https://altadefinizione.you/",
             "Priority" to "u=0, i"
+        )
+        
+        // Headers per la richiesta M3U8 (CDN)
+        private val M3U8_HEADERS = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/148.0.0.0 Safari/537.36",
+            "Accept" to "*/*",
+            "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding" to "gzip, deflate, br, zstd",
+            "Origin" to "https://v.vidxgo.co",
+            "Referer" to "https://v.vidxgo.co/",
+            "Connection" to "keep-alive",
+            "Sec-Fetch-Dest" to "empty",
+            "Sec-Fetch-Mode" to "cors",
+            "Sec-Fetch-Site" to "cross-site",
+            "Sec-Ch-Ua" to "\"Chromium\";v=\"148\", \"Google Chrome\";v=\"148\", \"Not/A)Brand\";v=\"99\"",
+            "Sec-Ch-Ua-Mobile" to "?0",
+            "Sec-Ch-Ua-Platform" to "\"Windows\"",
+            "Priority" to "u=1, i",
+            "DNT" to "1"
         )
         
         private fun extractM3u8FromHtml(html: String): String? {
@@ -89,20 +106,12 @@ class VidxGoExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ) {
-        // ============================================================
-        // SUPPORTA SIA FILM CHE SERIE TV
-        // Formati supportati:
-        // - "https://v.vidxgo.co/1375666" (film)
-        // - "https://v.vidxgo.co/4574334/1/1" (serie TV)
-        // - "tt1375666"
-        // - "1375666"
-        // - "tt4574334-1-1"
-        // ============================================================
-        
+        // Costruisce l'URL target (supporta film e serie TV)
         val targetUrl = buildTargetUrl(url)
         log("VidxGo", "🎬 URL: $targetUrl")
         
-        val response = app.get(targetUrl, headers = CUSTOM_HEADERS)
+        // Scarica l'HTML con gli headers corretti
+        val response = app.get(targetUrl, headers = HTML_HEADERS)
         
         if (!response.isSuccessful) {
             log("VidxGo", "❌ HTTP ${response.code}")
@@ -112,6 +121,7 @@ class VidxGoExtractor : ExtractorApi() {
         val html = response.text
         log("VidxGo", "📄 HTML: ${html.length} caratteri")
         
+        // Estrae l'm3u8 dall'HTML
         val m3u8Url = extractM3u8FromHtml(html)
         
         if (m3u8Url != null) {
@@ -123,13 +133,9 @@ class VidxGoExtractor : ExtractorApi() {
                     url = m3u8Url,
                     type = ExtractorLinkType.M3U8
                 ) {
-                    this.headers = mapOf(
-                        "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/139.0.0.0 Safari/537.36",
-                        "Referer" to "$mainUrl/",
-                        "Origin" to mainUrl,
-                        "Accept" to "*/*"
-                    )
-                    this.referer = "$mainUrl/"
+                    // HEADERS PER IL CDN (fondamentali per evitare 403)
+                    this.headers = M3U8_HEADERS
+                    this.referer = "https://v.vidxgo.co/"
                 }
             )
         } else {
