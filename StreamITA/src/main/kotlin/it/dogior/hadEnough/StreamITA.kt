@@ -176,7 +176,7 @@ class StreamITA(
 
         val type = if (data.type == "movie") TvType.Movie else TvType.TvSeries
         StreamITALogger.log(TAG, "Caricamento dettagli: tipo=${data.type}, id=${data.id}, lingua=$apiLang")
-        val append = "credits,videos,recommendations,external_ids,images"
+        val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) "$tmdbAPI/movie/${data.id}?language=$apiLang&append_to_response=$append" else "$tmdbAPI/tv/${data.id}?language=$apiLang&append_to_response=$append"
 
         var res = try { 
@@ -211,19 +211,7 @@ class StreamITA(
         val rating = res.voteAverage?.toString()
         val genres = res.genres?.mapNotNull { it.name } ?: emptyList()
         val imdbId = res.imdbId ?: res.externalIds?.imdbId
-        val logoUrl = if (showLogo && data.id != null) {
-            StreamITALogger.log(TAG, "Caricamento logo per id=${data.id}")
-            val appLang = apiLang.substringBefore("-").lowercase()
-            res.images?.logos?.filter { it.filePath != null }?.let { logos ->
-                fun svg(l: Logo) = l.filePath?.endsWith(".svg", true) ?: true
-                logos.firstOrNull { it.iso_639_1 == appLang && !svg(it) }
-                    ?: logos.firstOrNull { it.iso_639_1 == appLang }
-                    ?: logos.firstOrNull { it.iso_639_1 == "en" && !svg(it) }
-                    ?: logos.firstOrNull { it.iso_639_1 == "en" }
-                    ?: logos.firstOrNull { !svg(it) }
-                    ?: logos.firstOrNull()
-            }?.filePath?.let { "https://image.tmdb.org/t/p/w500$it" }
-        } else null
+        val logoUrl = if (showLogo && data.id != null) { StreamITALogger.log(TAG, "Caricamento logo per id=${data.id}"); fetchTmdbLogoUrl(type, data.id, apiLang) } else null
         if (logoUrl != null) StreamITALogger.log(TAG, "Logo trovato per '$title'")
         val comingSoonFlag = when (res.status?.lowercase()) {
             "released" -> false
@@ -471,6 +459,32 @@ class StreamITA(
             StreamITALogger.log(TAG, "Errore recupero titolo inglese: ${e.message}")
             null
         }
+    }
+
+    private suspend fun fetchTmdbLogoUrl(type: TvType, tmdbId: Int?, appLangCode: String?): String? {
+        if (tmdbId == null) return null
+        return try {
+            val appLang = appLangCode?.substringBefore("-")?.lowercase()
+            val url = if (type == TvType.Movie) "$tmdbAPI/movie/$tmdbId/images" else "$tmdbAPI/tv/$tmdbId/images"
+            val response = app.get(url, timeout = 15000, headers = authHeaders).text
+            val json = JSONObject(response)
+            val logos = json.optJSONArray("logos") ?: return null
+            if (logos.length() == 0) return null
+
+            fun logoUrlAt(i: Int): String { val logo = logos.getJSONObject(i); return "https://image.tmdb.org/t/p/w500${logo.optString("file_path", "")}" }
+            fun isSvg(i: Int): Boolean { val logo = logos.getJSONObject(i); return logo.optString("file_path", "").endsWith(".svg", ignoreCase = true) }
+
+            if (!appLang.isNullOrBlank()) {
+                var svgFallback: String? = null
+                for (i in 0 until logos.length()) { val logo = logos.getJSONObject(i); if (logo.optString("iso_639_1") == appLang) { if (isSvg(i)) { if (svgFallback == null) svgFallback = logoUrlAt(i) } else return logoUrlAt(i) } }
+                if (svgFallback != null) return svgFallback
+            }
+            var enSvgFallback: String? = null
+            for (i in 0 until logos.length()) { val logo = logos.getJSONObject(i); if (logo.optString("iso_639_1") == "en") { if (isSvg(i)) { if (enSvgFallback == null) enSvgFallback = logoUrlAt(i) } else return logoUrlAt(i) } }
+            if (enSvgFallback != null) return enSvgFallback
+            for (i in 0 until logos.length()) { if (!isSvg(i)) return logoUrlAt(i) }
+            if (logos.length() > 0) logoUrlAt(0) else null
+        } catch (e: Exception) { StreamITALogger.log(TAG, "Errore caricamento logo: ${e.message}"); null }
     }
 
     private fun isExtractorEnabled(name: String, default: Boolean): Boolean {
