@@ -33,6 +33,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.net.URLEncoder
 import kotlin.random.Random
+import com.lagradost.cloudstream3.APIHolder.unixTimeMS
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class StreamITA(
     private val sharedPref: SharedPreferences?
@@ -458,6 +461,16 @@ class StreamITA(
         } catch (e: Exception) {
             StreamITALogger.log(TAG, "Errore recupero titolo inglese: ${e.message}")
             null
+        }
+    }
+
+    private fun isUpcoming(dateString: String?): Boolean {
+        return try {
+            val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val dateTime = dateString?.let { format.parse(it)?.time } ?: return false
+            unixTimeMS < dateTime
+        } catch (t: Throwable) {
+            false
         }
     }
 
