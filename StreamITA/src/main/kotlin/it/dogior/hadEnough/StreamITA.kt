@@ -69,6 +69,11 @@ class StreamITA(
         headers: Map<String, String> = authHeaders
     ): String {
         StreamITACache.get(cacheKey)?.let { return it }
+
+        val noGzipHeaders = headers.toMutableMap().apply {
+            this["Accept-Encoding"] = "identity"
+        }
+        
         val text = app.get(url, headers = headers).text
         StreamITACache.put(cacheKey, text, profile)
         return text
