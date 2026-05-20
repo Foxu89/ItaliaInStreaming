@@ -462,8 +462,7 @@ class StreamITA(
         return try {
             val appLang = appLangCode?.substringBefore("-")?.lowercase()
             val url = if (type == TvType.Movie) "$tmdbAPI/movie/$tmdbId/images" else "$tmdbAPI/tv/$tmdbId/images"
-            val cacheKey = "TMDB:LOGO:$type:$tmdbId"
-            val response = cachedApiGet(url, cacheKey, StreamITACache.CacheProfile.TMDB_DETAIL)
+            val response = app.get(url, timeout = 15000, headers = authHeaders).text
             val json = JSONObject(response)
             val logos = json.optJSONArray("logos") ?: return null
             if (logos.length() == 0) return null
