@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.net.URLEncoder
+import kotlin.random.Random
 
 class StreamITA(
     private val sharedPref: SharedPreferences?
@@ -70,7 +71,12 @@ class StreamITA(
     ): String {
         StreamITACache.get(cacheKey)?.let { return it }
         
-        val text = app.get(url, headers = headers).text
+        val text = try {
+            app.get(url, timeout = 15000, headers = headers).text
+        } catch (e: Exception) {
+            StreamITALogger.log(TAG, "cachedApiGet riprovo: ${e.message}")
+            app.get(url, timeout = 30000, headers = headers).text
+        }
         StreamITACache.put(cacheKey, text, profile)
         return text
     }
@@ -127,7 +133,7 @@ class StreamITA(
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         StreamITALogger.log(TAG, "Caricamento homepage: ${request.name} (pagina $page, lingua=$apiLang)")
         val cacheKey = "TMDB:HOME:${URLEncoder.encode(request.data, "UTF-8")}:$page:$apiLang"
-        val resp = cachedApiGet("${request.data}&page=$page", cacheKey, StreamITACache.CacheProfile.TMDB_HOME)
+        val resp = cachedApiGet("${request.data}&page=$page&random=${Random.nextInt()}", cacheKey, StreamITACache.CacheProfile.TMDB_HOME)
         val type = if (request.data.contains("tv")) "tv" else "movie"
         val parsedResponse = parseJson<Results>(resp).results?.mapNotNull { media -> media.toSearchResponse(type = type) }
         val home = parsedResponse ?: throw ErrorLoadingException("Invalid Json response")
