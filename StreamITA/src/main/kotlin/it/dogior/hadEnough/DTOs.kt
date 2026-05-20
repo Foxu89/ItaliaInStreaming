@@ -48,9 +48,18 @@ data class MediaDetail(
     @JsonProperty("credits") val credits: Credits? = null,
     @JsonProperty("recommendations") val recommendations: ResultsRecommendations? = null,
     @JsonProperty("external_ids") val externalIds: ExternalIds? = null,
+    @JsonProperty("images") val images: ImagesResponse? = null,
 )
 
 data class ExternalIds(@JsonProperty("imdb_id") val imdbId: String? = null)
+
+data class ImagesResponse(
+    @JsonProperty("logos") val logos: ArrayList<Logo>? = arrayListOf(),
+)
+data class Logo(
+    @JsonProperty("iso_639_1") val iso_639_1: String? = null,
+    @JsonProperty("file_path") val filePath: String? = null,
+)
 
 data class Seasons(
     @JsonProperty("season_number") val seasonNumber: Int? = null,
