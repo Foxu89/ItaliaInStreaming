@@ -73,15 +73,19 @@ class StreamITA(
         headers: Map<String, String> = authHeaders
     ): String {
         StreamITACache.get(cacheKey)?.let { return it }
-        
-        val text = try {
-            app.get(url, timeout = 15000, headers = headers).text
+        return try {
+            val text = app.get(url, timeout = 15000, headers = headers).text
+            StreamITACache.put(cacheKey, text, profile)
+            text
         } catch (e: Exception) {
-            StreamITALogger.log(TAG, "cachedApiGet riprovo: ${e.message}")
-            app.get(url, timeout = 30000, headers = headers).text
+            StreamITALogger.log(TAG, "cachedApiGet fallisce, provo cache scaduta: ${e.message}")
+            StreamITACache.get(cacheKey, allowExpired = true) ?: run {
+                StreamITALogger.log(TAG, "cachedApiGet riprovo con timeout maggiore")
+                val text = app.get(url, timeout = 30000, headers = headers).text
+                StreamITACache.put(cacheKey, text, profile)
+                text
+            }
         }
-        StreamITACache.put(cacheKey, text, profile)
-        return text
     }
 
     // ==================== SEZIONE NOMI ====================
@@ -182,15 +186,22 @@ class StreamITA(
         val append = "credits,videos,recommendations,external_ids"
         val resUrl = if (type == TvType.Movie) "$tmdbAPI/movie/${data.id}?language=$apiLang&append_to_response=$append" else "$tmdbAPI/tv/${data.id}?language=$apiLang&append_to_response=$append"
 
-        var res = try { 
-            withTimeoutOrNull(10000) { 
-                app.get(resUrl, headers = authHeaders).parsedSafe<MediaDetail>() 
-            } 
-        } catch (e: Exception) { 
-            StreamITALogger.log(TAG, "Errore richiesta dettagli (${apiLang}): ${e.message}")
-            null 
+        val detailCacheKey = "TMDB:DETAIL:${data.id}:${data.type}:$apiLang"
+        var res = StreamITACache.get(detailCacheKey)?.let { json ->
+            try { parseJson<MediaDetail>(json) } catch (_: Exception) { null }
         }
-        
+
+        if (res == null) {
+            res = try { 
+                withTimeoutOrNull(10000) { 
+                    app.get(resUrl, headers = authHeaders).parsedSafe<MediaDetail>() 
+                } 
+            } catch (e: Exception) { 
+                StreamITALogger.log(TAG, "Errore richiesta dettagli (${apiLang}): ${e.message}")
+                null 
+            }
+        }
+
         if (res == null) {
             StreamITALogger.log(TAG, "Fallback a EN per id=${data.id}")
             val enUrl = if (type == TvType.Movie) "$tmdbAPI/movie/${data.id}?language=en-US&append_to_response=$append" else "$tmdbAPI/tv/${data.id}?language=en-US&append_to_response=$append"
@@ -202,6 +213,12 @@ class StreamITA(
                 StreamITALogger.log(TAG, "Errore richiesta EN: ${e.message}")
                 null 
             }
+            if (res != null) {
+                val enCacheKey = "TMDB:DETAIL:${data.id}:${data.type}:en-US"
+                StreamITACache.put(enCacheKey, res.toJson(), StreamITACache.CacheProfile.TMDB_DETAIL)
+            }
+        } else {
+            StreamITACache.put(detailCacheKey, res.toJson(), StreamITACache.CacheProfile.TMDB_DETAIL)
         }
         if (res == null) { StreamITALogger.log(TAG, "Contenuto non disponibile per id=${data.id}"); throw ErrorLoadingException("Contenuto non disponibile") }
 
@@ -243,8 +260,14 @@ class StreamITA(
             StreamITALogger.log(TAG, "Serie TV: '$title', ${seasons.size} stagioni")
             val episodes = seasons.mapNotNull { season ->
                 val seasonNumber = season.seasonNumber ?: return@mapNotNull null
-                app.get("$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=$apiLang", headers = authHeaders)
-                    .parsedSafe<MediaDetailEpisodes>()?.episodes?.map { eps ->
+                try {
+                    val seasonCacheKey = "TMDB:SEASON:${data.id}:$seasonNumber:$apiLang"
+                    val seasonJson = cachedApiGet(
+                        "$tmdbAPI/tv/${data.id}/season/$seasonNumber?language=$apiLang",
+                        seasonCacheKey,
+                        StreamITACache.CacheProfile.TMDB_SEASONS
+                    )
+                    parseJson<MediaDetailEpisodes>(seasonJson)?.episodes?.map { eps ->
                         val linkData = LinkData(id = data.id, title = title, year = year, season = eps.seasonNumber, episode = eps.episodeNumber, isMovie = false, imdbId = imdbId)
                         newEpisode(linkData.toJson()) {
                             this.name = eps.name ?: "Episodio ${eps.episodeNumber}"; this.season = eps.seasonNumber; this.episode = eps.episodeNumber
@@ -252,6 +275,10 @@ class StreamITA(
                             this.score = if (showRating) eps.voteAverage?.let { Score.from10(it) } else null; this.runTime = eps.runtime; this.addDate(eps.airDate)
                         }
                     }
+                } catch (e: Exception) {
+                    StreamITALogger.log(TAG, "Errore caricamento stagione $seasonNumber: ${e.message}")
+                    null
+                }
             }.flatten()
             StreamITALogger.log(TAG, "Episodi caricati: ${episodes.size} totali")
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
@@ -485,7 +512,8 @@ class StreamITA(
         return try {
             val appLang = appLangCode?.substringBefore("-")?.lowercase()
             val url = if (type == TvType.Movie) "$tmdbAPI/movie/$tmdbId/images" else "$tmdbAPI/tv/$tmdbId/images"
-            val response = app.get(url, timeout = 15000, headers = authHeaders).text
+            val logoCacheKey = "TMDB:LOGO:$type:$tmdbId"
+            val response = cachedApiGet(url, logoCacheKey, StreamITACache.CacheProfile.TMDB_LOGO)
             val json = JSONObject(response)
             val logos = json.optJSONArray("logos") ?: return null
             if (logos.length() == 0) return null

@@ -5,8 +5,8 @@ import java.security.MessageDigest
 
 object StreamITACache {
     private const val TAG = "StreamITACache"
-    private const val MAX_MEMORY_ENTRIES = 256
-    private const val MAX_DISK_ENTRIES = 512
+    private const val MAX_MEMORY_ENTRIES = 512
+    private const val MAX_DISK_ENTRIES = 1024
 
     private data class CacheEntry(
         val text: String,
@@ -45,22 +45,24 @@ object StreamITACache {
         ANIME_SATURN_DETAIL(6 * 3600 * 1000L),
         ANIME_SATURN_PLAYER(30 * 60 * 1000L),
         SUBTITLES(3 * 3600 * 1000L),
+        TMDB_LOGO(24 * 3600 * 1000L),
     }
 
     // ==================== Metodi pubblici ====================
     @Synchronized
-    fun get(key: String): String? {
+    fun get(key: String, allowExpired: Boolean = false): String? {
         // 1. Cerca in memoria
         val entry = memoryCache[key]
         if (entry != null) {
             if (entry.expiresAtMs > System.currentTimeMillis()) {
                 return entry.text
             }
+            if (allowExpired) return entry.text
             memoryCache.remove(key)
         }
 
         // 2. Cerca su disco
-        return readDisk(key)
+        return readDisk(key, allowExpired)
     }
 
     @Synchronized
@@ -108,7 +110,7 @@ object StreamITACache {
     }
 
     // ==================== Disco ====================
-    private fun readDisk(key: String): String? {
+    private fun readDisk(key: String, allowExpired: Boolean = false): String? {
         val file = cacheFile(key) ?: return null
         val raw = runCatching { file.readText() }.getOrNull() ?: return null
         val separator = raw.indexOf('\n')
@@ -125,6 +127,10 @@ object StreamITACache {
 
         val text = raw.substring(separator + 1)
         if (expiresAtMs <= System.currentTimeMillis()) {
+            if (allowExpired) {
+                memoryCache[key] = CacheEntry(text, expiresAtMs)
+                return text
+            }
             runCatching { file.delete() }
             return null
         }
