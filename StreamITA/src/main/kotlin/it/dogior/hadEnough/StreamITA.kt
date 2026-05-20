@@ -260,8 +260,6 @@ class StreamITA(
                 addTrailer(trailer); imdbId?.let { addImdbId(it) }; if (logoUrl != null) this.logoUrl = logoUrl
                 this.showStatus = when (res.status) {
                     "Returning Series" -> ShowStatus.Ongoing
-                    "Ended" -> ShowStatus.Completed
-                    "Canceled" -> ShowStatus.Canceled
                     else -> ShowStatus.Completed
                 }
                 this.comingSoon = comingSoonFlag
