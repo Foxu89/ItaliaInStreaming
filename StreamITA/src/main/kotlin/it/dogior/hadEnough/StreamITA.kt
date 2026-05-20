@@ -236,12 +236,6 @@ class StreamITA(
                 this.posterUrl = poster; this.backgroundPosterUrl = bgPoster; this.year = year; this.plot = plot; this.duration = res.runtime
                 this.score = if (showRating) rating?.let { Score.from10(it) } else null; this.actors = actors; this.tags = genres; this.recommendations = recommendations
                 addTrailer(trailer); imdbId?.let { addImdbId(it) }; if (logoUrl != null) this.logoUrl = logoUrl
-                this.showStatus = when (res.status) {
-                    "Returning Series" -> ShowStatus.Ongoing
-                    "Ended" -> ShowStatus.Completed
-                    "Canceled" -> ShowStatus.Cancelled
-                    else -> ShowStatus.Completed
-                }
                 this.comingSoon = comingSoonFlag
             }
         } else {
@@ -267,7 +261,7 @@ class StreamITA(
                 this.showStatus = when (res.status) {
                     "Returning Series" -> ShowStatus.Ongoing
                     "Ended" -> ShowStatus.Completed
-                    "Canceled" -> ShowStatus.Cancelled
+                    "Canceled" -> ShowStatus.Canceled
                     else -> ShowStatus.Completed
                 }
                 this.comingSoon = comingSoonFlag
