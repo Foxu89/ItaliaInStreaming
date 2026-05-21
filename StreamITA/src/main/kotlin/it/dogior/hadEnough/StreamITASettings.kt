@@ -262,7 +262,7 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
     private val currentOrder = mutableListOf<String>()
     private val enabledState = mutableMapOf<String, Boolean>()
     private val timeoutState = mutableMapOf<String, String>()
-    private var currentConcurrency = 3
+    private var currentConcurrency = 9
 
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -284,7 +284,7 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
             }
         }
         view.findViewByName<View>("concurrency_plus")?.setOnClickListener {
-            if (currentConcurrency < 15) {
+            if (currentConcurrency < 9) {
                 currentConcurrency++
                 concurrencyValue?.text = currentConcurrency.toString()
             }
@@ -311,7 +311,7 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
         }
         if (currentOrder.isEmpty()) currentOrder.addAll(defaultOrder)
 
-        currentConcurrency = sharedPref?.getInt(StreamITAPlugin.PREF_EXTRACTOR_CONCURRENCY, 3) ?: 3
+        currentConcurrency = sharedPref?.getInt(StreamITAPlugin.PREF_EXTRACTOR_CONCURRENCY, 9) ?: 9
     }
 
     private fun initEnabledTimeoutState() {

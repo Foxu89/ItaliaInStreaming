@@ -45,7 +45,7 @@ class StreamITAExtractors(
             )
             if (response.isSuccessful) {
                 val html = response.text
-                if (isEnabled("dropload") && !any) {
+                if (isEnabled("dropload")) {
                     Regex("""data-link\s*=\s*"(//[^"]*dr0pstream[^"]*|https?://[^"]*dr0pstream[^"]*)""", RegexOption.IGNORE_CASE)
                         .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
                             val fullLink = if (link.startsWith("//")) "https:$link" else link
@@ -53,7 +53,7 @@ class StreamITAExtractors(
                             onSuccess(); any = true
                         }
                 }
-                if (isEnabled("mixdrop") && !any) {
+                if (isEnabled("mixdrop")) {
                     Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""", RegexOption.IGNORE_CASE)
                         .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
                             val fullLink = if (link.startsWith("//")) "https:$link" else link
@@ -61,7 +61,7 @@ class StreamITAExtractors(
                             onSuccess(); any = true
                         }
                 }
-                if (isEnabled("streamhg") && !any) {
+                if (isEnabled("streamhg")) {
                     Regex("""data-link\s*=\s*"(//[^"]*dhcplay[^"]*|https?://[^"]*dhcplay[^"]*)""", RegexOption.IGNORE_CASE)
                         .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
                             val fullLink = if (link.startsWith("//")) "https:$link" else link

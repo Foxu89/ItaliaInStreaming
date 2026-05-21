@@ -36,7 +36,8 @@ import kotlin.random.Random
 import com.lagradost.cloudstream3.APIHolder.unixTimeMS
 import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.concurrent.Semaphore
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 class StreamITA(
     private val sharedPref: SharedPreferences?
@@ -309,7 +310,7 @@ class StreamITA(
     }
 
     private fun readExtractorConcurrency(): Int {
-        return sharedPref?.getInt(StreamITAPlugin.PREF_EXTRACTOR_CONCURRENCY, 3) ?: 3
+        return sharedPref?.getInt(StreamITAPlugin.PREF_EXTRACTOR_CONCURRENCY, 9) ?: 9
     }
 
     override suspend fun loadLinks(
@@ -346,21 +347,16 @@ class StreamITA(
                 }
 
                 launch {
-                    try {
-                        semaphore.acquire()
-                    } catch (_: InterruptedException) {
-                        return@launch
-                    }
-                    try {
-                        val success = executeOrderedExtractor(key, linkData, tmdbId, extractors, subtitleCallback, callback)
-                        if (success) {
-                            anySuccess = true
-                            StreamITALogger.log(TAG, "Link trovato da $key per tmdbId=$tmdbId")
+                    semaphore.withPermit {
+                        try {
+                            val success = executeOrderedExtractor(key, linkData, tmdbId, extractors, subtitleCallback, callback)
+                            if (success) {
+                                anySuccess = true
+                                StreamITALogger.log(TAG, "Link trovato da $key per tmdbId=$tmdbId")
+                            }
+                        } catch (e: Exception) {
+                            StreamITALogger.log(TAG, "$key fallito: ${e.message}")
                         }
-                    } catch (e: Exception) {
-                        StreamITALogger.log(TAG, "$key fallito: ${e.message}")
-                    } finally {
-                        semaphore.release()
                     }
                 }
             }
