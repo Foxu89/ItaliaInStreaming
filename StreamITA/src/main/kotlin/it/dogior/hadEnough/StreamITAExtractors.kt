@@ -9,9 +9,12 @@ import it.dogior.hadEnough.extractors.StreamHGExtractor
 import it.dogior.hadEnough.extractors.VidSrcExtractor
 import it.dogior.hadEnough.extractors.VidxGoExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 class StreamITAExtractors(
+    private val scope: CoroutineScope,
     private val subtitleCallback: (SubtitleFile) -> Unit,
     private val callback: (ExtractorLink) -> Unit,
     private val onSuccess: () -> Unit,
@@ -31,86 +34,119 @@ class StreamITAExtractors(
         return seconds * 1000L
     }
 
-    suspend fun tryGuardahd(imdbId: String): Boolean {
-        if (!isEnabled("dropload") && !isEnabled("mixdrop") && !isEnabled("streamhg")) return false
-        val timeout = maxOf(
-            getTimeoutMs("dropload", 15),
-            getTimeoutMs("mixdrop", 30),
-            getTimeoutMs("streamhg", 15)
-        )
-        var any = false
-        withTimeoutOrNull(timeout) {
-            val response = com.lagradost.cloudstream3.app.get(
-                "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=$imdbId"
-            )
-            if (response.isSuccessful) {
-                val html = response.text
-                if (isEnabled("dropload")) {
-                    Regex("""data-link\s*=\s*"(//[^"]*dr0pstream[^"]*|https?://[^"]*dr0pstream[^"]*)""", RegexOption.IGNORE_CASE)
-                        .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
-                            val fullLink = if (link.startsWith("//")) "https:$link" else link
-                            DropLoadExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
-                            onSuccess(); any = true
+    fun loadMovieExtractors(imdbId: String) {
+        if (isEnabled("dropload")) {
+            scope.launch {
+                try {
+                    val timeout = getTimeoutMs("dropload", 15)
+                    withTimeoutOrNull(timeout) {
+                        val response = com.lagradost.cloudstream3.app.get(
+                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=$imdbId"
+                        )
+                        if (response.isSuccessful) {
+                            val html = response.text
+                            Regex("""data-link\s*=\s*"(//[^"]*dr0pstream[^"]*|https?://[^"]*dr0pstream[^"]*)""", RegexOption.IGNORE_CASE)
+                                .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
+                                    val fullLink = if (link.startsWith("//")) "https:$link" else link
+                                    DropLoadExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
+                                    onSuccess()
+                                }
                         }
-                }
-                if (isEnabled("mixdrop")) {
-                    Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""", RegexOption.IGNORE_CASE)
-                        .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
-                            val fullLink = if (link.startsWith("//")) "https:$link" else link
-                            MixDropExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
-                            onSuccess(); any = true
-                        }
-                }
-                if (isEnabled("streamhg")) {
-                    Regex("""data-link\s*=\s*"(//[^"]*dhcplay[^"]*|https?://[^"]*dhcplay[^"]*)""", RegexOption.IGNORE_CASE)
-                        .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
-                            val fullLink = if (link.startsWith("//")) "https:$link" else link
-                            StreamHGExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
-                            onSuccess(); any = true
-                        }
-                }
+                    }
+                } catch (_: Exception) {}
             }
         }
-        return any
-    }
 
-    suspend fun tryVixSrc(tmdbId: Int, season: Int?, episode: Int?): Boolean {
-        if (!isEnabled("vixsrc")) return false
-        var any = false
-        withTimeoutOrNull(getTimeoutMs("vixsrc", 15)) {
-            val url = if (season == null) "https://vixsrc.to/movie/$tmdbId"
-            else "https://vixsrc.to/tv/$tmdbId/$season/$episode"
-            VixSrcExtractor().getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
-            onSuccess(); any = true
-        }
-        return any
-    }
-
-    suspend fun tryVidSrc(tmdbId: Int, season: Int?, episode: Int?): Boolean {
-        if (!isEnabled("vidsrc")) return false
-        var any = false
-        withTimeoutOrNull(getTimeoutMs("vidsrc", 15)) {
-            val url = if (season == null) "https://vidsrc.ru/movie/$tmdbId"
-            else "https://vidsrc.ru/tv/$tmdbId/$season/$episode"
-            VidSrcExtractor().getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
-            onSuccess(); any = true
-        }
-        return any
-    }
-
-    suspend fun tryVidxGo(imdbId: String, season: Int?, episode: Int?): Boolean {
-        if (!isEnabled("vidxgo")) return false
-        var any = false
-        withTimeoutOrNull(getTimeoutMs("vidxgo", 20)) {
-            val rawId = imdbId.replace("tt", "")
-            val url = if (season == null || episode == null) {
-                "https://v.vidxgo.co/$rawId"
-            } else {
-                "https://v.vidxgo.co/$rawId/$season/$episode"
+        if (isEnabled("mixdrop")) {
+            scope.launch {
+                try {
+                    val timeout = getTimeoutMs("mixdrop", 30)
+                    withTimeoutOrNull(timeout) {
+                        val response = com.lagradost.cloudstream3.app.get(
+                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=$imdbId"
+                        )
+                        if (response.isSuccessful) {
+                            val html = response.text
+                            Regex("""data-link\s*=\s*"(//[^"]*m1xdrop[^"]*|https?://[^"]*m1xdrop[^"]*)""", RegexOption.IGNORE_CASE)
+                                .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
+                                    val fullLink = if (link.startsWith("//")) "https:$link" else link
+                                    MixDropExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
+                                    onSuccess()
+                                }
+                        }
+                    }
+                } catch (_: Exception) {}
             }
-            VidxGoExtractor().getUrl(url, "https://v.vidxgo.co/", subtitleCallback, callback)
-            onSuccess(); any = true
         }
-        return any
+
+        if (isEnabled("streamhg")) {
+            scope.launch {
+                try {
+                    val timeout = getTimeoutMs("streamhg", 15)
+                    withTimeoutOrNull(timeout) {
+                        val response = com.lagradost.cloudstream3.app.get(
+                            "https://guardahd.stream/index.php?task=set-movie-u&id_imdb=$imdbId"
+                        )
+                        if (response.isSuccessful) {
+                            val html = response.text
+                            Regex("""data-link\s*=\s*"(//[^"]*dhcplay[^"]*|https?://[^"]*dhcplay[^"]*)""", RegexOption.IGNORE_CASE)
+                                .find(html)?.groupValues?.get(1)?.trim()?.let { link ->
+                                    val fullLink = if (link.startsWith("//")) "https:$link" else link
+                                    StreamHGExtractor().getUrl(fullLink, "https://guardahd.stream/", subtitleCallback, callback)
+                                    onSuccess()
+                                }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    fun loadCommonExtractors(tmdbId: Int, imdbId: String?, season: Int?, episode: Int?) {
+        if (isEnabled("vixsrc")) {
+            scope.launch {
+                try {
+                    val timeout = getTimeoutMs("vixsrc", 15)
+                    withTimeoutOrNull(timeout) {
+                        val url = if (season == null) "https://vixsrc.to/movie/$tmdbId"
+                        else "https://vixsrc.to/tv/$tmdbId/$season/$episode"
+                        VixSrcExtractor().getUrl(url, "https://vixsrc.to/", subtitleCallback, callback)
+                        onSuccess()
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        if (isEnabled("vidsrc")) {
+            scope.launch {
+                try {
+                    val timeout = getTimeoutMs("vidsrc", 15)
+                    withTimeoutOrNull(timeout) {
+                        val url = if (season == null) "https://vidsrc.ru/movie/$tmdbId"
+                        else "https://vidsrc.ru/tv/$tmdbId/$season/$episode"
+                        VidSrcExtractor().getUrl(url, "https://vidsrc.ru/", subtitleCallback, callback)
+                        onSuccess()
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        if (imdbId != null && isEnabled("vidxgo")) {
+            scope.launch {
+                try {
+                    val timeout = getTimeoutMs("vidxgo", 20)
+                    withTimeoutOrNull(timeout) {
+                        val rawId = imdbId.replace("tt", "")
+                        val url = if (season == null || episode == null) {
+                            "https://v.vidxgo.co/$rawId"
+                        } else {
+                            "https://v.vidxgo.co/$rawId/$season/$episode"
+                        }
+                        VidxGoExtractor().getUrl(url, "https://v.vidxgo.co/", subtitleCallback, callback)
+                        onSuccess()
+                    }
+                } catch (_: Exception) {}
+            }
+        }
     }
 }
