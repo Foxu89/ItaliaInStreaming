@@ -614,7 +614,7 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
 
     private fun saveSettings() {
         sharedPref?.edit {
-            putString(StreamITAPlugin.PREF_EXTRACTOR_ORDER, toJson(currentOrder))
+            putString(StreamITAPlugin.PREF_EXTRACTOR_ORDER, currentOrder.toJson())
             putInt(StreamITAPlugin.PREF_EXTRACTOR_CONCURRENCY, currentConcurrency)
             for ((key, enabled) in enabledState) {
                 putBoolean(StreamITAPlugin.extractorEnabledKey(key), enabled)
