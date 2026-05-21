@@ -476,6 +476,18 @@ class StreamITA(
                     }
                 }
             }
+
+            // ========== Stremio Addons in parallelo ==========
+            val stremioMap = StreamITAStremioAddonSettings.getDynamicStremioMap(
+                sharedPref, linkData.imdbId, linkData.season, linkData.episode,
+                subtitleCallback, callback
+            )
+            for ((_, action) in stremioMap) {
+                launch {
+                    try { action() }
+                    catch (e: Exception) { StreamITALogger.log(TAG, "Stremio addon fallito: ${e.message}") }
+                }
+            }
         }
 
         StreamITALogger.log(TAG, "Risultato ricerca link: successo=$anySuccess")
