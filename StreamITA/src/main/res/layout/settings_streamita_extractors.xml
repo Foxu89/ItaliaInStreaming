@@ -1013,7 +1013,6 @@
                 android:text="" />
         </LinearLayout>
     </LinearLayout>
-        </LinearLayout>
 
             <!-- Divider -->
             <View
