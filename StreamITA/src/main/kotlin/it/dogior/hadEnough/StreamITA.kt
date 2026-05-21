@@ -36,6 +36,7 @@ import kotlin.random.Random
 import com.lagradost.cloudstream3.APIHolder.unixTimeMS
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.concurrent.Semaphore
 
 class StreamITA(
     private val sharedPref: SharedPreferences?
@@ -294,6 +295,23 @@ class StreamITA(
         }
     }
 
+    private val defaultExtractorOrder = listOf(
+        "vixsrc", "vidxgo", "cinemacity", "guardahd", "vidsrc",
+        "animeunity", "animeworld", "animesaturn", "subtitle"
+    )
+
+    private fun readExtractorOrder(): List<String> {
+        val saved = sharedPref?.getString(StreamITAPlugin.PREF_EXTRACTOR_ORDER, null)
+        if (saved != null) {
+            try { return parseJson<List<String>>(saved) } catch (_: Exception) {}
+        }
+        return defaultExtractorOrder
+    }
+
+    private fun readExtractorConcurrency(): Int {
+        return sharedPref?.getInt(StreamITAPlugin.PREF_EXTRACTOR_CONCURRENCY, 3) ?: 3
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -306,180 +324,226 @@ class StreamITA(
 
         StreamITALogger.log(TAG, "Ricerca link: tmdbId=$tmdbId, isMovie=${linkData.isMovie}")
 
+        val order = readExtractorOrder()
+        val concurrency = readExtractorConcurrency()
+        val semaphore = Semaphore(concurrency)
+
+        val extractors = StreamITAExtractors(
+            subtitleCallback = subtitleCallback,
+            callback = callback,
+            onSuccess = { anySuccess = true },
+            sharedPref = sharedPref
+        )
+
         coroutineScope {
-            // ========== Estrattori normali ==========
-            val extractors = StreamITAExtractors(
-                scope = this,
-                subtitleCallback = subtitleCallback,
-                callback = callback,
-                onSuccess = {
-                    anySuccess = true
-                    StreamITALogger.log(TAG, "Link trovato da estrattori normali per tmdbId=$tmdbId")
-                },
-                sharedPref = sharedPref
-            )
+            for (key in order) {
+                if (key == "subtitle") {
+                    launch {
+                        try { runSubtitles(linkData, subtitleCallback) }
+                        catch (e: Exception) { StreamITALogger.log(TAG, "Sottotitoli falliti: ${e.message}") }
+                    }
+                    continue
+                }
 
-            if (linkData.isMovie && linkData.imdbId != null) {
-                extractors.loadMovieExtractors(linkData.imdbId)
-            }
-            extractors.loadCommonExtractors(tmdbId, linkData.imdbId, linkData.season, linkData.episode)
-
-            // ========== AnimeUnity in parallelo ==========
-            if (isExtractorEnabled("animeunity", true)) {
                 launch {
                     try {
-                        val timeout = extractorTimeoutMs("animeunity", 30)
-                        withTimeoutOrNull(timeout) {
-                            val title = linkData.title ?: return@withTimeoutOrNull
-                            val success = AnimeUnityScraper.loadLinks(
-                                title = title,
-                                tmdbId = linkData.id,
-                                isMovie = linkData.isMovie,
-                                season = linkData.season,
-                                episode = linkData.episode,
-                                subtitleCallback = subtitleCallback,
-                                callback = callback,
-                                fetchEnglishTitle = { id, isMov -> fetchEnglishTitle(id, isMov) }
-                            )
-                            if (success) anySuccess = true
+                        semaphore.acquire()
+                    } catch (_: InterruptedException) {
+                        return@launch
+                    }
+                    try {
+                        val success = executeOrderedExtractor(key, linkData, tmdbId, extractors, subtitleCallback, callback)
+                        if (success) {
+                            anySuccess = true
+                            StreamITALogger.log(TAG, "Link trovato da $key per tmdbId=$tmdbId")
                         }
                     } catch (e: Exception) {
-                        StreamITALogger.log(TAG, "AnimeUnity fallito: ${e.message}")
+                        StreamITALogger.log(TAG, "$key fallito: ${e.message}")
+                    } finally {
+                        semaphore.release()
                     }
                 }
             }
 
-            // ========== AnimeWorld in parallelo ==========
-            if (isExtractorEnabled("animeworld", true)) {
+            // Always run subtitle if not already in order list
+            if ("subtitle" !in order) {
                 launch {
-                    try {
-                        val timeout = extractorTimeoutMs("animeworld", 30)
-                        withTimeoutOrNull(timeout) {
-                            val title = linkData.title ?: return@withTimeoutOrNull
-                            val tmdbIdLocal = linkData.id
-                            val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
-
-                            val sources = AnimeWorldScraper.searchWithSources(
-                                title = title,
-                                tmdbId = tmdbIdLocal,
-                                englishTitle = enTitle
-                            )
-
-                            val animeToTry = listOfNotNull(sources.sub, sources.dub)
-
-                            for (anime in animeToTry) {
-                                val episodes = AnimeWorldScraper.loadEpisodes(anime.url)
-
-                                val targetEp = if (linkData.season == null) {
-                                    episodes.firstOrNull()
-                                } else {
-                                    episodes.find { it.number == linkData.episode.toString() }
-                                }
-
-                                if (targetEp != null) {
-                                    val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
-                                    if (info != null) {
-                                        val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
-                                        if (success) {
-                                            anySuccess = true
-                                            StreamITALogger.log(TAG, "AnimeWorld OK: link trovato per ep.${targetEp.number} (${if (anime.isDub) "DUB" else "SUB"})")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        StreamITALogger.log(TAG, "AnimeWorld fallito: ${e.message}")
-                    }
-                }
-            }
-
-            // ========== AnimeSaturn in parallelo ==========
-            if (isExtractorEnabled("animesaturn", true)) {
-                launch {
-                    try {
-                        val timeout = extractorTimeoutMs("animesaturn", 30)
-                        withTimeoutOrNull(timeout) {
-                            val title = linkData.title ?: return@withTimeoutOrNull
-                            val tmdbIdLocal = linkData.id
-                            val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
-
-                            val sources = AnimeSaturnScraper.searchWithSources(
-                                title = title,
-                                tmdbId = tmdbIdLocal,
-                                englishTitle = enTitle
-                            )
-
-                            val animeToTry = listOfNotNull(sources.sub, sources.dub)
-
-                            for (anime in animeToTry) {
-                                val episodes = AnimeSaturnScraper.loadEpisodes(anime.url)
-
-                                val targetEp = if (linkData.season == null) {
-                                    episodes.firstOrNull()
-                                } else {
-                                    episodes.find { it.number == linkData.episode.toString() }
-                                }
-
-                                if (targetEp != null) {
-                                    val videoUrl = AnimeSaturnScraper.getEpisodeVideoUrl(targetEp.episodeUrl)
-                                    if (videoUrl != null) {
-                                        val label = if (anime.isDub) "[DUB]" else "[SUB]"
-                                        val success = AnimeSaturnScraper.loadLinks(videoUrl, label, callback)
-                                        if (success) {
-                                            anySuccess = true
-                                            StreamITALogger.log(TAG, "AnimeSaturn OK: link trovato per ep.${targetEp.number} ($label)")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        StreamITALogger.log(TAG, "AnimeSaturn fallito: ${e.message}")
-                    }
-                }
-            }
-
-            // ========== CinemaCity in parallelo ==========
-            if (isExtractorEnabled("cinemacity", true)) {
-                launch {
-                    try {
-                        val timeout = extractorTimeoutMs("cinemacity", 60)
-                        linkData.imdbId?.let { imdbId ->
-                            val success = withTimeoutOrNull(timeout) {
-                                CinemaCityScraper.loadLinks(
-                                    imdbId = imdbId,
-                                    season = linkData.season,
-                                    episode = linkData.episode,
-                                    subtitleCallback = subtitleCallback,
-                                    callback = callback,
-                                )
-                            } ?: false
-                            if (success) anySuccess = true
-                        }
-                    } catch (e: Exception) {
-                        StreamITALogger.log(TAG, "CinemaCity fallito: ${e.message}")
-                    }
-                }
-            }
-
-            // ========== Sottotitoli in parallelo ==========
-            launch {
-                if (sharedPref?.getBoolean(StreamITAPlugin.extractorEnabledKey("subtitle"), true) == true) {
-                    try {
-                        linkData.imdbId?.let { imdbId ->
-                            StreamITASubtitles.loadWyzieSubs(imdbId, linkData.season, linkData.episode, subtitleCallback)
-                            StreamITASubtitles.loadOpenSubtitles(imdbId, linkData.season, linkData.episode, subtitleCallback)
-                        }
-                    } catch (e: Exception) {
-                        StreamITALogger.log(TAG, "Sottotitoli falliti: ${e.message}")
-                    }
+                    try { runSubtitles(linkData, subtitleCallback) }
+                    catch (e: Exception) { StreamITALogger.log(TAG, "Sottotitoli falliti: ${e.message}") }
                 }
             }
         }
 
         StreamITALogger.log(TAG, "Risultato ricerca link: successo=$anySuccess")
         return anySuccess
+    }
+
+    private suspend fun executeOrderedExtractor(
+        key: String,
+        linkData: LinkData,
+        tmdbId: Int,
+        extractors: StreamITAExtractors,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean = when (key) {
+        "guardahd" -> {
+            if (linkData.isMovie && linkData.imdbId != null)
+                extractors.tryGuardahd(linkData.imdbId)
+            else false
+        }
+        "vixsrc" -> extractors.tryVixSrc(tmdbId, linkData.season, linkData.episode)
+        "vidsrc" -> extractors.tryVidSrc(tmdbId, linkData.season, linkData.episode)
+        "vidxgo" -> {
+            if (linkData.imdbId != null)
+                extractors.tryVidxGo(linkData.imdbId, linkData.season, linkData.episode)
+            else false
+        }
+        "cinemacity" -> runCinemaCity(linkData, subtitleCallback, callback)
+        "animeunity" -> runAnimeUnity(linkData, subtitleCallback, callback)
+        "animeworld" -> runAnimeWorld(linkData, subtitleCallback, callback)
+        "animesaturn" -> runAnimeSaturn(linkData, callback)
+        else -> false
+    }
+
+    private suspend fun runSubtitles(linkData: LinkData, subtitleCallback: (SubtitleFile) -> Unit) {
+        if (sharedPref?.getBoolean(StreamITAPlugin.extractorEnabledKey("subtitle"), true) != true) return
+        linkData.imdbId?.let { imdbId ->
+            StreamITASubtitles.loadWyzieSubs(imdbId, linkData.season, linkData.episode, subtitleCallback)
+            StreamITASubtitles.loadOpenSubtitles(imdbId, linkData.season, linkData.episode, subtitleCallback)
+        }
+    }
+
+    private suspend fun runCinemaCity(
+        linkData: LinkData,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (!isExtractorEnabled("cinemacity", true)) return false
+        val imdbId = linkData.imdbId ?: return false
+        val timeout = extractorTimeoutMs("cinemacity", 60)
+        return withTimeoutOrNull(timeout) {
+            CinemaCityScraper.loadLinks(
+                imdbId = imdbId,
+                season = linkData.season,
+                episode = linkData.episode,
+                subtitleCallback = subtitleCallback,
+                callback = callback,
+            )
+        } ?: false
+    }
+
+    private suspend fun runAnimeUnity(
+        linkData: LinkData,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (!isExtractorEnabled("animeunity", true)) return false
+        val title = linkData.title ?: return false
+        val timeout = extractorTimeoutMs("animeunity", 30)
+        return withTimeoutOrNull(timeout) {
+            AnimeUnityScraper.loadLinks(
+                title = title,
+                tmdbId = linkData.id,
+                isMovie = linkData.isMovie,
+                season = linkData.season,
+                episode = linkData.episode,
+                subtitleCallback = subtitleCallback,
+                callback = callback,
+                fetchEnglishTitle = { id, isMov -> fetchEnglishTitle(id, isMov) }
+            )
+        } ?: false
+    }
+
+    private suspend fun runAnimeWorld(
+        linkData: LinkData,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (!isExtractorEnabled("animeworld", true)) return false
+        val title = linkData.title ?: return false
+        val timeout = extractorTimeoutMs("animeworld", 30)
+        return withTimeoutOrNull(timeout) {
+            val tmdbIdLocal = linkData.id
+            val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
+
+            val sources = AnimeWorldScraper.searchWithSources(
+                title = title,
+                tmdbId = tmdbIdLocal,
+                englishTitle = enTitle
+            )
+
+            val animeToTry = listOfNotNull(sources.sub, sources.dub)
+            var any = false
+
+            for (anime in animeToTry) {
+                val episodes = AnimeWorldScraper.loadEpisodes(anime.url)
+
+                val targetEp = if (linkData.season == null) {
+                    episodes.firstOrNull()
+                } else {
+                    episodes.find { it.number == linkData.episode.toString() }
+                }
+
+                if (targetEp != null) {
+                    val info = AnimeWorldScraper.getEpisodeInfo(anime.url, targetEp.token, anime.isDub)
+                    if (info != null) {
+                        val success = AnimeWorldScraper.loadLinks(info, subtitleCallback, callback)
+                        if (success) {
+                            any = true
+                            StreamITALogger.log(TAG, "AnimeWorld OK: link trovato per ep.${targetEp.number} (${if (anime.isDub) "DUB" else "SUB"})")
+                        }
+                    }
+                }
+            }
+
+            any
+        } ?: false
+    }
+
+    private suspend fun runAnimeSaturn(
+        linkData: LinkData,
+        callback: (ExtractorLink) -> Unit
+    ): Boolean {
+        if (!isExtractorEnabled("animesaturn", true)) return false
+        val title = linkData.title ?: return false
+        val timeout = extractorTimeoutMs("animesaturn", 30)
+        return withTimeoutOrNull(timeout) {
+            val tmdbIdLocal = linkData.id
+            val enTitle = if (tmdbIdLocal != null) fetchEnglishTitle(tmdbIdLocal, linkData.isMovie) else null
+
+            val sources = AnimeSaturnScraper.searchWithSources(
+                title = title,
+                tmdbId = tmdbIdLocal,
+                englishTitle = enTitle
+            )
+
+            val animeToTry = listOfNotNull(sources.sub, sources.dub)
+            var any = false
+
+            for (anime in animeToTry) {
+                val episodes = AnimeSaturnScraper.loadEpisodes(anime.url)
+
+                val targetEp = if (linkData.season == null) {
+                    episodes.firstOrNull()
+                } else {
+                    episodes.find { it.number == linkData.episode.toString() }
+                }
+
+                if (targetEp != null) {
+                    val videoUrl = AnimeSaturnScraper.getEpisodeVideoUrl(targetEp.episodeUrl)
+                    if (videoUrl != null) {
+                        val label = if (anime.isDub) "[DUB]" else "[SUB]"
+                        val success = AnimeSaturnScraper.loadLinks(videoUrl, label, callback)
+                        if (success) {
+                            any = true
+                            StreamITALogger.log(TAG, "AnimeSaturn OK: link trovato per ep.${targetEp.number} ($label)")
+                        }
+                    }
+                }
+            }
+
+            any
+        } ?: false
     }
 
     private suspend fun fetchEnglishTitle(tmdbId: Int, isMovie: Boolean): String? {

@@ -18,6 +18,8 @@ class StreamITAPlugin : Plugin() {
         const val PREF_SHOW_LOGO = "show_logo"
         const val PREF_CACHE_HOURS = "cache_hours"
         const val PREF_SHOW_RATING = "show_rating"
+        const val PREF_EXTRACTOR_ORDER = "extractor_order"
+        const val PREF_EXTRACTOR_CONCURRENCY = "extractor_concurrency"
 
         fun extractorEnabledKey(name: String) = "ext_${name.lowercase()}_enabled"
         fun extractorTimeoutKey(name: String) = "ext_${name.lowercase()}_timeout"

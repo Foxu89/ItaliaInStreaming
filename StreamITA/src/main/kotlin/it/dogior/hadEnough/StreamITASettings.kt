@@ -4,9 +4,11 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
+import android.graphics.Typeface
 import androidx.core.content.res.ResourcesCompat
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,6 +16,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
@@ -23,6 +26,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
+import com.lagradost.cloudstream3.utils.AppUtils.toJson
 
 abstract class StreamITABaseSettingsFragment : BottomSheetDialogFragment() {
 
@@ -84,7 +88,7 @@ abstract class StreamITABaseSettingsFragment : BottomSheetDialogFragment() {
                 dismiss()
                 restartApp()
             }
-            .setNegativeButton("Più tardi", null)
+            .setNegativeButton("Pi� tardi", null)
             .show()
     }
 
@@ -100,6 +104,11 @@ abstract class StreamITABaseSettingsFragment : BottomSheetDialogFragment() {
         } else {
             showToast("Impossibile riavviare automaticamente l'app. Chiudila e riaprila manualmente.")
         }
+    }
+
+    protected fun dpToPx(dp: Int): Int {
+        val density = resources?.displayMetrics?.density ?: 1f
+        return (dp * density).toInt()
     }
 }
 
@@ -216,108 +225,410 @@ class StreamITAGeneralSettings : StreamITABaseSettingsFragment() {
 class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
     override val layoutName: String = "settings_streamita_extractors"
 
-    private data class ExtractorEntry(
+    private data class ExtractorDef(
         val key: String,
+        val label: String,
+        val description: String,
         val defaultEnabled: Boolean,
-        val defaultTimeout: Int
+        val defaultTimeout: Int,
+        val children: List<ExtractorDef>? = null
     )
 
-    private val extractors = listOf(
-        ExtractorEntry("vixsrc", true, 15),
-        ExtractorEntry("vidsrc", true, 15),
-        ExtractorEntry("streamhg", true, 15),
-        ExtractorEntry("mixdrop", true, 30),
-        ExtractorEntry("dropload", true, 15),
-        ExtractorEntry("cinemacity", true, 60),
-        ExtractorEntry("animeunity", true, 30),
-        ExtractorEntry("animeworld", true, 30),
-        ExtractorEntry("animesaturn", true, 30),
-        ExtractorEntry("vidxgo", true, 20),
-        ExtractorEntry("subtitle", true, 15),
+    private val allDefs = listOf(
+        ExtractorDef("vixsrc", "VixSrc", "Estrattore basato su WebView (vixsrc.to)", true, 15),
+        ExtractorDef("vidsrc", "VidSrc", "Estrattore WebView (vidsrc.ru)", true, 15),
+        ExtractorDef("guardahd", "Guardahd", "DropLoad, MixDrop, StreamHG", true, 15, children = listOf(
+            ExtractorDef("dropload", "DropLoad", "Estrattore WebView (dr0pstream.com)", true, 15),
+            ExtractorDef("mixdrop", "MixDrop", "Estrattore WebView con auto-click (mixdrop.top)", true, 30),
+            ExtractorDef("streamhg", "StreamHG", "Estrattore WebView (dhcplay.com)", true, 15),
+        )),
+        ExtractorDef("cinemacity", "CinemaCity", "Estrattore PlayerJS (cinemacity.cc)", true, 60),
+        ExtractorDef("animeunity", "AnimeUnity", "Scraper anime (animeunity.so)", true, 30),
+        ExtractorDef("animeworld", "AnimeWorld", "Scraper anime (animeworld.ac)", true, 30),
+        ExtractorDef("animesaturn", "AnimeSaturn", "Scraper anime (animesaturn.cx)", true, 30),
+        ExtractorDef("vidxgo", "VidxGo", "Estrattore WebView (v.vidxgo.co)", true, 20),
+        ExtractorDef("subtitle", "Subtitle", "Cercatore sottotitoli", true, 15),
     )
 
+    private val defaultOrder = listOf(
+        "vixsrc", "vidxgo", "cinemacity", "guardahd", "vidsrc",
+        "animeunity", "animeworld", "animesaturn", "subtitle"
+    )
+
+    private val allKeys = allDefs.flatMap { def ->
+        if (def.children != null) def.children.map { it.key } + def.key else listOf(def.key)
+    }.toSet()
+
+    private val currentOrder = mutableListOf<String>()
     private val enabledState = mutableMapOf<String, Boolean>()
     private val timeoutState = mutableMapOf<String, String>()
+    private var currentConcurrency = 3
 
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        for (entry in extractors) {
-            val card = view.findViewByName<View>("ext_${entry.key}_card") ?: continue
-            card.applyOutlineBackground()
-            view.findViewByName<View>("ext_${entry.key}_timeout_bg")?.applyOutlineBackground()
+        loadSavedState()
+        initEnabledTimeoutState()
 
-            val enabled = sharedPref?.getBoolean(
-                StreamITAPlugin.extractorEnabledKey(entry.key), entry.defaultEnabled
-            ) ?: entry.defaultEnabled
-            enabledState[entry.key] = enabled
+        view.findViewByName<View>("concurrency_card")?.applyOutlineBackground()
+        view.findViewByName<View>("reset_order_btn")?.applyOutlineBackground()
 
-            val savedTimeout = sharedPref?.getString(
-                StreamITAPlugin.extractorTimeoutKey(entry.key), null
-            )
-            timeoutState[entry.key] = savedTimeout ?: ""
+        val concurrencyValue: TextView? = view.findViewByName("concurrency_value")
+        concurrencyValue?.text = currentConcurrency.toString()
 
-            val switch = view.findViewByName<Switch>("ext_${entry.key}_switch")
-            switch?.text = ""
-            switch?.isChecked = enabled
-            switch?.setOnCheckedChangeListener { _, isChecked ->
-                enabledState[entry.key] = isChecked
+        view.findViewByName<View>("concurrency_minus")?.setOnClickListener {
+            if (currentConcurrency > 1) {
+                currentConcurrency--
+                concurrencyValue?.text = currentConcurrency.toString()
             }
-
-            val timeoutView = view.findViewByName<TextView>("ext_${entry.key}_timeout")
-            val displayText = savedTimeout ?: entry.defaultTimeout.toString()
-            timeoutView?.text = displayText
-            timeoutView?.setOnClickListener {
-                val ctx = context ?: return@setOnClickListener
-                val input = EditText(ctx)
-                input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                input.setText(timeoutState[entry.key]?.takeIf { it.isNotEmpty() } ?: entry.defaultTimeout.toString())
-                input.setSelection(input.text.length)
-                input.gravity = android.view.Gravity.CENTER
-
-                AlertDialog.Builder(ctx)
-                    .setTitle("Timeout - ${entry.key.replaceFirstChar { it.uppercaseChar() }}")
-                    .setMessage("Inserisci il timeout in secondi")
-                    .setView(input)
-                    .setPositiveButton("OK") { _, _ ->
-                        val text = input.text.toString().trim()
-                        if (text.isNotEmpty() && text.toIntOrNull() != null && (text.toIntOrNull() ?: 0) > 0) {
-                            timeoutState[entry.key] = text
-                            timeoutView.text = text
-                        } else {
-                            timeoutState[entry.key] = ""
-                            timeoutView.text = entry.defaultTimeout.toString()
-                        }
-                    }
-                    .setNegativeButton("Annulla", null)
-                    .show()
+        }
+        view.findViewByName<View>("concurrency_plus")?.setOnClickListener {
+            if (currentConcurrency < 15) {
+                currentConcurrency++
+                concurrencyValue?.text = currentConcurrency.toString()
             }
         }
 
-        setupSaveButton(view) {
-            val editor = sharedPref?.edit()
-            if (editor != null) {
-                for (entry in extractors) {
-                    val enabled = enabledState[entry.key] ?: entry.defaultEnabled
-                    editor.putBoolean(
-                        StreamITAPlugin.extractorEnabledKey(entry.key), enabled
-                    )
+        view.findViewByName<View>("reset_order_btn")?.setOnClickListener {
+            currentOrder.clear()
+            currentOrder.addAll(defaultOrder)
+            rebuildCards(view)
+        }
 
-                    val timeoutStr = timeoutState[entry.key] ?: ""
-                    if (timeoutStr.isNotEmpty() && timeoutStr.toIntOrNull() != null && (timeoutStr.toIntOrNull() ?: 0) > 0) {
-                        editor.putString(
-                            StreamITAPlugin.extractorTimeoutKey(entry.key), timeoutStr
-                        )
-                    } else {
-                        editor.remove(StreamITAPlugin.extractorTimeoutKey(entry.key))
-                    }
+        rebuildCards(view)
+
+        setupSaveButton(view) { saveSettings() }
+    }
+
+    private fun loadSavedState() {
+        val savedOrder = sharedPref?.getString(StreamITAPlugin.PREF_EXTRACTOR_ORDER, null)
+        if (savedOrder != null) {
+            try {
+                val parsed = com.lagradost.cloudstream3.utils.AppUtils.parseJson<List<String>>(savedOrder)
+                currentOrder.addAll(parsed.filter { it in allKeys })
+            } catch (_: Exception) {}
+        }
+        if (currentOrder.isEmpty()) currentOrder.addAll(defaultOrder)
+
+        currentConcurrency = sharedPref?.getInt(StreamITAPlugin.PREF_EXTRACTOR_CONCURRENCY, 3) ?: 3
+    }
+
+    private fun initEnabledTimeoutState() {
+        for (def in allDefs) {
+            val defsToInit = if (def.children != null) def.children else listOf(def)
+            for (d in defsToInit) {
+                if (d.key !in enabledState) {
+                    enabledState[d.key] = sharedPref?.getBoolean(
+                        StreamITAPlugin.extractorEnabledKey(d.key), d.defaultEnabled
+                    ) ?: d.defaultEnabled
+                    timeoutState[d.key] = sharedPref?.getString(
+                        StreamITAPlugin.extractorTimeoutKey(d.key), null
+                    ) ?: ""
                 }
-                editor.apply()
             }
-            showToast("Modifiche in Estrattori salvate")
-            dismiss()
         }
+    }
+
+    private fun rebuildCards(containerView: View) {
+        val containerLayout: LinearLayout? = containerView.findViewByName("extractor_container")
+        containerLayout?.removeAllViews()
+
+        for ((index, orderKey) in currentOrder.withIndex()) {
+            if (orderKey == "guardahd") {
+                val def = allDefs.first { it.key == "guardahd" }
+                containerLayout?.addView(buildGuardahdCard(containerView, def, index))
+            } else {
+                val def = allDefs.firstOrNull { it.key == orderKey }
+                    ?: allDefs.flatMap { it.children ?: emptyList() }.firstOrNull { it.key == orderKey }
+                if (def != null) {
+                    containerLayout?.addView(buildNormalCard(containerView, def, index))
+                }
+            }
+        }
+    }
+
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    private fun buildNormalCard(containerView: View, def: ExtractorDef, position: Int): View {
+        val ctx = requireContext()
+        val inflater = LayoutInflater.from(ctx)
+        val layoutId = res.getIdentifier("settings_streamita_extractor_card", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val card = inflater.inflate(res.getLayout(layoutId), containerView as ViewGroup?, false)
+
+        card.applyOutlineBackground()
+
+        val posView: TextView? = card.findViewByName("ext_pos")
+        posView?.text = (position + 1).toString()
+        posView?.applyOutlineBackground()
+        posView?.setOnClickListener {
+            showPositionDialog(def.key, position)
+        }
+
+        val upView: TextView? = card.findViewByName("ext_up")
+        upView?.setOnClickListener { moveItem(def.key, -1); rebuildCards(requireView()) }
+
+        val downView: TextView? = card.findViewByName("ext_down")
+        downView?.setOnClickListener { moveItem(def.key, 1); rebuildCards(requireView()) }
+
+        val labelView: TextView? = card.findViewByName("ext_label")
+        labelView?.text = def.label
+
+        val descView: TextView? = card.findViewByName("ext_description")
+        descView?.text = def.description
+
+        val switchView: Switch? = card.findViewByName("ext_switch")
+        switchView?.isChecked = enabledState[def.key] ?: def.defaultEnabled
+        switchView?.setOnCheckedChangeListener { _, isChecked ->
+            enabledState[def.key] = isChecked
+        }
+
+        card.findViewByName<View>("ext_timeout_bg")?.applyOutlineBackground()
+
+        val timeoutView: TextView? = card.findViewByName("ext_timeout")
+        val displayText = timeoutState[def.key]?.takeIf { it.isNotEmpty() } ?: def.defaultTimeout.toString()
+        timeoutView?.text = displayText
+        timeoutView?.setOnClickListener {
+            showTimeoutDialog(def, timeoutView)
+        }
+
+        return card
+    }
+
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    private fun buildGuardahdCard(containerView: View, def: ExtractorDef, position: Int): View {
+        val ctx = requireContext()
+        val card = LinearLayout(ctx).apply {
+            layoutParams = ViewGroup.MarginLayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).also { it.topMargin = dpToPx(8) }
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(14), dpToPx(14), dpToPx(14), dpToPx(14))
+            setBackgroundDrawable(getDrawable("outline"))
+        }
+
+        val row = LinearLayout(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            minimumHeight = dpToPx(52)
+            setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10))
+        }
+
+        val posBadge = TextView(ctx).apply {
+            text = (position + 1).toString()
+            gravity = Gravity.CENTER
+            textSize = 11f
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = ViewGroup.LayoutParams(dpToPx(28), dpToPx(28))
+            setBackgroundDrawable(getDrawable("outline"))
+            setOnClickListener { showPositionDialog(def.key, position) }
+        }
+        row.addView(posBadge)
+
+        val upView = TextView(ctx).apply {
+            text = "\u25B2"
+            gravity = Gravity.CENTER
+            textSize = 10f
+            layoutParams = ViewGroup.LayoutParams(dpToPx(28), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setOnClickListener { moveItem(def.key, -1); rebuildCards(requireView()) }
+        }
+        row.addView(upView)
+
+        val downView = TextView(ctx).apply {
+            text = "\u25BC"
+            gravity = Gravity.CENTER
+            textSize = 10f
+            layoutParams = ViewGroup.LayoutParams(dpToPx(28), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setOnClickListener { moveItem(def.key, 1); rebuildCards(requireView()) }
+        }
+        row.addView(downView)
+
+        val labelContainer = LinearLayout(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(4), 0, 0, 0)
+        }
+
+        val label = TextView(ctx).apply {
+            text = def.label
+            textSize = 13f
+            setTypeface(null, Typeface.BOLD)
+        }
+        labelContainer.addView(label)
+
+        val desc = TextView(ctx).apply {
+            text = def.description
+            textSize = 11f
+            alpha = 0.6f
+        }
+        labelContainer.addView(desc)
+        row.addView(labelContainer)
+        card.addView(row)
+
+        // Sub-items for guardahd children
+        val childrenContainer = LinearLayout(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(16), 0, dpToPx(8), 0)
+        }
+
+        def.children?.forEach { child ->
+            val childRow = LinearLayout(ctx).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+                minimumHeight = dpToPx(44)
+                setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
+            }
+
+            val childLabel = TextView(ctx).apply {
+                text = child.label
+                textSize = 13f
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            childRow.addView(childLabel)
+
+            val childSwitch = Switch(ctx).apply {
+                layoutParams = ViewGroup.LayoutParams(dpToPx(42), ViewGroup.LayoutParams.WRAP_CONTENT)
+                switchMinWidth = dpToPx(28)
+                text = ""
+                isChecked = enabledState[child.key] ?: child.defaultEnabled
+                setOnCheckedChangeListener { _, isChecked ->
+                    enabledState[child.key] = isChecked
+                }
+            }
+            childRow.addView(childSwitch)
+            childrenContainer.addView(childRow)
+
+            // Timeout row for child
+            val childTimeoutRow = LinearLayout(ctx).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dpToPx(12), 0, dpToPx(12), dpToPx(8))
+            }
+
+            val childTimeoutLabel = TextView(ctx).apply {
+                text = "Timeout (secondi)"
+                textSize = 12f
+                alpha = 0.6f
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            childTimeoutRow.addView(childTimeoutLabel)
+
+            val childTimeoutBg = LinearLayout(ctx).apply {
+                layoutParams = ViewGroup.LayoutParams(dpToPx(60), dpToPx(36))
+                gravity = Gravity.CENTER
+                setBackgroundDrawable(getDrawable("outline"))
+            }
+
+            val childTimeout = TextView(ctx).apply {
+                val displayText = timeoutState[child.key]?.takeIf { it.isNotEmpty() } ?: child.defaultTimeout.toString()
+                text = displayText
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setOnClickListener { showTimeoutDialog(child, this) }
+            }
+            childTimeoutBg.addView(childTimeout)
+            childTimeoutRow.addView(childTimeoutBg)
+            childrenContainer.addView(childTimeoutRow)
+        }
+
+        card.addView(childrenContainer)
+        return card
+    }
+
+    private fun moveItem(key: String, delta: Int) {
+        val idx = currentOrder.indexOf(key)
+        if (idx < 0) return
+        val newIdx = idx + delta
+        if (newIdx < 0 || newIdx >= currentOrder.size) return
+        currentOrder.removeAt(idx)
+        currentOrder.add(newIdx, key)
+    }
+
+    private fun showPositionDialog(key: String, currentPos: Int) {
+        val ctx = context ?: return
+        val input = EditText(ctx).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText((currentPos + 1).toString())
+            setSelection(text.length)
+            gravity = Gravity.CENTER
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle("Vai alla posizione")
+            .setMessage("Inserisci la posizione per ${key.replaceFirstChar { it.uppercaseChar() }}")
+            .setView(input)
+            .setPositiveButton("OK") { _, _ ->
+                val text = input.text.toString().trim()
+                val targetPos = text.toIntOrNull()?.minus(1) ?: return@setPositiveButton
+                if (targetPos in currentOrder.indices && targetPos != currentPos) {
+                    currentOrder.removeAt(currentPos)
+                    currentOrder.add(targetPos, key)
+                    rebuildCards(requireView())
+                }
+            }
+            .setNegativeButton("Annulla", null)
+            .show()
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun showTimeoutDialog(def: ExtractorDef, timeoutView: TextView) {
+        val ctx = context ?: return
+        val input = EditText(ctx).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(timeoutState[def.key]?.takeIf { it.isNotEmpty() } ?: def.defaultTimeout.toString())
+            setSelection(text.length)
+            gravity = Gravity.CENTER
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle("Timeout - ${def.label}")
+            .setMessage("Inserisci il timeout in secondi")
+            .setView(input)
+            .setPositiveButton("OK") { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isNotEmpty() && text.toIntOrNull() != null && (text.toIntOrNull() ?: 0) > 0) {
+                    timeoutState[def.key] = text
+                    timeoutView.text = text
+                } else {
+                    timeoutState[def.key] = ""
+                    timeoutView.text = def.defaultTimeout.toString()
+                }
+            }
+            .setNegativeButton("Annulla", null)
+            .show()
+    }
+
+    private fun saveSettings() {
+        sharedPref?.edit {
+            putString(StreamITAPlugin.PREF_EXTRACTOR_ORDER, toJson(currentOrder))
+            putInt(StreamITAPlugin.PREF_EXTRACTOR_CONCURRENCY, currentConcurrency)
+            for ((key, enabled) in enabledState) {
+                putBoolean(StreamITAPlugin.extractorEnabledKey(key), enabled)
+            }
+            for ((key, timeout) in timeoutState) {
+                if (timeout.isNotEmpty() && timeout.toIntOrNull() != null && (timeout.toIntOrNull() ?: 0) > 0) {
+                    putString(StreamITAPlugin.extractorTimeoutKey(key), timeout)
+                } else {
+                    remove(StreamITAPlugin.extractorTimeoutKey(key))
+                }
+            }
+        }
+        showToast("Modifiche in Estrattori salvate")
+        dismiss()
     }
 }
 
