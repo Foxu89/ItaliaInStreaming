@@ -1,10 +1,13 @@
 package it.dogior.hadEnough
 
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.INFER_TYPE
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -175,17 +178,18 @@ object StreamITAStremioAddonSettings {
                     val extType = when {
                         streamUrl.contains(".m3u8") -> ExtractorLinkType.M3U8
                         streamUrl.contains(".mpd") -> ExtractorLinkType.DASH
-                        else -> ExtractorLinkType.NORMAL
+                        else -> INFER_TYPE
                     }
                     callback(
-                        ExtractorLink(
+                        newExtractorLink(
                             source = sourceName,
                             name = displayName,
                             url = streamUrl,
                             type = extType,
-                            quality = quality,
-                            headers = headers
-                        )
+                        ) {
+                            this.quality = quality
+                            this.headers = headers
+                        }
                     )
                 }
             }
@@ -233,13 +237,14 @@ object StreamITAStremioAddonSettings {
 
                 val quality = getIndexQuality(title)
                 callback(
-                    ExtractorLink(
+                    newExtractorLink(
                         source = sourceName,
                         name = name ?: sourceName,
                         url = magnet,
                         type = ExtractorLinkType.MAGNET,
-                        quality = quality
-                    )
+                    ) {
+                        this.quality = quality
+                    }
                 )
             }
         } catch (_: Exception) { }
