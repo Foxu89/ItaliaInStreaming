@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
 import androidx.core.content.res.ResourcesCompat
 import android.graphics.drawable.Drawable
 import android.os.Bundle
@@ -18,6 +19,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -331,13 +333,13 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
-                )
+                ).apply { bottomMargin = dpToPx(10) }
                 orientation = LinearLayout.VERTICAL
                 setPadding(dpToPx(14), dpToPx(10), dpToPx(14), dpToPx(10))
                 setBackgroundDrawable(getDrawable("outline"))
             }
 
-            // Inner row: type badge + name + switch + X
+            // Inner row: name + switch + settings
             val innerRow = LinearLayout(requireContext()).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -347,29 +349,6 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
                 orientation = LinearLayout.HORIZONTAL
                 minimumHeight = dpToPx(44)
             }
-
-            // Type badge (clickable to cycle)
-            val typeBadge = TextView(requireContext()).apply {
-                text = when (addon.type) {
-                    StreamITAAddonType.HTTPS -> "HTTPS"
-                    StreamITAAddonType.TORRENT -> "TORRENT"
-                    StreamITAAddonType.DEBRID -> "DEBRID"
-                    StreamITAAddonType.SUBTITLE -> "SUBTITLE"
-                }
-                textSize = 9f
-                setTypeface(null, Typeface.BOLD)
-                gravity = Gravity.CENTER
-                layoutParams = ViewGroup.LayoutParams(dpToPx(58), dpToPx(24))
-                setPadding(dpToPx(4), 0, dpToPx(4), 0)
-                setBackgroundDrawable(getDrawable("outline"))
-                setOnClickListener {
-                    val currentIdx = StreamITAAddonType.values().indexOf(addon.type)
-                    val nextIdx = (currentIdx + 1) % StreamITAAddonType.values().size
-                    addon.type = StreamITAAddonType.values()[nextIdx]
-                    rebuildAddonRows(view)
-                }
-            }
-            innerRow.addView(typeBadge)
 
             // Name
             val nameText = TextView(requireContext()).apply {
@@ -392,13 +371,35 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
             }
             innerRow.addView(switch)
 
-            // X delete button
-            val deleteBtn = TextView(requireContext()).apply {
-                text = "✕"
-                textSize = 16f
+            // Settings icon (opens /configure in browser)
+            val settingsBtn = ImageView(requireContext()).apply {
+                layoutParams = ViewGroup.LayoutParams(dpToPx(28), dpToPx(28))
+                setImageDrawable(getDrawable("settings"))
+                setOnClickListener {
+                    val configureUrl = addon.url
+                        .replace("/manifest.json", "")
+                        .trimEnd('/') + "/configure"
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(configureUrl))
+                    requireContext().startActivity(intent)
+                }
+            }
+            innerRow.addView(settingsBtn)
+            row.addView(innerRow)
+
+            // Remove button
+            val removeBtn = TextView(requireContext()).apply {
+                text = "RIMUOVI"
+                textSize = 13f
+                setTypeface(null, Typeface.BOLD)
                 gravity = Gravity.CENTER
-                layoutParams = ViewGroup.LayoutParams(dpToPx(36), dpToPx(36))
-                setTextColor(Color.parseColor("#FFFF4444"))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dpToPx(42)
+                ).apply { topMargin = dpToPx(10) }
+                val dangerDrawable = getDrawable("outline_danger")
+                if (dangerDrawable != null) background = dangerDrawable
+                else applyOutlineBackground()
+                setTextColor(Color.parseColor("#FFFF7F7F"))
                 setOnClickListener {
                     AlertDialog.Builder(requireContext())
                         .setTitle("Rimuovi addon")
@@ -411,25 +412,7 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
                         .show()
                 }
             }
-            innerRow.addView(deleteBtn)
-            row.addView(innerRow)
-
-            // URL sub-row
-            val urlRow = LinearLayout(requireContext()).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-                setPadding(dpToPx(4), dpToPx(4), dpToPx(4), 0)
-            }
-
-            val urlText = TextView(requireContext()).apply {
-                text = addon.url
-                textSize = 11f
-                alpha = 0.5f
-            }
-            urlRow.addView(urlText)
-            row.addView(urlRow)
+            row.addView(removeBtn)
 
             container?.addView(row)
         }
