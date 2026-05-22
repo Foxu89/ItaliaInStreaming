@@ -312,9 +312,13 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
         stremioAddons.addAll(StreamITAStremioAddonSettings.getStremioAddons(sharedPref))
         rebuildAddonRows(view)
 
-        // "+" button
-        view.findViewByName<View>("add_addon_btn")?.setOnClickListener {
-            showAddAddonDialog()
+        // "AGGIUNGI" button
+        view.findViewByName<TextView>("add_addon_btn")?.let { btn ->
+            val greenDrawable = getDrawable("outline_green")
+            if (greenDrawable != null) btn.background = greenDrawable
+            else btn.applyOutlineBackground()
+            btn.setTextColor(Color.parseColor("#997CFF9D"))
+            btn.setOnClickListener { showAddAddonDialog() }
         }
 
         setupSaveButton(view) { saveSettings() }

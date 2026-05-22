@@ -1067,7 +1067,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginTop="12dp"
-                android:background="@drawable/outline_green"
                 android:gravity="center"
                 android:text="AGGIUNGI"
                 android:textSize="14sp"
