@@ -318,9 +318,6 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
         setupSaveButton(view) { saveSettings() }
     }
 
-    private fun Context.dpToPx(dp: Int): Int =
-        (dp * resources.displayMetrics.density).toInt()
-
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private fun rebuildAddonRows(view: View) {
         val container: LinearLayout? = view.findViewByName("addon_container")
@@ -628,3 +625,6 @@ class StreamITAAdvancedSettings : StreamITABaseSettingsFragment() {
         }
     }
 }
+
+private fun Context.dpToPx(dp: Int): Int =
+    (dp * resources.displayMetrics.density).toInt()
