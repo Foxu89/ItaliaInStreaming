@@ -95,7 +95,9 @@ object StreamITAStremioAddonSettings {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Map<String, suspend () -> Unit> {
-        return getStremioAddons(sharedPref).associate { addon ->
+        return getStremioAddons(sharedPref)
+            .filter { isEnabled(sharedPref, it.name) }
+            .associate { addon ->
             val key = stremioAddonKey(addon.name)
             key to suspend {
                 when (addon.type) {

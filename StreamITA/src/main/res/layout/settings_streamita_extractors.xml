@@ -1052,13 +1052,6 @@
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <LinearLayout
-                    android:id="@+id/addon_container"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="vertical" />
-
                 <TextView
                     android:id="@+id/add_addon_btn"
                     android:layout_width="match_parent"
@@ -1068,6 +1061,13 @@
                     android:text="AGGIUNGI"
                     android:textSize="14sp"
                     android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/addon_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
