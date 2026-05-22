@@ -343,7 +343,7 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
                 setBackgroundDrawable(getDrawable("outline"))
             }
 
-            // Inner row: name + switch + settings
+            // Inner row: name + switch
             val innerRow = LinearLayout(requireContext()).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -374,32 +374,28 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
                 }
             }
             innerRow.addView(switch)
-
-            // Settings icon (opens /configure in browser)
-            val settingsBtn = ImageView(requireContext()).apply {
-                layoutParams = ViewGroup.LayoutParams(dpToPx(28), dpToPx(28))
-                setImageDrawable(getDrawable("settings"))
-                setOnClickListener {
-                    val configureUrl = addon.url
-                        .replace("/manifest.json", "")
-                        .trimEnd('/') + "/configure"
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(configureUrl))
-                    requireContext().startActivity(intent)
-                }
-            }
-            innerRow.addView(settingsBtn)
             row.addView(innerRow)
 
-            // Remove button
+            // Bottom row: remove button + settings icon
+            val bottomRow = LinearLayout(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dpToPx(10) }
+                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+            }
+
             val removeBtn = TextView(requireContext()).apply {
                 text = "RIMUOVI"
                 textSize = 13f
                 setTypeface(null, Typeface.BOLD)
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    dpToPx(42)
-                ).apply { topMargin = dpToPx(10) }
+                    0,
+                    dpToPx(42),
+                    1f
+                )
                 val dangerDrawable = getDrawable("outline_danger")
                 if (dangerDrawable != null) background = dangerDrawable
                 else applyOutlineBackground()
@@ -416,7 +412,22 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
                         .show()
                 }
             }
-            row.addView(removeBtn)
+            bottomRow.addView(removeBtn)
+
+            // Settings icon (opens /configure in browser)
+            val settingsBtn = ImageView(requireContext()).apply {
+                layoutParams = ViewGroup.LayoutParams(dpToPx(28), dpToPx(28))
+                setImageDrawable(getDrawable("settings"))
+                setOnClickListener {
+                    val configureUrl = addon.url
+                        .replace("/manifest.json", "")
+                        .trimEnd('/') + "/configure"
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(configureUrl))
+                    requireContext().startActivity(intent)
+                }
+            }
+            bottomRow.addView(settingsBtn)
+            row.addView(bottomRow)
 
             container?.addView(row)
         }
