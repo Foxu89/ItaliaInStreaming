@@ -31,6 +31,10 @@ import it.dogior.hadEnough.StreamITAStremioAddonSettings.getDynamicStremioMap
 import org.json.JSONArray
 import org.json.JSONObject
 
+private fun String.fixSourceUrl(): String {
+    return this.replace("/manifest.json", "").replace("stremio://", "https://")
+}
+
 data class StreamITAStremioCatelogAddon(
     val id: Long,
     val name: String,
@@ -52,7 +56,7 @@ object StreamITAStremioCatelogSettings {
                 StreamITAStremioCatelogAddon(
                     id = obj.optLong("id", System.currentTimeMillis()),
                     name = obj.optString("name", link).ifBlank { link },
-                    url = link.trimEnd('/')
+                    url = link.fixSourceUrl().trimEnd('/')
                 )
             }
         } catch (_: Exception) { emptyList() }
@@ -100,7 +104,7 @@ class StreamITAStremioCatelog(
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         if (mainUrl.isEmpty()) throw IllegalArgumentException("Configure catalog addon URL in settings")
-        mainUrl = mainUrl.trimEnd('/')
+        mainUrl = mainUrl.fixSourceUrl()
 
         val pageSize = 100
         val skip = (page - 1) * pageSize
@@ -114,7 +118,7 @@ class StreamITAStremioCatelog(
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        mainUrl = mainUrl.trimEnd('/')
+        mainUrl = mainUrl.fixSourceUrl()
         val manifest = app.get("$mainUrl/manifest.json").parsedSafe<CatelogManifest>()
         val results = manifest?.catalogs?.amap { catalog ->
             catalog.search(query, this)
@@ -130,6 +134,8 @@ class StreamITAStremioCatelog(
             val metaJson = JSONObject(json).getJSONObject("meta").toString()
             parseJson(metaJson)
         }
+
+        mainUrl = mainUrl.fixSourceUrl()
 
         var response = app.get("$mainUrl/meta/${res.type}/${res.id}.json")
             .parsedSafe<CatelogResponse>()
