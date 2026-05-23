@@ -84,6 +84,9 @@ abstract class StreamITABaseSettingsFragment : BottomSheetDialogFragment() {
         saveBtn?.setOnClickListener { onClick() }
     }
 
+    protected fun dpToPx(dp: Int): Int =
+        (dp * requireContext().resources.displayMetrics.density).toInt()
+
     protected fun promptRestartAfterSave(message: String) {
         val context = context ?: return
         AlertDialog.Builder(context)
@@ -323,9 +326,6 @@ class StreamITAExtractorsSettings : StreamITABaseSettingsFragment() {
 
         setupSaveButton(view) { saveSettings() }
     }
-
-    private fun dpToPx(dp: Int): Int =
-        (dp * requireContext().resources.displayMetrics.density).toInt()
 
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private fun rebuildAddonRows(view: View) {
@@ -567,7 +567,7 @@ class StreamITAUISettings : StreamITABaseSettingsFragment() {
 
         view.findViewByName<View>("catelog_settings_card")?.applyOutlineBackground()
         view.findViewByName<View>("catelog_settings_card")?.setOnClickListener {
-            StreamITAStremioCatelogSettings().show(parentFragmentManager, "CatelogSettings")
+            StreamITACatelogSettingsFragment().show(parentFragmentManager, "CatelogSettings")
         }
 
         val logoSwitch: Switch? = view.findViewByName("show_logo_switch")
@@ -632,7 +632,7 @@ class StreamITAAdvancedSettings : StreamITABaseSettingsFragment() {
     }
 }
 
-class StreamITAStremioCatelogSettings : StreamITABaseSettingsFragment() {
+class StreamITACatelogSettingsFragment : StreamITABaseSettingsFragment() {
     override val layoutName: String = "settings_streamita_catelog"
 
     private val catelogAddons = mutableListOf<StreamITAStremioCatelogAddon>()

@@ -17,6 +17,7 @@ import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.amap
+import com.lagradost.cloudstream3.runAllAsync
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newHomePageResponse
@@ -159,13 +160,13 @@ class StreamITAStremioCatelog(
             sharedPref, imdb, res.season, res.episode, subtitleCallback, callback
         ).values
 
-        kotlinx.coroutines.coroutineScope {
-            stremioAddons.forEach { action ->
-                kotlinx.coroutines.launch {
+        runAllAsync(
+            *stremioAddons.map { action ->
+                suspend {
                     try { action() } catch (_: Throwable) {}
                 }
-            }
-        }
+            }.toTypedArray()
+        )
         return true
     }
 
