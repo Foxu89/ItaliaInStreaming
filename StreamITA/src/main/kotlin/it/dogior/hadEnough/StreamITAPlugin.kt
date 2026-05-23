@@ -3,6 +3,8 @@ package it.dogior.hadEnough
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatActivity
+import com.lagradost.api.Log
+import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
 import java.io.File
@@ -31,12 +33,34 @@ class StreamITAPlugin : Plugin() {
         StreamITACache.setDiskDirectory(File(context.cacheDir, "streamita_cache"))
 
         registerMainAPI(StreamITA(sharedPref))
+        reload(context)
 
         openSettings = { ctx ->
             val activity = ctx as AppCompatActivity
             activePlugin = this
             activeSharedPref = sharedPref
             StreamITASettings().show(activity.supportFragmentManager, "StreamITASettings")
+        }
+    }
+
+    private fun reload(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences("StreamITA", Context.MODE_PRIVATE)
+            val addons = StreamITAStremioCatelogSettings.getAddons(prefs)
+            for (addon in addons) {
+                if (StreamITAStremioCatelogSettings.isEnabled(prefs, addon.name)) {
+                    try {
+                        registerMainAPI(StreamITAStremioCatelog(addon.url, addon.name, sharedPref = prefs))
+                    } catch (_: Throwable) {
+                        try { registerMainAPI(StreamITAStremioCatelog("", addon.name, sharedPref = prefs)) } catch (_: Throwable) {}
+                    }
+                }
+            }
+            try {
+                MainActivity.afterPluginsLoadedEvent.invoke(true)
+            } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            Log.e("StreamITAPlugin", "reload error ${e.message}")
         }
     }
 }

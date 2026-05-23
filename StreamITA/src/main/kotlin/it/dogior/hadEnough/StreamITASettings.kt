@@ -565,6 +565,11 @@ class StreamITAUISettings : StreamITABaseSettingsFragment() {
         view.findViewByName<View>("ui_options_card")?.applyOutlineBackground()
         view.findViewByName<View>("show_rating_card")?.applyOutlineBackground()
 
+        view.findViewByName<View>("catelog_settings_card")?.applyOutlineBackground()
+        view.findViewByName<View>("catelog_settings_card")?.setOnClickListener {
+            StreamITAStremioCatelogSettings().show(parentFragmentManager, "CatelogSettings")
+        }
+
         val logoSwitch: Switch? = view.findViewByName("show_logo_switch")
         logoSwitch?.text = ""
         logoSwitch?.isChecked = showLogo
@@ -624,6 +629,187 @@ class StreamITAAdvancedSettings : StreamITABaseSettingsFragment() {
             showToast("Modifiche in Avanzate salvate")
             dismiss()
         }
+    }
+}
+
+class StreamITAStremioCatelogSettings : StreamITABaseSettingsFragment() {
+    override val layoutName: String = "settings_streamita_catelog"
+
+    private val catelogAddons = mutableListOf<StreamITAStremioCatelogAddon>()
+
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        view.findViewByName<View>("catelog_header_row")?.applyOutlineBackground()
+
+        catelogAddons.clear()
+        catelogAddons.addAll(StreamITAStremioCatelogSettings.getAddons(sharedPref))
+        rebuildRows(view)
+
+        val addBtn = view.findViewByName<TextView>("add_catelog_btn")
+        addBtn?.let { btn ->
+            val greenDrawable = getDrawable("outline_green")
+            if (greenDrawable != null) btn.background = greenDrawable
+            else btn.applyOutlineBackground()
+            btn.setTextColor(Color.parseColor("#997CFF9D"))
+            btn.setOnClickListener { showAddDialog() }
+        }
+
+        setupSaveButton(view) {
+            StreamITAStremioCatelogSettings.saveAddons(sharedPref, catelogAddons)
+            showToast("Modifiche in Cataloghi salvate. Riavvia per applicare.")
+            dismiss()
+        }
+    }
+
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    private fun rebuildRows(view: View) {
+        val container: LinearLayout? = view.findViewByName("catelog_container")
+        container?.removeAllViews()
+
+        for (addon in catelogAddons) {
+            val row = LinearLayout(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = dpToPx(10) }
+                orientation = LinearLayout.VERTICAL
+                setPadding(dpToPx(14), dpToPx(10), dpToPx(14), dpToPx(10))
+                setBackgroundDrawable(getDrawable("outline"))
+            }
+
+            val innerRow = LinearLayout(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+                minimumHeight = dpToPx(44)
+            }
+
+            val nameText = TextView(requireContext()).apply {
+                text = addon.name
+                textSize = 13f
+                setTypeface(null, Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                setPadding(dpToPx(8), 0, dpToPx(8), 0)
+            }
+            innerRow.addView(nameText)
+
+            val switch = Switch(requireContext()).apply {
+                text = ""
+                switchMinWidth = dpToPx(28)
+                isChecked = StreamITAStremioCatelogSettings.isEnabled(sharedPref, addon.name)
+                setOnCheckedChangeListener { _, isChecked ->
+                    StreamITAStremioCatelogSettings.setEnabled(sharedPref, addon.name, isChecked)
+                }
+            }
+            innerRow.addView(switch)
+            row.addView(innerRow)
+
+            val bottomRow = LinearLayout(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dpToPx(10) }
+                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+            }
+
+            val removeBtn = TextView(requireContext()).apply {
+                text = "RIMUOVI"
+                textSize = 13f
+                setTypeface(null, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dpToPx(42)
+                )
+                val dangerDrawable = getDrawable("outline_danger")
+                if (dangerDrawable != null) background = dangerDrawable
+                else applyOutlineBackground()
+                setTextColor(Color.parseColor("#FFFF7F7F"))
+                setOnClickListener {
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Rimuovi catalogo")
+                        .setMessage("Rimuovere \"${addon.name}\"?")
+                        .setPositiveButton("Rimuovi") { _, _ ->
+                            catelogAddons.remove(addon)
+                            rebuildRows(view)
+                        }
+                        .setNegativeButton("Annulla", null)
+                        .show()
+                }
+            }
+            bottomRow.addView(removeBtn)
+            row.addView(bottomRow)
+
+            container?.addView(row)
+        }
+    }
+
+    private fun showAddDialog() {
+        val ctx = context ?: return
+        val inflater = LayoutInflater.from(ctx)
+        val layout = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(20), dpToPx(16), dpToPx(20), dpToPx(16))
+        }
+
+        val nameLabel = TextView(ctx).apply {
+            text = "Nome"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+        }
+        layout.addView(nameLabel)
+
+        val nameInput = EditText(ctx).apply {
+            hint = "Es. Cinemeta"
+            inputType = InputType.TYPE_CLASS_TEXT
+            setPadding(0, dpToPx(8), 0, dpToPx(16))
+        }
+        layout.addView(nameInput)
+
+        val urlLabel = TextView(ctx).apply {
+            text = "URL dell'addon catalogo"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+        }
+        layout.addView(urlLabel)
+
+        val urlInput = EditText(ctx).apply {
+            hint = "https://v3-cinemeta.strem.io"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        layout.addView(urlInput)
+
+        AlertDialog.Builder(ctx)
+            .setTitle("Aggiungi Catalogo")
+            .setView(layout)
+            .setPositiveButton("OK") { _, _ ->
+                val name = nameInput.text.toString().trim()
+                var url = urlInput.text.toString().trim()
+                if (name.isEmpty() || url.isEmpty()) {
+                    showToast("Nome e URL richiesti")
+                    return@setPositiveButton
+                }
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    url = "https://$url"
+                }
+                catelogAddons.add(
+                    StreamITAStremioCatelogAddon(
+                        id = System.currentTimeMillis(),
+                        name = name,
+                        url = url
+                    )
+                )
+                rebuildRows(requireView())
+                showToast("Catalogo \"$name\" aggiunto. Riavvia per applicare.")
+            }
+            .setNegativeButton("Annulla", null)
+            .show()
     }
 }
 
