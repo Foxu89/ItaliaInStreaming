@@ -28,6 +28,8 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import it.dogior.hadEnough.StreamITAStremioAddonSettings.getDynamicStremioMap
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -153,6 +155,28 @@ class StreamITAStremioCatelog(
         return entry.toLoadResponse(this, res.id)
     }
 
+    private suspend fun imdbToTmdbId(imdbId: String): Int? {
+        if (!imdbId.startsWith("tt")) return null
+        return try {
+            val url = "https://api.themoviedb.org/3/find/$imdbId?external_source=imdb_id"
+            val headers = mapOf(
+                "Authorization" to "Bearer ${BuildConfig.TMDB_API}",
+                "Accept" to "application/json"
+            )
+            val json = app.get(url, headers = headers, timeout = 10L).text
+            val obj = JSONObject(json)
+            val movies = obj.optJSONArray("movie_results")
+            if (movies != null && movies.length() > 0) {
+                movies.getJSONObject(0).optInt("id")
+            } else {
+                val tv = obj.optJSONArray("tv_results")
+                if (tv != null && tv.length() > 0) {
+                    tv.getJSONObject(0).optInt("id")
+                } else null
+            }
+        } catch (_: Exception) { null }
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -160,19 +184,66 @@ class StreamITAStremioCatelog(
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val res = parseJson<CatelogLoadData>(data)
-        val imdb = res.id
+        val imdbId = res.imdbId ?: res.id ?: return false
+        val isMovie = res.type != "series"
 
-        val stremioAddons = getDynamicStremioMap(
-            sharedPref, imdb, res.season, res.episode, subtitleCallback, callback
-        ).values
+        val tmdbId = if (imdbId.startsWith("tt")) imdbToTmdbId(imdbId) else null
 
-        runAllAsync(
-            *stremioAddons.map { action ->
-                suspend {
+        coroutineScope {
+            val extractors = StreamITAExtractors(
+                scope = this,
+                subtitleCallback = subtitleCallback,
+                callback = callback,
+                onSuccess = {},
+                sharedPref = sharedPref
+            )
+            if (isMovie) {
+                extractors.loadMovieExtractors(imdbId)
+            }
+            val numericImdbId = imdbId.replace("tt", "").toIntOrNull()
+            val effectiveTmdbId = tmdbId ?: numericImdbId
+            if (effectiveTmdbId != null) {
+                extractors.loadCommonExtractors(effectiveTmdbId, imdbId, res.season, res.episode)
+            }
+
+            val ccEnabled = sharedPref?.getBoolean(
+                StreamITAPlugin.extractorEnabledKey("cinemacity"), true
+            ) ?: true
+            if (ccEnabled) {
+                launch {
+                    try {
+                        CinemaCityScraper.loadLinks(
+                            imdbId = imdbId,
+                            season = res.season,
+                            episode = res.episode,
+                            subtitleCallback = subtitleCallback,
+                            callback = callback
+                        )
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val subEnabled = sharedPref?.getBoolean(
+                StreamITAPlugin.extractorEnabledKey("subtitle"), true
+            ) ?: true
+            if (subEnabled) {
+                launch {
+                    try {
+                        StreamITASubtitles.loadWyzieSubs(imdbId, res.season, res.episode, subtitleCallback)
+                        StreamITASubtitles.loadOpenSubtitles(imdbId, res.season, res.episode, subtitleCallback)
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val stremioAddons = getDynamicStremioMap(
+                sharedPref, imdbId, res.season, res.episode, subtitleCallback, callback
+            ).values
+            stremioAddons.forEach { action ->
+                launch {
                     try { action() } catch (_: Throwable) {}
                 }
-            }.toTypedArray()
-        )
+            }
+        }
         return true
     }
 
