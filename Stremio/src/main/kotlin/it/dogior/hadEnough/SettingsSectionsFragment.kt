@@ -303,10 +303,8 @@ class SettingsSectionsFragment(
 
     private fun showAddDialog(view: View) {
         val ctx = context ?: return
-        val scrollView = LayoutInflater.from(ctx).inflate(
-            res.getLayout(res.getIdentifier("settings_section_editor", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)),
-            null
-        )
+        val editorLayoutId = res.getIdentifier("settings_section_editor", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val scrollView = LayoutInflater.from(ctx).inflate(editorLayoutId, null)
 
         val titleView: TextView? = scrollView.findViewByName("editor_title")
         titleView?.text = "Nuova Sezione"
@@ -362,10 +360,8 @@ class SettingsSectionsFragment(
 
     private fun showEditDialog(view: View, section: SectionConfig) {
         val ctx = context ?: return
-        val scrollView = LayoutInflater.from(ctx).inflate(
-            res.getLayout(res.getIdentifier("settings_section_editor", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)),
-            null
-        )
+        val editorLayoutId = res.getIdentifier("settings_section_editor", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val scrollView = LayoutInflater.from(ctx).inflate(editorLayoutId, null)
 
         val titleView: TextView? = scrollView.findViewByName("editor_title")
         titleView?.text = "Modifica Sezione"
@@ -383,11 +379,9 @@ class SettingsSectionsFragment(
 
         fun rebuildAddonSlots() {
             addonContainer.removeAllViews()
+            val slotLayoutId = res.getIdentifier("item_addon_slot", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
             for (i in 0 until maxOf(addonSlots.size, 5)) {
-                val slotLayout = res.getLayout(
-                    res.getIdentifier("item_addon_slot", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-                )
-                val slot = LayoutInflater.from(ctx).inflate(slotLayout, addonContainer, false)
+                val slot = LayoutInflater.from(ctx).inflate(slotLayoutId, addonContainer, false)
                 val label: TextView = slot.findViewByName("addon_label") ?: continue
                 label.text = "Addon #${i + 1}"
 

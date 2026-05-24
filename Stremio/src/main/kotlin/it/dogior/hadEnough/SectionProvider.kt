@@ -53,7 +53,7 @@ class SectionProvider(
 
     override val mainPage: List<MainPageData>
         get() = if (catalogUrl != null) {
-            emptyList()
+            mainPageOf("placeholder://catalog" to name)
         } else {
             mainPageOf(
                 "$TMDB_API/trending/all/day?api_key=$API_KEY&region=IT&language=it" to "Trending",
