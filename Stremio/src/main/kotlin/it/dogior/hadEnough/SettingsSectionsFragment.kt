@@ -436,8 +436,8 @@ class SettingsSectionsFragment(
                         if (name.isEmpty()) {
                             Toast.makeText(requireContext(), "Inserisci un nome", Toast.LENGTH_SHORT).show()
                             return@setOnClickListener
+                        }
 
-                            // collect addons
                         val currentAddons = mutableListOf<StreamAddonConfig>()
                         for (i in 0 until addonContainer.childCount) {
                             val slot = addonContainer.getChildAt(i)
