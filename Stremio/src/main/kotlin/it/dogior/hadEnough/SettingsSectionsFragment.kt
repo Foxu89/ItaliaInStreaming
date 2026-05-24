@@ -15,13 +15,13 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.api.Log
-import com.lagradost.cloudstream3.CommonActivity.showToast
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -79,7 +79,7 @@ class SettingsSectionsFragment(
         saveBtn.setImageDrawable(getDrawable("save_icon"))
         saveBtn.setOnClickListener {
             saveSections(sections)
-            requireContext().showToast("Sezioni salvate")
+            Toast.makeText(requireContext(), "Sezioni salvate", Toast.LENGTH_SHORT).show()
             AlertDialog.Builder(requireContext())
                 .setTitle("Riavvia applicazione")
                 .setMessage("Riavviare per applicare le modifiche?")
@@ -323,7 +323,7 @@ class SettingsSectionsFragment(
                         val name = nameInput.text.toString().trim()
                         val url = urlInput.text.toString().trim()
                         if (name.isEmpty()) {
-                            showToast("Inserisci un nome")
+                            Toast.makeText(requireContext(), "Inserisci un nome", Toast.LENGTH_SHORT).show()
                             return@setOnClickListener
                         }
 
@@ -434,11 +434,10 @@ class SettingsSectionsFragment(
                         val name = nameInput.text.toString().trim()
                         val url = urlInput.text.toString().trim()
                         if (name.isEmpty()) {
-                            showToast("Inserisci un nome")
+                            Toast.makeText(requireContext(), "Inserisci un nome", Toast.LENGTH_SHORT).show()
                             return@setOnClickListener
-                        }
 
-                        // collect addons
+                            // collect addons
                         val currentAddons = mutableListOf<StreamAddonConfig>()
                         for (i in 0 until addonContainer.childCount) {
                             val slot = addonContainer.getChildAt(i)

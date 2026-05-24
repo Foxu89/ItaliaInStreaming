@@ -87,7 +87,7 @@ class SectionProvider(
             val res = app.get("$catUrl/manifest.json").parsedSafe<Manifest>()
             val list = mutableListOf<SearchResponse>()
             res?.catalogs?.amap { catalog ->
-                list.addAll(catalog.search(query, catUrl))
+                list.addAll(catalog.search(query, catUrl, this))
             }
             return list.distinct()
         }
@@ -141,8 +141,8 @@ class SectionProvider(
     private suspend fun getCatalogMainPage(catUrl: String, page: Int, request: MainPageRequest): HomePageResponse {
         val res = app.get("$catUrl/manifest.json").parsedSafe<Manifest>()
         val lists = mutableListOf<HomePageList>()
-        res?.catalogs?.amap { catalog ->
-            catalog.toHomePageList(catUrl).let {
+            res?.catalogs?.amap { catalog ->
+                catalog.toHomePageList(catUrl, this).let {
                 if (it.list.isNotEmpty()) lists.add(it)
             }
         }
@@ -230,7 +230,7 @@ class SectionProvider(
 
         val home = app.get("${request.data}$adultQuery&page=$page")
             .parsedSafe<TmdbResults>()?.results?.mapNotNull { media ->
-                media.toSearchResponse(type)
+                media.toSearchResponse(this, type)
             } ?: throw ErrorLoadingException("Invalid Json response")
 
         return newHomePageResponse(request.name, home)
@@ -240,7 +240,7 @@ class SectionProvider(
         return app.get(
             "$TMDB_API/search/multi?api_key=$API_KEY&language=it&query=$query&page=$page&include_adult=${settingsForProvider.enableAdult}"
         ).parsedSafe<TmdbResults>()?.results?.mapNotNull { media ->
-            media.toSearchResponse()
+            media.toSearchResponse(this)
         }?.toNewSearchResponseList()
     }
 
@@ -271,8 +271,8 @@ class SectionProvider(
                 Actor(cast.name ?: cast.originalName ?: return@mapNotNull null, getImageUrl(cast.profilePath)),
                 roleString = cast.character
             )
-        } ?: return null
-        val recommendations = res.recommendations?.results?.mapNotNull { media -> media.toSearchResponse() }
+        } ?: throw ErrorLoadingException("No cast found")
+        val recommendations = res.recommendations?.results?.mapNotNull { media -> media.toSearchResponse(this) }
         val trailer = res.videos?.results?.map { "https://www.youtube.com/watch?v=${it.key}" }?.randomOrNull()
 
         return if (type == TvType.TvSeries) {
@@ -354,8 +354,8 @@ class SectionProvider(
         @JsonProperty("media_type") val mediaType: String? = null,
         @JsonProperty("poster_path") val posterPath: String? = null,
     ) {
-        fun toSearchResponse(type: String? = null): SearchResponse? {
-            return newMovieSearchResponse(
+        fun toSearchResponse(provider: SectionProvider, type: String? = null): SearchResponse? {
+            return provider.newMovieSearchResponse(
                 title ?: name ?: originalTitle ?: return null,
                 TmdbData(id = id, type = mediaType ?: type).toJson(),
                 TvType.Movie,
@@ -442,25 +442,25 @@ data class Catalog(
 ) {
     init { if (type != null) types.add(type) }
 
-    suspend fun search(query: String, catUrl: String): List<SearchResponse> {
+    suspend fun search(query: String, catUrl: String, provider: SectionProvider): List<SearchResponse> {
         val entries = mutableListOf<SearchResponse>()
         types.forEach { type ->
             val res = app.get("$catUrl/catalog/${type}/$id/search=$query.json", timeout = 120L)
                 .parsedSafe<CatalogResponse>()
             res?.metas?.forEach { entry ->
-                entries.add(entry.toSearchResponse())
+                entries.add(entry.toSearchResponse(provider))
             }
         }
         return entries
     }
 
-    suspend fun toHomePageList(catUrl: String): HomePageList {
+    suspend fun toHomePageList(catUrl: String, provider: SectionProvider): HomePageList {
         val entries = mutableListOf<SearchResponse>()
         types.forEach { type ->
             val res = app.get("$catUrl/catalog/${type}/$id.json", timeout = 120L)
                 .parsedSafe<CatalogResponse>()
             res?.metas?.forEach { entry ->
-                entries.add(entry.toSearchResponse())
+                entries.add(entry.toSearchResponse(provider))
             }
         }
         return HomePageList(name ?: id, entries)
@@ -484,8 +484,8 @@ data class CatalogEntry(
     @JsonProperty("trailers") val trailersSources: List<Trailer> = emptyList(),
     @JsonProperty("year") val yearNum: String? = null
 ) {
-    fun toSearchResponse(): SearchResponse {
-        return newMovieSearchResponse(fixTitle(name), this.toJson(), TvType.Others) {
+    fun toSearchResponse(provider: SectionProvider): SearchResponse {
+        return provider.newMovieSearchResponse(fixTitle(name), this.toJson(), TvType.Others) {
             posterUrl = poster
         }
     }
@@ -503,7 +503,7 @@ data class CatalogEntry(
                 addImdbId(imdbId)
             }
         } else {
-            provider.newTvSeriesLoadResponse(
+            return provider.newTvSeriesLoadResponse(
                 name, "${provider.mainUrl}/meta/${type}/${id}.json", TvType.TvSeries,
                 videos.map { it.toEpisode(provider, type, imdbId) }
             ) {
