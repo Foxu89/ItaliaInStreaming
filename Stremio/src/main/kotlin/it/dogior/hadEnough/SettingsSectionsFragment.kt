@@ -237,7 +237,7 @@ class SettingsSectionsFragment(
 
             // subheader: catalog type
             val catalogType = TextView(requireContext()).apply {
-                text = if (section.catalogUrl != null) "Catalogo: ${section.catalogUrl}" else "Catalogo: TMDB"
+                text = if (section.catalogUrl != null) "Catalogo" else "Catalogo: TMDB"
                 textSize = 12f
                 setPadding(dpToPx(8), dpToPx(4), dpToPx(8), 0)
             }
