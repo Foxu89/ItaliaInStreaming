@@ -8,12 +8,12 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -299,161 +299,142 @@ class SettingsSectionsFragment(
         }
     }
 
-    // ── add section dialog ──
+    // ── shared section editor (programmatic, like StreamITA) ──
 
-    private fun showAddDialog(view: View) {
+    private fun showSectionEditor(view: View, existing: SectionConfig?) {
         val ctx = context ?: return
-        val editorLayoutId = res.getIdentifier("settings_section_editor", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-        val scrollView = LayoutInflater.from(ctx).inflate(editorLayoutId, null)
+        val outer = ScrollView(ctx)
+        val layout = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(20), dpToPx(16), dpToPx(20), dpToPx(16))
+        }
 
-        val titleView: TextView? = scrollView.findViewByName("editor_title")
-        titleView?.text = "Nuova Sezione"
+        val titleLabel = TextView(ctx).apply {
+            text = "Nome sezione"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+        }
+        layout.addView(titleLabel)
 
+        val nameInput = EditText(ctx).apply {
+            hint = "Es. Film, Serie TV..."
+            inputType = InputType.TYPE_CLASS_TEXT
+            setText(existing?.name ?: "")
+            setPadding(0, dpToPx(8), 0, dpToPx(16))
+        }
+        layout.addView(nameInput)
+
+        val catalogLabel = TextView(ctx).apply {
+            text = "URL catalogo (opzionale — vuoto = TMDB)"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+        }
+        layout.addView(catalogLabel)
+
+        val catalogInput = EditText(ctx).apply {
+            hint = "https://v3-cinemeta.strem.io"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setText(existing?.catalogUrl ?: "")
+        }
+        layout.addView(catalogInput)
+
+        val addonsLabel = TextView(ctx).apply {
+            text = "Stream addon (massimo 5)"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setPadding(0, dpToPx(16), 0, dpToPx(8))
+        }
+        layout.addView(addonsLabel)
+
+        val addonSlots = mutableListOf<Pair<EditText, EditText>>()
+        val existingAddons = existing?.streamAddons ?: emptyList()
+        for (i in 0 until 5) {
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+                background = getDrawable("outline")
+                val lp = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                lp.bottomMargin = dpToPx(8)
+                layoutParams = lp
+            }
+
+            val label = TextView(ctx).apply {
+                text = "Addon #${i + 1}"
+                textSize = 13f
+                setTypeface(null, Typeface.BOLD)
+            }
+            row.addView(label)
+
+            val etName = EditText(ctx).apply {
+                hint = "Nome"
+                inputType = InputType.TYPE_CLASS_TEXT
+                if (i < existingAddons.size) setText(existingAddons[i].name)
+            }
+            row.addView(etName)
+
+            val etUrl = EditText(ctx).apply {
+                hint = "https://example.com (manifest.json)"
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+                if (i < existingAddons.size) setText(existingAddons[i].url)
+            }
+            row.addView(etUrl)
+
+            addonSlots.add(etName to etUrl)
+            layout.addView(row)
+        }
+
+        outer.addView(layout)
+
+        val title = if (existing != null) "Modifica Sezione" else "Nuova Sezione"
         AlertDialog.Builder(ctx)
-            .setView(scrollView)
+            .setTitle(title)
+            .setView(outer)
             .setPositiveButton("OK", null)
             .setNegativeButton("Annulla", null)
             .create().apply {
                 setOnShowListener {
                     getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        val nameInput: EditText = scrollView.findViewByName("etSectionName") ?: return@setOnClickListener
-                        val urlInput: EditText = scrollView.findViewByName("etCatalogUrl") ?: return@setOnClickListener
                         val name = nameInput.text.toString().trim()
-                        val url = urlInput.text.toString().trim()
+                        val catalogUrl = catalogInput.text.toString().trim().ifBlank { null }
                         if (name.isEmpty()) {
-                            Toast.makeText(requireContext(), "Inserisci un nome", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, "Inserisci un nome", Toast.LENGTH_SHORT).show()
                             return@setOnClickListener
                         }
 
-                        // collect addons from dynamic slots
-                        val addonContainer: LinearLayout = scrollView.findViewByName("addon_container") ?: return@setOnClickListener
                         val addons = mutableListOf<StreamAddonConfig>()
-                        for (i in 0 until addonContainer.childCount) {
-                            val slot = addonContainer.getChildAt(i)
-                            val aname = slot.findViewByName<EditText>("etAddonName")?.text?.toString()?.trim().orEmpty()
-                            val aurl = slot.findViewByName<EditText>("etAddonUrl")?.text?.toString()?.trim().orEmpty()
+                        for ((idx, pair) in addonSlots.withIndex()) {
+                            val aname = pair.first.text.toString().trim()
+                            val aurl = pair.second.text.toString().trim()
                             if (aurl.isNotBlank()) {
                                 addons.add(StreamAddonConfig(
-                                    id = System.currentTimeMillis() + i,
-                                    name = aname.ifBlank { "Addon ${addons.size + 1}" },
+                                    id = if (existing != null && idx < existingAddons.size) existingAddons[idx].id
+                                          else System.currentTimeMillis() + idx,
+                                    name = aname.ifBlank { "Addon ${idx + 1}" },
                                     url = aurl,
                                     type = "https"
                                 ))
                             }
                         }
 
-                        sections.add(SectionConfig(
-                            id = System.currentTimeMillis(),
-                            name = name,
-                            catalogUrl = url.ifBlank { null },
-                            streamAddons = addons
-                        ))
-                        rebuildRows(view)
-                        dismiss()
-                    }
-                }
-                show()
-            }
-    }
-
-    // ── edit section dialog ──
-
-    private fun showEditDialog(view: View, section: SectionConfig) {
-        val ctx = context ?: return
-        val editorLayoutId = res.getIdentifier("settings_section_editor", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-        val scrollView = LayoutInflater.from(ctx).inflate(editorLayoutId, null)
-
-        val titleView: TextView? = scrollView.findViewByName("editor_title")
-        titleView?.text = "Modifica Sezione"
-
-        val nameInput: EditText = scrollView.findViewByName("etSectionName") ?: return
-        nameInput.setText(section.name)
-
-        val urlInput: EditText = scrollView.findViewByName("etCatalogUrl") ?: return
-        urlInput.setText(section.catalogUrl ?: "")
-
-        // build addon slots
-        val addonContainer: LinearLayout = scrollView.findViewByName("addon_container") ?: return
-        val addonSlots = mutableListOf<StreamAddonConfig>()
-        addonSlots.addAll(section.streamAddons)
-
-        fun rebuildAddonSlots() {
-            addonContainer.removeAllViews()
-            val slotLayoutId = res.getIdentifier("item_addon_slot", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-            for (i in 0 until maxOf(addonSlots.size, 5)) {
-                val slot = LayoutInflater.from(ctx).inflate(slotLayoutId, addonContainer, false)
-                val label: TextView = slot.findViewByName("addon_label") ?: continue
-                label.text = "Addon #${i + 1}"
-
-                val aname: EditText = slot.findViewByName("etAddonName") ?: continue
-                val aurl: EditText = slot.findViewByName("etAddonUrl") ?: continue
-
-                if (i < addonSlots.size) {
-                    aname.setText(addonSlots[i].name)
-                    aurl.setText(addonSlots[i].url)
-                }
-
-                // track changes
-                val idx = i
-                aname.setOnFocusChangeListener { _, _ ->
-                    if (idx < addonSlots.size) {
-                        addonSlots[idx] = addonSlots[idx].copy(name = aname.text.toString().trim())
-                    }
-                }
-                aurl.setOnFocusChangeListener { _, _ ->
-                    if (idx < addonSlots.size) {
-                        addonSlots[idx] = addonSlots[idx].copy(url = aurl.text.toString().trim())
-                    } else if (aurl.text.toString().trim().isNotBlank()) {
-                        addonSlots.add(StreamAddonConfig(
-                            id = System.currentTimeMillis() + idx,
-                            name = aname.text.toString().trim().ifBlank { "Addon ${idx + 1}" },
-                            url = aurl.text.toString().trim(),
-                            type = "https"
-                        ))
-                    }
-                }
-
-                addonContainer.addView(slot)
-            }
-        }
-        rebuildAddonSlots()
-
-        AlertDialog.Builder(ctx)
-            .setView(scrollView)
-            .setPositiveButton("OK", null)
-            .setNegativeButton("Annulla", null)
-            .create().apply {
-                setOnShowListener {
-                    getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        val name = nameInput.text.toString().trim()
-                        val url = urlInput.text.toString().trim()
-                        if (name.isEmpty()) {
-                            Toast.makeText(requireContext(), "Inserisci un nome", Toast.LENGTH_SHORT).show()
-                            return@setOnClickListener
-                        }
-
-                        val currentAddons = mutableListOf<StreamAddonConfig>()
-                        for (i in 0 until addonContainer.childCount) {
-                            val slot = addonContainer.getChildAt(i)
-                            val aname = slot.findViewByName<EditText>("etAddonName")?.text?.toString()?.trim().orEmpty()
-                            val aurl = slot.findViewByName<EditText>("etAddonUrl")?.text?.toString()?.trim().orEmpty()
-                            if (aurl.isNotBlank()) {
-                                currentAddons.add(StreamAddonConfig(
-                                    id = if (i < addonSlots.size) addonSlots[i].id else System.currentTimeMillis() + i,
-                                    name = aname.ifBlank { "Addon ${currentAddons.size + 1}" },
-                                    url = aurl,
-                                    type = "https"
-                                ))
+                        if (existing != null) {
+                            val idx = sections.indexOfFirst { it.id == existing.id }
+                            if (idx >= 0) {
+                                sections[idx] = existing.copy(
+                                    name = name,
+                                    catalogUrl = catalogUrl,
+                                    streamAddons = addons
+                                )
                             }
-                        }
-
-                        val idx = sections.indexOfFirst { it.id == section.id }
-                        if (idx >= 0) {
-                            sections[idx] = section.copy(
+                        } else {
+                            sections.add(SectionConfig(
+                                id = System.currentTimeMillis(),
                                 name = name,
-                                catalogUrl = url.ifBlank { null },
-                                streamAddons = currentAddons
-                            )
+                                catalogUrl = catalogUrl,
+                                streamAddons = addons
+                            ))
                         }
                         rebuildRows(view)
                         dismiss()
@@ -462,6 +443,9 @@ class SettingsSectionsFragment(
                 show()
             }
     }
+
+    private fun showAddDialog(view: View) = showSectionEditor(view, null)
+    private fun showEditDialog(view: View, section: SectionConfig) = showSectionEditor(view, section)
 
     // ── helpers ──
 
