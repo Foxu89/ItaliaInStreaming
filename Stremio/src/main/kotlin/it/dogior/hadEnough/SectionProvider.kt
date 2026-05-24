@@ -97,12 +97,15 @@ class SectionProvider(
     override suspend fun search(query: String): List<SearchResponse> {
         val catUrl = catalogUrl
         if (catUrl != null) {
-            val res = app.get("$catUrl/manifest.json").parsedSafe<Manifest>()
-            val list = mutableListOf<SearchResponse>()
-            res?.catalogs?.amap { catalog ->
-                list.addAll(catalog.search(query, catUrl, this))
+            val manifest = app.get("$catUrl/manifest.json").parsedSafe<Manifest>()
+            if (manifest != null) {
+                val supportedCatalogs = manifest.catalogs.filter { it.supportsSearch() }
+                val addonResults = supportedCatalogs.amap { catalog ->
+                    catalog.search(query, catUrl, this)
+                }.flatten().distinctBy { it.url }
+                if (addonResults.isNotEmpty()) return addonResults
             }
-            return list.distinct()
+            return searchTmdb(query, 1)?.items ?: emptyList()
         }
         return searchTmdb(query, 1)?.items ?: emptyList()
     }
@@ -152,10 +155,10 @@ class SectionProvider(
     // ── private helpers ──
 
     private suspend fun getCatalogMainPage(catUrl: String, page: Int, request: MainPageRequest): HomePageResponse {
-        val res = app.get("$catUrl/manifest.json").parsedSafe<Manifest>()
+        val manifest = app.get("$catUrl/manifest.json").parsedSafe<Manifest>()
         val lists = mutableListOf<HomePageList>()
-            res?.catalogs?.amap { catalog ->
-                catalog.toHomePageList(catUrl, this).let {
+        manifest?.catalogs?.filter { !it.isSearchRequired() }?.amap { catalog ->
+            catalog.toHomePageList(catUrl, this).let {
                 if (it.list.isNotEmpty()) lists.add(it)
             }
         }
@@ -447,13 +450,26 @@ class SectionProvider(
 // ── Catalog data classes ──
 
 data class Manifest(val catalogs: List<Catalog>)
+data class Extra(val name: String? = null, @JsonProperty("isRequired") val isRequired: Boolean? = null)
 data class Catalog(
     var name: String?,
     val id: String,
     val type: String?,
-    val types: MutableList<String> = mutableListOf()
+    val types: MutableList<String> = mutableListOf(),
+    val extra: List<Extra>? = null,
+    val extraSupported: List<String>? = null
 ) {
     init { if (type != null) types.add(type) }
+
+    fun isSearchRequired(): Boolean {
+        return extra?.any { it.name == "search" && it.isRequired == true } == true
+    }
+
+    fun supportsSearch(): Boolean {
+        val hasSearchInExtra = extra?.any { it.name == "search" } == true
+        val hasSearchInExtraSupported = extraSupported?.contains("search") == true
+        return hasSearchInExtra || hasSearchInExtraSupported
+    }
 
     suspend fun search(query: String, catUrl: String, provider: SectionProvider): List<SearchResponse> {
         val entries = mutableListOf<SearchResponse>()
