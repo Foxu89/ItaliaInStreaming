@@ -51,12 +51,16 @@ class SectionProvider(
     override val supportedTypes = setOf(TvType.Others)
     override val hasMainPage = true
 
-    override val mainPage: MainPageData
-        get() = if (catalogUrl != null) mainPageOf() else mainPageOf(
-            "$TMDB_API/trending/all/day?api_key=$API_KEY&region=IT&language=it" to "Trending",
-            "$TMDB_API/movie/popular?api_key=$API_KEY&region=IT&language=it" to "Film Popolari",
-            "$TMDB_API/tv/popular?api_key=$API_KEY&region=IT&language=it" to "Serie TV Popolari"
-        )
+    override val mainPage: List<MainPageData>
+        get() = if (catalogUrl != null) {
+            emptyList()
+        } else {
+            mainPageOf(
+                "$TMDB_API/trending/all/day?api_key=$API_KEY&region=IT&language=it" to "Trending",
+                "$TMDB_API/movie/popular?api_key=$API_KEY&region=IT&language=it" to "Film Popolari",
+                "$TMDB_API/tv/popular?api_key=$API_KEY&region=IT&language=it" to "Serie TV Popolari"
+            )
+        }
 
     companion object {
         const val TRACKER_LIST_URL = "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt"
