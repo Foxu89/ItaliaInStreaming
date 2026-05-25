@@ -94,6 +94,7 @@ class SettingsFragment(
         }
 
         val resetBtn = root.findView<View>("delete_img")
+        resetBtn.background = getDrawable("outline_danger")
         resetBtn.setOnClickListener {
             AlertDialog.Builder(requireContext())
                 .setTitle("Reset")

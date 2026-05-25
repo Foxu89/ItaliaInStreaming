@@ -71,8 +71,7 @@
             android:text="Reset"
             android:layout_marginTop="20dp"
             android:focusable="true"
-            android:nextFocusUp="@id/debrid_key_input"
-            android:background="@drawable/outline_danger" />
+            android:nextFocusUp="@id/debrid_key_input" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
