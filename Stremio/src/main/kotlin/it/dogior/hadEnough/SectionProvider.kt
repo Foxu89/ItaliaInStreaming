@@ -122,7 +122,25 @@ class SectionProvider(
 
     override suspend fun load(url: String): LoadResponse {
         val catUrl = catalogUrl
-        if (catUrl != null) return loadFromCatalog(catUrl, url)
+        if (catUrl != null) {
+            try {
+                return loadFromCatalog(catUrl, url)
+            } catch (_: Exception) {
+                val regex = Regex("/meta/([^/]+)/([^/.]+)")
+                val match = regex.find(url) ?: throw RuntimeException("Cannot load: $url")
+                val type = match.groupValues[1]
+                val id = match.groupValues[2]
+                val catUrlFixed = if ((type == "movie" || type == "series") && isImdborTmdb(id))
+                    CINEMETA_URL else catUrl
+                val encodedId = URLEncoder.encode(id, "UTF-8")
+                val response = app.get("$catUrlFixed/meta/$type/$encodedId.json")
+                    .parsedSafe<CatalogResponse>()
+                val entry = response?.meta ?: response?.metas?.firstOrNull { it.id == id }
+                    ?: response?.metas?.firstOrNull()
+                    ?: throw RuntimeException("Failed to load meta")
+                return entry.toLoadResponse(this, id)
+            }
+        }
         return loadFromTmdb(url)
     }
 
