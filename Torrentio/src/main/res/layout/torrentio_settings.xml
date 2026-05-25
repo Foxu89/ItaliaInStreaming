@@ -21,41 +21,13 @@
         android:background="#3D3D3D"
         android:layout_marginBottom="16dp" />
 
-    <!-- Abilita Debrid -->
+    <!-- ── TORBOX ── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Abilita Debrid"
-            android:textSize="16sp"
-            android:textColor="#FFFFFF" />
-
-        <Switch
-            android:id="@+id/debrid_toggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#3D3D3D"
-        android:layout_marginBottom="16dp" />
-
-    <!-- TorBox Config -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="4dp">
 
         <TextView
             android:layout_width="0dp"
@@ -66,29 +38,120 @@
             android:textStyle="bold"
             android:textColor="#FFFFFF" />
 
-        <ImageButton
-            android:id="@+id/torbox_button"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_edit"
-            android:tint="#FFFFFF" />
+        <Switch
+            android:id="@+id/torbox_enable"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/debrid_status"
+    <EditText
+        android:id="@+id/torbox_token"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
-        android:textColor="#AAAAAA"
+        android:hint="Token API TorBox"
+        android:inputType="text"
+        android:padding="10dp"
+        android:background="#2D2D2D"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#AAAAAA"
+        android:layout_marginBottom="12dp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#3D3D3D"
+        android:layout_marginBottom="12dp" />
+
+    <!-- ── REAL-DEBRID ── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="4dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Real-Debrid"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF" />
+
+        <Switch
+            android:id="@+id/realdebrid_enable"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/realdebrid_token"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="API Key Real-Debrid"
+        android:inputType="text"
+        android:padding="10dp"
+        android:background="#2D2D2D"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#AAAAAA"
+        android:layout_marginBottom="12dp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#3D3D3D"
+        android:layout_marginBottom="12dp" />
+
+    <!-- ── PREMIUMIZE ── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="4dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Premiumize"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF" />
+
+        <Switch
+            android:id="@+id/premiumize_enable"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/premiumize_token"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="API Key Premiumize"
+        android:inputType="text"
+        android:padding="10dp"
+        android:background="#2D2D2D"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#AAAAAA"
         android:layout_marginBottom="16dp" />
 
-    <TextView
+    <View
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Come ottenere il token TorBox:\n1. Vai su torbox.app\n2. Accedi al tuo account\n3. Vai su Settings → API\n4. Copia il tuo token API"
-        android:textSize="12sp"
-        android:textColor="#AAAAAA"
-        android:lineSpacingExtra="4dp" />
+        android:layout_height="1dp"
+        android:background="#3D3D3D"
+        android:layout_marginBottom="16dp" />
+
+    <!-- ── SALVA ── -->
+    <Button
+        android:id="@+id/save_btn"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="Salva Impostazioni"
+        android:textColor="#FFFFFF"
+        android:background="#2D7D46"
+        android:layout_marginBottom="8dp" />
 
 </LinearLayout>
