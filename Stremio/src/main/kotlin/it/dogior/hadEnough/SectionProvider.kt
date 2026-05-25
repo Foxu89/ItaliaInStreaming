@@ -97,21 +97,26 @@ class SectionProvider(
     override suspend fun search(query: String): List<SearchResponse> {
         val catUrl = catalogUrl
         if (catUrl != null) {
-            val manifest = app.get("$catUrl/manifest.json").parsedSafe<Manifest>()
-            if (manifest != null) {
-                val supportedCatalogs = manifest.catalogs.filter { it.supportsSearch() }
-                val addonResults = supportedCatalogs.amap { catalog ->
-                    catalog.search(query, catUrl, this)
-                }.flatten().distinctBy { it.url }
-                if (addonResults.isNotEmpty()) return addonResults
-            }
+            try {
+                val manifest = app.get("$catUrl/manifest.json").parsedSafe<Manifest>()
+                if (manifest != null) {
+                    val supportedCatalogs = manifest.catalogs.filter { it.supportsSearch() }
+                    val addonResults = supportedCatalogs.amap { catalog ->
+                        catalog.search(query, catUrl, this)
+                    }.flatten().distinctBy { it.url }
+                    if (addonResults.isNotEmpty()) return addonResults
+                }
+            } catch (_: Exception) {}
             return searchTmdb(query, 1)?.items ?: emptyList()
         }
         return searchTmdb(query, 1)?.items ?: emptyList()
     }
 
     override suspend fun search(query: String, page: Int): SearchResponseList? {
-        if (catalogUrl != null) return null
+        if (catalogUrl != null) {
+            if (page == 1) return search(query).toNewSearchResponseList()
+            return null
+        }
         return searchTmdb(query, page)
     }
 
@@ -473,8 +478,9 @@ data class Catalog(
 
     suspend fun search(query: String, catUrl: String, provider: SectionProvider): List<SearchResponse> {
         val entries = mutableListOf<SearchResponse>()
+        val encodedQuery = URLEncoder.encode(query, "UTF-8")
         types.forEach { type ->
-            val res = app.get("$catUrl/catalog/${type}/$id/search=$query.json", timeout = 120L)
+            val res = app.get("$catUrl/catalog/${type}/$id/search=$encodedQuery.json", timeout = 120L)
                 .parsedSafe<CatalogResponse>()
             res?.metas?.forEach { entry ->
                 entries.add(entry.toSearchResponse(provider))
