@@ -1,13 +1,7 @@
-@file:Suppress("UnstableApiUsage")
-
 import org.jetbrains.kotlin.konan.properties.Properties
 
-dependencies {
-    implementation("com.google.android.material:material:1.4.0")
-}
-
 // use an integer for version numbers
-version = 8
+version = 6
 
 
 cloudstream {
@@ -27,7 +21,7 @@ cloudstream {
 
     tvTypes = listOf("Movie", "TvSeries", "Torrent", "Documentary")
 
-    requiresResources = true
+    requiresResources = false
     language = "it"
 
     iconUrl = "https://torrentio.strem.fun/images/logo_v1.png"

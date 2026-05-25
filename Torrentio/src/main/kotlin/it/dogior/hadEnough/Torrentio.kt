@@ -1,5 +1,3 @@
-@file:OptIn(com.lagradost.cloudstream3.Prerelease::class)
-
 package it.dogior.hadEnough
 
 import com.lagradost.api.Log
@@ -32,13 +30,11 @@ import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newSearchResponseList
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
-import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.random.Random
+
 
 class Torrentio : TmdbProvider() {
     private val torrentioUrl = "https://torrentio.strem.fun"
@@ -82,118 +78,17 @@ class Torrentio : TmdbProvider() {
     private fun getDate(): String {
         val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val calendar = Calendar.getInstance()
-        return formatter.format(calendar.time)
+        val today = formatter.format(calendar.time)
+        return today
     }
-
-    // ======================== DEBRID TORBOX ========================
-    
-    private fun isDebridEnabled(): Boolean {
-        return getKey<Boolean>("torrentio_debrid_enabled") == true && getKey<Boolean>("torrentio_torbox_enabled") == true
-    }
-    
-    private fun getTorboxToken(): String? {
-        return getKey<String>("torrentio_torbox_token")
-    }
-    
-    // Aggiunge un magnet a TorBox e ottiene l'ID del torrent
-    private suspend fun addMagnetToTorbox(magnetLink: String): String? {
-        try {
-            val token = getTorboxToken()
-            if (token.isNullOrEmpty()) return null
-            
-            val response = app.post(
-                "https://api.torbox.app/v1/api/torrents/createtorrent",
-                params = mapOf("token" to token),
-                data = mapOf("magnet" to magnetLink),
-                timeout = 30
-            )
-            
-            val json = JSONObject(response.text)
-            if (json.optBoolean("success", false)) {
-                val data = json.getJSONObject("data")
-                return data.optString("id", null)
-            }
-            Log.e("Torrentio", "TorBox add error: ${json.optString("detail")}")
-        } catch (e: Exception) {
-            Log.e("Torrentio", "TorBox add magnet error: ${e.message}")
-        }
-        return null
-    }
-    
-    // Ottiene il link di download da un torrent ID
-    private suspend fun getTorboxDownloadLink(torrentId: String, maxRetries: Int = 3): String? {
-        try {
-            val token = getTorboxToken()
-            if (token.isNullOrEmpty()) return null
-            
-            repeat(maxRetries) { attempt ->
-                val response = app.get(
-                    "https://api.torbox.app/v1/api/torrents/mylist",
-                    params = mapOf(
-                        "token" to token,
-                        "id" to torrentId
-                    ),
-                    timeout = 30
-                )
-                
-                val json = JSONObject(response.text)
-                if (json.optBoolean("success", false)) {
-                    val data = json.getJSONObject("data")
-                    val downloadUrl = data.optString("download", null)
-                    
-                    if (!downloadUrl.isNullOrEmpty()) {
-                        return downloadUrl
-                    }
-                    
-                    val status = data.optString("status", "")
-                    Log.d("Torrentio", "TorBox status: $status (attempt ${attempt + 1}/$maxRetries)")
-                    
-                    if (attempt < maxRetries - 1) {
-                        delay(3000)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("Torrentio", "TorBox get link error: ${e.message}")
-        }
-        return null
-    }
-    
-    private suspend fun resolveWithTorbox(magnetLink: String): String? {
-        try {
-            val token = getTorboxToken()
-            if (token.isNullOrEmpty()) return null
-            
-            // 1. Aggiungi il magnet a TorBox
-            val torrentId = addMagnetToTorbox(magnetLink)
-            if (torrentId == null) {
-                Log.e("Torrentio", "Failed to add magnet to TorBox")
-                return null
-            }
-            
-            Log.d("Torrentio", "TorBox torrent ID: $torrentId")
-            
-            // 2. Aspetta un po' che il torrent venga elaborato
-            delay(2000)
-            
-            // 3. Ottieni il link di download
-            val downloadLink = getTorboxDownloadLink(torrentId)
-            if (downloadLink != null) {
-                Log.d("Torrentio", "✅ TorBox resolved: $downloadLink")
-                return downloadLink
-            }
-            
-            Log.e("Torrentio", "TorBox download link not ready after retries")
-        } catch (e: Exception) {
-            Log.e("Torrentio", "TorBox resolve error: ${e.message}")
-        }
-        return null
-    }
-    
-    // ======================== METODI ESISTENTI ========================
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val resp = app.get("${request.data}&page=$page", headers = authHeaders).body.string()
+        val resp = try {
+            app.get("${request.data}&page=$page&random=${Random.nextInt()}", timeout = 15000, headers = authHeaders).body.string()
+        } catch (e: Exception) {
+            Log.w("Torrentio", "Gzip error, retry: ${e.message}")
+            app.get("${request.data}&page=$page&random=${Random.nextInt()}", timeout = 30000, headers = authHeaders).body.string()
+        }
         val parsedResponse = parseJson<Results>(resp).results?.mapNotNull { media ->
             val type = if (request.data.contains("tv")) "tv" else "movie"
             media.toSearchResponse(type = type)
@@ -227,6 +122,7 @@ class Torrentio : TmdbProvider() {
         }
         val res = app.get(resUrl, headers = authHeaders).parsedSafe<MediaDetail>()
             ?: throw ErrorLoadingException("Invalid Json Response")
+//        Log.d("Torrentio", res.toJson())
 
         val title = res.title ?: res.name ?: return null
         val poster = getImageUrl(res.posterPath, getOriginal = true)
@@ -331,8 +227,6 @@ class Torrentio : TmdbProvider() {
         return episodes ?: emptyList()
     }
 
-    // ======================== LOAD LINKS MODIFICATO CON TORBOX ========================
-    
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -341,26 +235,20 @@ class Torrentio : TmdbProvider() {
     ): Boolean {
         val show = parseJson<LinkData>(data)
         var success = false
-        
         val url = if (show.season == null) {
             "$mainUrl/stream/movie/${show.imdbId}.json"
         } else {
             "$mainUrl/stream/series/${show.imdbId}:${show.season}:${show.episode}.json"
         }
-        
         val headers = mapOf(
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
         )
-        
         val res = app.get(url, headers = headers, timeout = 100L)
         val body = res.body.string()
         val response = parseJson<TorrentioResponse>(body)
 
         response.streams.forEach { stream ->
-            val magnet = generateMagnetLink(TRACKER_LIST_URL, stream.infoHash)
-            if (magnet.isNotEmpty()) success = true
-            
             val formattedTitleName = stream.title
                 ?.let { title ->
                     val tags = "\\[(.*?)]".toRegex().findAll(title)
@@ -372,28 +260,13 @@ class Torrentio : TmdbProvider() {
                             ?: "Unknown"
                     "Torrentio | $tags | Seeder: $seeder | Provider: $provider".trim()
                 }
-            
-            val finalUrl = if (isDebridEnabled()) {
-                runBlocking {
-                    val debridUrl = resolveWithTorbox(magnet)
-                    if (debridUrl != null) {
-                        Log.d("Torrentio", "✅ TorBox risolto: $debridUrl")
-                        debridUrl
-                    } else {
-                        Log.d("Torrentio", "⚠️ TorBox fallito, uso magnet")
-                        magnet
-                    }
-                }
-            } else {
-                magnet
-            }
-            
+            val magnet = generateMagnetLink(TRACKER_LIST_URL, stream.infoHash)
+            if (magnet.isNotEmpty()) success = true
             callback.invoke(
                 newExtractorLink(
                     "Torrentio",
-                    if (isDebridEnabled() && finalUrl != magnet) "Torrentio (TorBox) | $formattedTitleName" 
-                    else formattedTitleName ?: stream.name ?: "",
-                    url = finalUrl,
+                    formattedTitleName ?: stream.name ?: "",
+                    url = magnet,
                     INFER_TYPE
                 ) {
                     this.referer = ""
@@ -406,8 +279,10 @@ class Torrentio : TmdbProvider() {
 
     private suspend fun generateMagnetLink(url: String, hash: String?): String {
         val response = app.get(url)
-        val trackerList = response.text.trim().split("\n")
 
+        val trackerList = response.text.trim().split("\n") // Assuming each tracker is on a new line
+
+        // Build the magnet link
         return buildString {
             append("magnet:?xt=urn:btih:$hash")
             trackerList.forEach { tracker ->
