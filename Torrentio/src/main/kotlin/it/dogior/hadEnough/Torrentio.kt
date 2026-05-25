@@ -361,7 +361,7 @@ class Torrentio : TmdbProvider() {
         }
         val res = app.get(debridUrl, timeout = 15000L).parsedSafe<DebianRoot>() ?: return
         res.streams.forEach { stream ->
-            val name = stream.behaviorHints.filename.ifBlank { stream.name }
+            val name = (stream.behaviorHints.filename ?: "").ifBlank { stream.name }
             callback.invoke(
                 newExtractorLink(
                     if (provider == "premiumize") "Premiumize" else "RealDebrid",
