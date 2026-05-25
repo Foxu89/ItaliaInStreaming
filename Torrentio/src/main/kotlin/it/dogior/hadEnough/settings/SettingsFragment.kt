@@ -3,6 +3,7 @@ package it.dogior.hadEnough.settings
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.Resources
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.*
 import android.widget.*
@@ -29,6 +30,20 @@ class SettingsFragment(
         return findViewById(id)
     }
 
+    private fun getDrawable(name: String): Drawable {
+        val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        return res.getDrawable(id, null)
+    }
+
+    private fun View?.makeTvCompatible() {
+        if (this == null) return
+        val outlineId = res.getIdentifier("outline", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        if (outlineId != 0) {
+            val drawable = res.getDrawable(outlineId, null)
+            if (drawable != null) background = drawable
+        }
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -47,11 +62,15 @@ class SettingsFragment(
             val pos = debridProviders.indexOf(savedDebrid)
             if (pos >= 0) debridSpinner.setSelection(pos)
         }
+        debridSpinner.makeTvCompatible()
 
         val debridKeyInput = root.findView<EditText>("debrid_key_input")
         debridKeyInput.setText(sharedPref.getString("debrid_key", ""))
+        debridKeyInput.makeTvCompatible()
 
-        val saveBtn = root.findView<View>("save")
+        val saveBtn = root.findView<ImageView>("save")
+        saveBtn.setImageDrawable(getDrawable("save_icon"))
+        saveBtn.makeTvCompatible()
         saveBtn.setOnClickListener {
             sharedPref.edit {
                 putString("debrid_provider", debridSpinner.selectedItem?.toString() ?: "")

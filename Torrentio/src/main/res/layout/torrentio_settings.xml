@@ -26,12 +26,12 @@
                 android:textStyle="bold"
                 android:layout_marginBottom="10dp" />
 
-            <Button
+            <ImageView
                 android:id="@+id/save"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:padding="5dp"
-                android:text="Save" />
+                android:contentDescription="Save Settings"
+                android:padding="5dp" />
         </LinearLayout>
 
         <!-- Debrid Providers -->
@@ -71,7 +71,8 @@
             android:text="Reset"
             android:layout_marginTop="20dp"
             android:focusable="true"
-            android:nextFocusUp="@id/debrid_key_input" />
+            android:nextFocusUp="@id/debrid_key_input"
+            android:background="@drawable/outline_danger" />
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
