@@ -1,157 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
+    android:layout_height="match_parent"
     android:padding="16dp"
-    android:background="#1E1E1E">
+    android:fillViewport="true">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Impostazioni Torrentio"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:textColor="#FFFFFF"
-        android:layout_marginBottom="16dp" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#3D3D3D"
-        android:layout_marginBottom="16dp" />
-
-    <!-- ── TORBOX ── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="4dp">
+        android:orientation="vertical">
 
-        <TextView
-            android:layout_width="0dp"
+        <!-- Title Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="TorBox"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Torrentio Settings"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/save"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="5dp"
+                android:text="Save" />
+        </LinearLayout>
+
+        <!-- Debrid Providers -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Debrid Providers"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="#FFFFFF" />
+            android:layout_marginTop="10dp" />
 
-        <Switch
-            android:id="@+id/torbox_enable"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
-
-    <EditText
-        android:id="@+id/torbox_token"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Token API TorBox"
-        android:inputType="text"
-        android:padding="10dp"
-        android:background="#2D2D2D"
-        android:textColor="#FFFFFF"
-        android:textColorHint="#AAAAAA"
-        android:layout_marginBottom="12dp" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#3D3D3D"
-        android:layout_marginBottom="12dp" />
-
-    <!-- ── REAL-DEBRID ── -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="4dp">
-
-        <TextView
-            android:layout_width="0dp"
+        <Spinner
+            android:id="@+id/debrid_provider_spinner"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Real-Debrid"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF" />
+            android:background="@android:drawable/btn_dropdown"
+            android:focusable="true"
+            android:nextFocusDown="@id/debrid_key_input" />
 
-        <Switch
-            android:id="@+id/realdebrid_enable"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
-
-    <EditText
-        android:id="@+id/realdebrid_token"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="API Key Real-Debrid"
-        android:inputType="text"
-        android:padding="10dp"
-        android:background="#2D2D2D"
-        android:textColor="#FFFFFF"
-        android:textColorHint="#AAAAAA"
-        android:layout_marginBottom="12dp" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#3D3D3D"
-        android:layout_marginBottom="12dp" />
-
-    <!-- ── PREMIUMIZE ── -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="4dp">
-
-        <TextView
-            android:layout_width="0dp"
+        <EditText
+            android:id="@+id/debrid_key_input"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Premiumize"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF" />
+            android:hint="Enter API Key / Token"
+            android:inputType="text"
+            android:padding="8dp"
+            android:layout_marginTop="5dp"
+            android:focusable="true"
+            android:nextFocusUp="@id/debrid_provider_spinner"
+            android:nextFocusDown="@id/delete_img" />
 
-        <Switch
-            android:id="@+id/premiumize_enable"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+        <!-- Reset Button -->
+        <Button
+            android:id="@+id/delete_img"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Reset"
+            android:layout_marginTop="20dp"
+            android:focusable="true"
+            android:nextFocusUp="@id/debrid_key_input" />
+
     </LinearLayout>
-
-    <EditText
-        android:id="@+id/premiumize_token"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="API Key Premiumize"
-        android:inputType="text"
-        android:padding="10dp"
-        android:background="#2D2D2D"
-        android:textColor="#FFFFFF"
-        android:textColorHint="#AAAAAA"
-        android:layout_marginBottom="16dp" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#3D3D3D"
-        android:layout_marginBottom="16dp" />
-
-    <!-- ── SALVA ── -->
-    <Button
-        android:id="@+id/save_btn"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:text="Salva Impostazioni"
-        android:textColor="#FFFFFF"
-        android:background="#2D7D46"
-        android:layout_marginBottom="8dp" />
-
-</LinearLayout>
+</androidx.core.widget.NestedScrollView>

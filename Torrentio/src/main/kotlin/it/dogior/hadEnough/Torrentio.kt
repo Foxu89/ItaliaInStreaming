@@ -30,15 +30,14 @@ import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newSearchResponseList
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
-import com.lagradost.cloudstream3.runAllAsync
+import android.content.SharedPreferences
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.random.Random
 
 
-class Torrentio : TmdbProvider() {
+class Torrentio(private val sharedPref: SharedPreferences? = null) : TmdbProvider() {
     private val torrentioUrl = "https://torrentio.strem.fun"
     private val torboxUrl = "https://stremio.torbox.app"
     override var mainUrl =
@@ -241,32 +240,18 @@ class Torrentio : TmdbProvider() {
         val season = show.season
         val episode = show.episode
 
-        val torboxEnabled = getKey<Boolean>("torrentio_torbox_enabled") == true
-        val torboxToken = getKey<String>("torrentio_torbox_token") ?: ""
-        val rdEnabled = getKey<Boolean>("torrentio_realdebrid_enabled") == true
-        val rdToken = getKey<String>("torrentio_realdebrid_token") ?: ""
-        val pmEnabled = getKey<Boolean>("torrentio_premiumize_enabled") == true
-        val pmToken = getKey<String>("torrentio_premiumize_token") ?: ""
+        val debridProvider = sharedPref?.getString("debrid_provider", "") ?: ""
+        val debridKey = sharedPref?.getString("debrid_key", "") ?: ""
 
-        val hasDebrid = (torboxEnabled && torboxToken.isNotBlank()) ||
-                (rdEnabled && rdToken.isNotBlank()) ||
-                (pmEnabled && pmToken.isNotBlank())
+        val hasDebrid = debridProvider != "None" && debridProvider.isNotBlank() && debridKey.isNotBlank()
 
         if (hasDebrid) {
-            runAllAsync(
-                {
-                    if (torboxEnabled && torboxToken.isNotBlank())
-                        invokeTorbox(torboxUrl, torboxToken, id, season, episode, callback)
-                },
-                {
-                    if (rdEnabled && rdToken.isNotBlank())
-                        invokeTorrentioDebian(mainUrl, rdToken, id, season, episode, callback)
-                },
-                {
-                    if (pmEnabled && pmToken.isNotBlank())
-                        invokeTorrentioDebian(mainUrl, pmToken, id, season, episode, callback, "premiumize")
-                }
-            )
+            when (debridProvider) {
+                "RealDebrid" -> invokeTorrentioDebian(mainUrl, debridKey, id, season, episode, callback, "realdebrid")
+                "Premiumize" -> invokeTorrentioDebian(mainUrl, debridKey, id, season, episode, callback, "premiumize")
+                "TorBox" -> invokeTorbox(torboxUrl, debridKey, id, season, episode, callback)
+                else -> return invokeMagnetTorrentio(mainUrl, id, season, episode, callback)
+            }
             return true
         }
 
@@ -289,7 +274,7 @@ class Torrentio : TmdbProvider() {
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "User-Agent" to "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
         )
-        val res = app.get(url, headers = headers, timeout = 100L).parsedSafe<TorrentioResponse>()
+        val res = app.get(url, headers = headers, timeout = 15000L).parsedSafe<TorrentioResponse>()
         var success = false
         res?.streams?.forEach { stream ->
             val formattedTitleName = stream.title
