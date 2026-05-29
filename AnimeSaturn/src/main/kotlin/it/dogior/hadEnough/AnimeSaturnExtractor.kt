@@ -96,22 +96,36 @@ class AnimeSaturnExtractor : ExtractorApi() {
             // ── Alt: jwplayer file ──
             try {
                 val altUrl = "$baseWatchUrl&s=alt"
+                val altHeaders = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+                    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                    "Referer" to baseWatchUrl
+                )
                 Log.i(TAG, "📥 5) ALT → fetch alt: $altUrl")
-                val altDoc = app.get(altUrl, headers = headers, timeout = timeout).document
-                Log.i(TAG, "📄 5a) ALT → pagina scaricata, title=${altDoc.title()}")
+                Log.i(TAG, "📥 5a) ALT → Referer=$baseWatchUrl")
+                val altDoc = app.get(altUrl, headers = altHeaders, timeout = timeout).document
+                Log.i(TAG, "📄 5b) ALT → pagina scaricata, title=${altDoc.title()}")
 
                 val scriptCount = altDoc.select("script").size
-                Log.i(TAG, "📄 5b) ALT → ${scriptCount} script trovati")
+                Log.i(TAG, "📄 5c) ALT → ${scriptCount} script trovati")
 
-                val altVideoUrl = altDoc.select("script").mapNotNull { script ->
+                var altVideoUrl: String? = altDoc.select("script").mapNotNull { script ->
                     val html = script.html()
                     if (html.contains("file:")) {
-                        Log.i(TAG, "🔍 5c) ALT → script contiene 'file:': ${html.take(200)}")
+                        Log.i(TAG, "🔍 5d) ALT → script contiene 'file:': ${html.take(300)}")
                     }
                     Regex("""file:\s*"([^"]+)""").find(html)?.groupValues?.get(1)
                 }.firstOrNull()
 
-                Log.i(TAG, "🎞️ 6) ALT → video url: '$altVideoUrl'")
+                Log.i(TAG, "🎞️ 6) ALT → jwplayer video url: '$altVideoUrl'")
+
+                if (altVideoUrl.isNullOrBlank()) {
+                    Log.w(TAG, "⚠️ 6a) ALT → jwplayer fallito! Provo body.string() + regex...")
+                    val rawBody = app.get(altUrl, headers = altHeaders, timeout = timeout).body.string()
+                    Log.i(TAG, "📄 6b) ALT → body primi 500: ${rawBody.take(500)}")
+                    altVideoUrl = Regex("""file:\s*"([^"]+)""").find(rawBody)?.groupValues?.get(1)
+                    Log.i(TAG, "🎞️ 6c) ALT → regex su body: '$altVideoUrl'")
+                }
 
                 if (!altVideoUrl.isNullOrBlank()) {
                     callback.invoke(
@@ -125,11 +139,9 @@ class AnimeSaturnExtractor : ExtractorApi() {
                             this.referer = altUrl
                         }
                     )
-                    Log.i(TAG, "✅ 6a) ALT → Callback inviato: $altVideoUrl")
+                    Log.i(TAG, "✅ 6d) ALT → Callback inviato: $altVideoUrl")
                 } else {
-                    Log.w(TAG, "⚠️ 6b) ALT → Nessun video trovato negli script")
-                    val body = app.get(altUrl, headers = headers, timeout = timeout).body.string()
-                    Log.i(TAG, "📄 6c) ALT → body primi 500: ${body.take(500)}")
+                    Log.w(TAG, "❌ 6e) ALT → NESSUN video trovato!")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "💥 ALT → eccezione: ${e.message}")

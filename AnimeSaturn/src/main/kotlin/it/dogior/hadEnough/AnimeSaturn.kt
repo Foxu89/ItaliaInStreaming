@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import it.dogior.hadEnough.AnimeSaturnExtractor
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URLEncoder
 import java.util.Locale
 
 const val TAG = "AnimeSaturn"
@@ -137,30 +138,108 @@ class AnimeSaturn : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        if (query.isBlank()) return emptyList()
-        
-        val searchUrl = "$mainUrl/index.php?search=1&key=${query}"
-        
+        Log.d(TAG, "🔍 search() → query: '$query'")
+
+        if (query.isBlank()) {
+            Log.d(TAG, "⚠️ search() → query vuota, ritorno lista vuota")
+            return emptyList()
+        }
+
+        val encodedQuery = URLEncoder.encode(query, "UTF-8")
+
+        // Tentativo 1: API JSON con headers browser-like
+        val searchUrl = "$mainUrl/index.php?search=1&key=$encodedQuery"
+        Log.d(TAG, "🌐 search() → tentativo API: $searchUrl")
+
         try {
-            val response = app.get(searchUrl, timeout = timeout).text
-            val json = parseJson<List<Map<String, Any>>>(response)
-            
-            return json.mapNotNull { anime: Map<String, Any> ->
-                val rawName = anime["name"] as? String ?: return@mapNotNull null
-                val name = cleanTitle(rawName)
-                val link = anime["link"] as? String ?: return@mapNotNull null
-                val image = anime["image"] as? String ?: ""
-                
-                val isDub = rawName.contains("(ITA)") || link.contains("-ITA")
-                
-                newAnimeSearchResponse(name, "/anime/$link") {
-                    this.posterUrl = fixUrlNull(image)
+            val response = app.get(searchUrl, headers = mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+                "Accept" to "application/json, text/javascript, */*; q=0.01",
+                "Referer" to "$mainUrl/",
+                "X-Requested-With" to "XMLHttpRequest"
+            ), timeout = timeout).text
+            Log.d(TAG, "📄 search() → risposta API, lunghezza: ${response.length} chars, inizio: '${response.take(60)}'")
+
+            val trimmed = response.trim()
+            if (trimmed.startsWith("[")) {
+                val json = parseJson<List<Map<String, Any>>>(trimmed)
+                Log.d(TAG, "📋 search() → risultati JSON: ${json.size}")
+
+                return json.mapNotNull { anime: Map<String, Any> ->
+                    val rawName = anime["name"] as? String ?: return@mapNotNull null
+                    val name = cleanTitle(rawName)
+                    val link = anime["link"] as? String ?: return@mapNotNull null
+                    val image = anime["image"] as? String ?: ""
+
+                    val isDub = rawName.contains("(ITA)") || link.contains("-ITA")
+
+                    Log.d(TAG, "🎌 search() → '$name' link='$link' dub=$isDub")
+
+                    newAnimeSearchResponse(name, "/anime/$link") {
+                        this.posterUrl = fixUrlNull(image)
+                        this.type = TvType.Anime
+                        addDubStatus(isDub)
+                    }
+                }
+            } else {
+                Log.d(TAG, "⚠️ search() → risposta API non è un array JSON, provo fallback...")
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "❌ search() → eccezione API: ${e.message}")
+        }
+
+        // Tentativo 2: Fallback su /filter (pagina HTML normale)
+        val filterUrl = "$mainUrl/filter?name=$encodedQuery"
+        Log.d(TAG, "🌐 search() → tentativo filter: $filterUrl")
+
+        try {
+            val doc = app.get(filterUrl, timeout = timeout).document
+            Log.d(TAG, "📄 search() → documento filter ottenuto, titolo: '${doc.title()}'")
+
+            return extractFilterResults(doc)
+        } catch (e: Exception) {
+            Log.d(TAG, "❌ search() → eccezione filter: ${e.message}")
+            return emptyList()
+        }
+    }
+
+    private fun extractFilterResults(doc: Document): List<SearchResponse> {
+        val cards = doc.select(".anime-card-newanime.main-anime-card")
+        Log.d(TAG, "🔍 extractFilterResults() → card trovate: ${cards.size}")
+
+        if (cards.isNotEmpty()) {
+            return cards.mapNotNull { card ->
+                val linkElement = card.select("a").first() ?: return@mapNotNull null
+                val rawTitle = card.select("span").text().ifEmpty {
+                    card.select(".card-text span").text()
+                }
+                val title = cleanTitle(rawTitle)
+                val href = fixUrl(linkElement.attr("href"))
+                val poster = card.select("img").attr("src")
+                val isDub = rawTitle.contains("(ITA)") || href.contains("-ITA")
+
+                Log.d(TAG, "🎌 extractFilterResults() → '$title' href='$href' dub=$isDub")
+
+                newAnimeSearchResponse(title, href) {
+                    this.posterUrl = fixUrlNull(poster)
                     this.type = TvType.Anime
                     addDubStatus(isDub)
                 }
             }
-        } catch (e: Exception) {
-            return emptyList()
+        }
+
+        val links = doc.select("a[href*='/anime/']")
+        Log.d(TAG, "🔍 extractFilterResults() → link generici trovati: ${links.size}")
+
+        return links.mapNotNull { link ->
+            val href = fixUrl(link.attr("href"))
+            val title = cleanTitle(link.text().trim())
+            if (title.isBlank()) return@mapNotNull null
+
+            newAnimeSearchResponse(title, href) {
+                this.type = TvType.Anime
+                addDubStatus(href.contains("-ITA"))
+            }
         }
     }
 
