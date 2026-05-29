@@ -1,5 +1,6 @@
 package it.dogior.hadEnough
 
+import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
@@ -280,7 +281,9 @@ class AnimeSaturn : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        Log.i(TAG, "🎬 loadLinks chiamato → data=$data")
         AnimeSaturnExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
+        Log.i(TAG, "🔚 loadLinks completato")
         return true
     }
 }
