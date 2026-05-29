@@ -20,32 +20,53 @@ class AnimeSaturnExtractor : ExtractorApi() {
 
         try {
             val episodeDoc = app.get(url, timeout = timeout).document
-
             val watchLink = episodeDoc.select("a[href*='/watch?file=']").attr("href")
             if (watchLink.isBlank()) return
 
-            val watchUrl = fixUrl(watchLink)
-            val playerDoc = app.get(watchUrl, timeout = timeout).document
+            val baseWatchUrl = fixUrl(watchLink)
 
-            val videoUrl = playerDoc.select("script").mapNotNull { script ->
-                Regex("""file:\s*"([^"]+)""").find(script.html())?.groupValues?.get(1)
-            }.firstOrNull()
-
-            if (videoUrl.isNullOrBlank()) return
-
-            callback.invoke(
-                newExtractorLink(
-                    source = this.name,
-                    name = "AnimeSaturn",
-                    url = videoUrl,
-                    type = ExtractorLinkType.VIDEO
-                ) {
-                    this.quality = 1080
-                    this.referer = mainUrl
+            // ── Main: video source ──
+            try {
+                val playerDoc = app.get(baseWatchUrl, timeout = timeout).document
+                val videoUrl = playerDoc.select("video source").attr("src")
+                if (videoUrl.isNotBlank()) {
+                    callback.invoke(
+                        newExtractorLink(
+                            source = this.name,
+                            name = "AnimeSaturn",
+                            url = videoUrl,
+                            type = ExtractorLinkType.VIDEO
+                        ) {
+                            this.quality = 1080
+                            this.referer = mainUrl
+                        }
+                    )
                 }
-            )
+            } catch (_: Exception) {}
 
-        } catch (_: Exception) {
-        }
+            // ── Alt: jwplayer file ──
+            try {
+                val altUrl = "$baseWatchUrl&s=alt"
+                val altDoc = app.get(altUrl, timeout = timeout).document
+                val altVideoUrl = altDoc.select("script").mapNotNull { script ->
+                    Regex("""file:\s*"([^"]+)""").find(script.html())?.groupValues?.get(1)
+                }.firstOrNull()
+
+                if (!altVideoUrl.isNullOrBlank()) {
+                    callback.invoke(
+                        newExtractorLink(
+                            source = this.name,
+                            name = "AnimeSaturn (Alt)",
+                            url = altVideoUrl,
+                            type = ExtractorLinkType.VIDEO
+                        ) {
+                            this.quality = 1080
+                            this.referer = mainUrl
+                        }
+                    )
+                }
+            } catch (_: Exception) {}
+
+        } catch (_: Exception) {}
     }
 }
