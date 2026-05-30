@@ -11,13 +11,15 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.abs
+import kotlin.math.max
 
 object CinemaCityScraper {
     private const val TAG = "CinemaCityScraper"
     private const val BASE_URL = "https://cinemacity.cc"
     private const val SITEMAP_URL = "$BASE_URL/news_pages.xml"
     private const val TMDB_URL = "https://api.themoviedb.org/3"
-    private const val SITEMAP_CACHE_KEY = "CINEMACITY:SITEMAP"
+    private const val WORKER_BASE = "https://cm.leanhuo61206.workers.dev"
+    private const val SITEMAP_CACHE_MS = 60 * 60 * 1000L
     private const val TMDB_CACHE_KEY_PREFIX = "CINEMACITY:TMDB:"
 
     private val cfKiller = CloudflareKiller()
@@ -30,6 +32,301 @@ object CinemaCityScraper {
         "Authorization" to "Bearer ${BuildConfig.TMDB_API}",
         "Accept" to "application/json"
     )
+
+    private data class SitemapCache(
+        val entries: List<SitemapEntry>,
+        val expiresAt: Long,
+    )
+
+    private data class SitemapEntry(
+        val url: String,
+        val kind: String,
+        val slug: String,
+        val title: String,
+        val normalizedTitle: String,
+        val compactTitle: String,
+        val tokens: Set<String>,
+        val year: Int?,
+    )
+
+    private var sitemapCache: SitemapCache? = null
+
+    private suspend fun fetchViaWorker(url: String): String? {
+        val path = try {
+            val u = java.net.URL(url)
+            u.path + if (u.query != null) "?${u.query}" else ""
+        } catch (_: Exception) { url }
+        val workerUrl = "${WORKER_BASE}${path}"
+        StreamITALogger.log(TAG, "Worker → $workerUrl")
+        return try {
+            val text = app.get(workerUrl, headers = headers).text
+            if (text.length < 10) null else text
+        } catch (e: Exception) {
+            StreamITALogger.log(TAG, "Worker fallito: ${e.message}")
+            null
+        }
+    }
+
+    private fun isBlockedResponse(text: String): Boolean {
+        return text.length < 500 ||
+            text.contains("Just a moment", ignoreCase = true) ||
+            (text.contains("admin", ignoreCase = true) && text.contains("Unlimited"))
+    }
+
+    private fun decodeHtmlEntities(value: String): String {
+        var result = value
+        result = result.replace(Regex("&#(\\d+);")) {
+            it.groupValues[1].toIntOrNull()?.toChar()?.toString() ?: it.value
+        }
+        result = result.replace(Regex("&#x([0-9a-f]+);", RegexOption.IGNORE_CASE)) {
+            it.groupValues[1].toIntOrNull(16)?.toChar()?.toString() ?: it.value
+        }
+        result = result.replace("&quot;", "\"")
+            .replace("&#039;", "'")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace(Regex("&(?:ndash|mdash);"), "-")
+            .replace(Regex("[\u2013\u2014]"), "-")
+        return result
+    }
+
+    private fun normalizeTitle(value: String): String {
+        return decodeHtmlEntities(value)
+            .let { java.text.Normalizer.normalize(it, java.text.Normalizer.Form.NFKD) }
+            .replace(Regex("[\u0300-\u036f]"), "")
+            .lowercase()
+            .replace(Regex("\\([^)]*\\)"), " ")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
+    }
+
+    private fun compactTitle(value: String): String {
+        return normalizeTitle(value).replace("\\s+".toRegex(), "")
+    }
+
+    private fun getSignificantTokens(value: String): Set<String> {
+        val stopwords = setOf(
+            "the", "a", "an", "of", "and", "in", "on", "to", "for", "at", "by", "is", "it",
+            "il", "lo", "la", "gli", "le", "un", "uno", "una",
+            "di", "da", "del", "della", "dei", "e", "o", "con", "per", "su", "tra", "fra"
+        )
+        return normalizeTitle(value)
+            .split(Regex("\\s+"))
+            .filter { it.length > 1 && it !in stopwords }
+            .toSet()
+    }
+
+    private fun scoreSitemapEntry(entry: SitemapEntry, expectedTitles: List<String>, expectedYear: Int?): Int {
+        var bestScore = 0
+        for (title in expectedTitles) {
+            val normalized = normalizeTitle(title)
+            val compact = compactTitle(title)
+            if (normalized.isBlank() || compact.isBlank()) continue
+
+            val score = when {
+                entry.normalizedTitle == normalized || entry.compactTitle == compact -> 1000
+                entry.normalizedTitle.startsWith(normalized) || normalized.startsWith(entry.normalizedTitle) -> 500
+                entry.compactTitle.contains(compact) || compact.contains(entry.compactTitle) -> 420
+                else -> {
+                    val expectedTokens = getSignificantTokens(title)
+                    if (expectedTokens.isNotEmpty() && entry.tokens.isNotEmpty()) {
+                        val hits = expectedTokens.count { it in entry.tokens }
+                        val coverage = hits.toDouble() / expectedTokens.size
+                        val extraTokens = max(0, entry.tokens.size - expectedTokens.size)
+                        val lengthDiff = abs(entry.tokens.size - expectedTokens.size)
+                        (coverage * 300 - extraTokens * 20 - lengthDiff * 2).toInt()
+                    } else 0
+                }
+            }
+
+            val yearBonus = if (expectedYear != null && entry.year != null) {
+                if (entry.year == expectedYear) 50 else -abs(entry.year - expectedYear) * 3
+            } else 0
+
+            bestScore = max(bestScore, score + yearBonus)
+        }
+        return bestScore
+    }
+
+    private fun extractImdbIdFromHtml(html: String): String? {
+        return Regex("""\b(tt\d{5,})\b""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)?.lowercase()
+    }
+
+    private fun parseSitemapEntries(xml: String): List<SitemapEntry> {
+        val entries = mutableListOf<SitemapEntry>()
+        val regex = Regex(
+            """<loc>(https://cinemacity\.cc/(movies|tv-series)/\d+-([a-z0-9-]+)\.html)</loc>""",
+            RegexOption.IGNORE_CASE
+        )
+        for (match in regex.findAll(xml)) {
+            val url = match.groupValues[1]
+            val kind = match.groupValues[2]
+            val slug = match.groupValues[3]
+            val yearMatch = Regex("""-(\d{4})$""").find(slug)
+            val extractedYear = yearMatch?.groupValues?.get(1)?.toIntOrNull()
+            val titleSlug = if (extractedYear != null) slug.dropLast(5) else slug
+            val title = titleSlug.replace("-", " ")
+            entries.add(
+                SitemapEntry(
+                    url = url,
+                    kind = kind,
+                    slug = slug,
+                    title = title,
+                    normalizedTitle = normalizeTitle(title),
+                    compactTitle = compactTitle(title),
+                    tokens = getSignificantTokens(title),
+                    year = extractedYear
+                )
+            )
+        }
+        return entries
+    }
+
+    private suspend fun fetchSitemapEntries(): List<SitemapEntry>? {
+        val now = System.currentTimeMillis()
+        if (sitemapCache != null && sitemapCache!!.expiresAt > now) {
+            return sitemapCache!!.entries
+        }
+
+        StreamITALogger.log(TAG, "Fetching sitemap catalog...")
+
+        try {
+            val sitemapPath = "/news_pages.xml"
+            val firstPageUrl = "$WORKER_BASE$sitemapPath?page=1&perPage=500"
+            StreamITALogger.log(TAG, "Sitemap page 1: $firstPageUrl")
+            val firstResp = app.get(firstPageUrl, headers = headers)
+            val totalEntries = firstResp.headers["x-total-entries"]?.toIntOrNull() ?: 0
+            val firstXml = firstResp.text
+            var allEntries = parseSitemapEntries(firstXml)
+
+            if (totalEntries > 0) {
+                val totalPages = (totalEntries + 499) / 500
+                for (p in 2..totalPages) {
+                    try {
+                        val pageUrl = "$WORKER_BASE$sitemapPath?page=$p&perPage=500"
+                        val resp = app.get(pageUrl, headers = headers)
+                        allEntries = allEntries + parseSitemapEntries(resp.text)
+                    } catch (_: Exception) {}
+                }
+            }
+
+            if (allEntries.isNotEmpty()) {
+                sitemapCache = SitemapCache(allEntries, now + SITEMAP_CACHE_MS)
+                StreamITALogger.log(TAG, "Sitemap loaded: ${allEntries.size} entries")
+                return allEntries
+            }
+        } catch (e: Exception) {
+            StreamITALogger.log(TAG, "Sitemap pagination fallito: ${e.message}")
+        }
+
+        StreamITALogger.log(TAG, "Fallback sitemap full fetch...")
+        val xml = fetchViaWorker(SITEMAP_URL) ?: return null
+        if (!isBlockedResponse(xml)) {
+            val entries = parseSitemapEntries(xml)
+            if (entries.isNotEmpty()) {
+                sitemapCache = SitemapCache(entries, now + SITEMAP_CACHE_MS)
+                StreamITALogger.log(TAG, "Sitemap loaded: ${entries.size} entries")
+                return entries
+            }
+        }
+
+        StreamITALogger.log(TAG, "Sitemap worker blocked, fallback CFK...")
+        val cfkXml = try { app.get(SITEMAP_URL, headers = headers, interceptor = cfKiller).text } catch (_: Exception) { null }
+        if (cfkXml != null && !isBlockedResponse(cfkXml)) {
+            val entries = parseSitemapEntries(cfkXml)
+            if (entries.isNotEmpty()) {
+                sitemapCache = SitemapCache(entries, now + SITEMAP_CACHE_MS)
+                return entries
+            }
+        }
+        return null
+    }
+
+    internal suspend fun resolveViaSitemap(imdbId: String, isTvSeries: Boolean): String? {
+        val cacheKey = "$TMDB_CACHE_KEY_PREFIX$imdbId"
+
+        val cached = StreamITACache.get(cacheKey)
+        if (cached != null) return cached
+
+        val tmdbUrl = "$TMDB_URL/find/$imdbId?external_source=imdb_id&language=it-IT"
+        val tmdbText = try {
+            app.get(tmdbUrl, headers = tmdbHeaders()).text
+        } catch (e: Exception) {
+            StreamITALogger.log(TAG, "TMDB fallito: ${e.message}")
+            return null
+        }
+        val tmdbJson = JSONObject(tmdbText)
+        val resultsKey = if (isTvSeries) "tv_results" else "movie_results"
+        val results = tmdbJson.optJSONArray(resultsKey) ?: return null
+        if (results.length() == 0) return null
+
+        val first = results.getJSONObject(0)
+        val title = first.optString("title").ifBlank { first.optString("name") }.ifBlank { null } ?: return null
+        val originalTitle = first.optString("original_title").ifBlank { first.optString("original_name") }
+        val date = first.optString("release_date").ifBlank { first.optString("first_air_date") }
+        val year = date.take(4).toIntOrNull()
+        val titles = listOfNotNull(title, originalTitle).distinct()
+
+        StreamITALogger.log(TAG, "TMDB: '$title' ($year), originale: '$originalTitle'")
+
+        val kind = if (isTvSeries) "tv-series" else "movies"
+        val entries = fetchSitemapEntries() ?: return null
+
+        val ranked = entries
+            .filter { it.kind == kind }
+            .map { entry -> entry to scoreSitemapEntry(entry, titles, year) }
+            .filter { it.second >= 250 }
+            .sortedByDescending { it.second }
+
+        if (ranked.isEmpty()) {
+            StreamITALogger.log(TAG, "Nessun match confidente per $title (best < 250)")
+            return null
+        }
+
+        for ((candidate, _) in ranked.take(3)) {
+            val candidateImdbId = verifyCandidateImdb(candidate.url, imdbId)
+            if (candidateImdbId == imdbId.lowercase()) {
+                StreamITALogger.log(TAG, "IMDb verificato: $title → ${candidate.url}")
+                StreamITACache.put(cacheKey, candidate.url, StreamITACache.CacheProfile.CINEMACITY_TMDB)
+                return candidate.url
+            }
+            if (candidateImdbId != null) {
+                StreamITALogger.log(TAG, "IMDb mismatch: ${candidate.url} ha $candidateImdbId, atteso $imdbId")
+            }
+        }
+
+        val bestScore = ranked.first().second
+        if (bestScore < 950) {
+            StreamITALogger.log(TAG, "Match non verificato IMDb, score $bestScore < 950")
+            return null
+        }
+
+        val bestUrl = ranked.first().first.url
+        StreamITALogger.log(TAG, "Match high confidence: $bestUrl (score=$bestScore)")
+        StreamITACache.put(cacheKey, bestUrl, StreamITACache.CacheProfile.CINEMACITY_TMDB)
+        return bestUrl
+    }
+
+    private suspend fun verifyCandidateImdb(candidateUrl: String, expectedImdbId: String): String? {
+        if (!Regex("""^tt\d{5,}$""", RegexOption.IGNORE_CASE).matches(expectedImdbId)) return null
+        try {
+            val html = fetchViaWorker(candidateUrl) ?: return null
+            val imdbId = extractImdbIdFromHtml(html)
+            if (imdbId != null) {
+                StreamITALogger.log(TAG, "IMDb check $candidateUrl: $imdbId")
+            }
+            return imdbId
+        } catch (e: Exception) {
+            val msg = e.message ?: ""
+            val isOk = msg.contains("403") || msg.contains("503") ||
+                Regex("Cloudflare has blocked|Error solving the challenge", RegexOption.IGNORE_CASE).containsMatchIn(msg)
+            if (!isOk) {
+                StreamITALogger.log(TAG, "IMDb check error: ${e.message}")
+            }
+            return null
+        }
+    }
 
     suspend fun loadLinks(
         imdbId: String,
@@ -49,10 +346,18 @@ object CinemaCityScraper {
 
             StreamITALogger.log(TAG, "Pagina trovata: $pageUrl")
 
-            val pageResponse = app.get(pageUrl, headers = headers, interceptor = cfKiller)
-            val html = pageResponse.text
+            var html = fetchViaWorker(pageUrl)
+            if (html != null && !isBlockedResponse(html)) {
+                StreamITALogger.log(TAG, "Pagina via worker")
+            } else {
+                StreamITALogger.log(TAG, "Worker bloccato, fallback CFK...")
+                html = try { app.get(pageUrl, headers = headers, interceptor = cfKiller).text } catch (_: Exception) { null }
+                if (html == null || isBlockedResponse(html)) {
+                    StreamITALogger.log(TAG, "Anche CFK bloccato")
+                    return false
+                }
+            }
 
-            // FIX 1: Prova link diretti (MP4/M3U8)
             val directLinks = extractDownloadLinks(html)
             if (directLinks.isNotEmpty()) {
                 StreamITALogger.log(TAG, "Trovati ${directLinks.size} link diretti")
@@ -92,7 +397,6 @@ object CinemaCityScraper {
                 return true
             }
 
-            // FIX 2: Prova estrazione atob()
             StreamITALogger.log(TAG, "Nessun link diretto, provo atob...")
             val atobUrl = extractStreamFromAtob(html, season, episode)
             if (atobUrl != null) {
@@ -125,8 +429,6 @@ object CinemaCityScraper {
         return false
     }
 
-    // ==================== LINK DIRETTI HTML ====================
-
     private fun extractDownloadLinks(html: String): List<Pair<String, String>> {
         val links = mutableListOf<Pair<String, String>>()
         val regex = Regex(
@@ -143,8 +445,6 @@ object CinemaCityScraper {
         return links
     }
 
-    // ==================== ESTRAZIONE ATOB ====================
-
     private fun extractStreamFromAtob(html: String, season: Int?, episode: Int?): String? {
         val atobRegex = Regex("""atob\s*\(\s*['"]([^"']{20,})['"]\s*\)""", RegexOption.IGNORE_CASE)
         for (match in atobRegex.findAll(html)) {
@@ -153,13 +453,10 @@ object CinemaCityScraper {
                 val decoded = base64Decode(b64)
                 if (decoded.length < 20) continue
 
-                // Cerca file: '[JSON_ARRAY]' (stringa)
                 val fileMatch = Regex("""file\s*:\s*'(\[.*?\])'""", RegexOption.DOT_MATCHES_ALL).find(decoded) ?: continue
                 val jsonArray = JSONArray(fileMatch.groupValues[1])
-
                 if (jsonArray.length() == 0) continue
 
-                // Serie TV: folder esiste
                 if (season != null && episode != null) {
                     val seasonIdx = season - 1
                     val seasonObj = jsonArray.optJSONObject(seasonIdx) ?: continue
@@ -170,7 +467,6 @@ object CinemaCityScraper {
                     return buildDownloadUrl(fileVal) ?: fileVal
                 }
 
-                // Film
                 val first = jsonArray.optJSONObject(0) ?: continue
                 val fileVal = first.optString("file").ifBlank { continue }
                 return buildDownloadUrl(fileVal) ?: fileVal
@@ -179,8 +475,6 @@ object CinemaCityScraper {
         }
         return null
     }
-
-    // ==================== BUILD DOWNLOAD URL ====================
 
     private fun buildDownloadUrl(fileVal: String): String? {
         val baseEnd = fileVal.indexOf("/public_files/")
@@ -194,7 +488,10 @@ object CinemaCityScraper {
         val itaAudio = parts.find { Regex("""italian|italiano""", RegexOption.IGNORE_CASE).containsMatchIn(it) && it.endsWith(".m4a") }
             ?: return null
 
-        return cdnBase + rest
+        val hasM3u8 = parts.any { it.contains(".m3u8") }
+        val suffix = if (hasM3u8) "" else ".urlset/master.m3u8"
+
+        return cdnBase + rest + suffix
     }
 
     private fun resolveUrl(base: String, relative: String): String {
@@ -204,138 +501,5 @@ object CinemaCityScraper {
         } catch (_: Exception) {
             relative
         }
-    }
-
-    // ==================== SITEMAP MATCHING (INVARIATO) ====================
-
-    internal suspend fun resolveViaSitemap(imdbId: String, isTvSeries: Boolean): String? {
-        val cacheKey = "$TMDB_CACHE_KEY_PREFIX$imdbId"
-
-        val cached = StreamITACache.get(cacheKey)
-        val pageUrl = if (cached != null) {
-            cached
-        } else {
-            val tmdbUrl = "$TMDB_URL/find/$imdbId?external_source=imdb_id&language=it-IT"
-            val tmdbText = try {
-                app.get(tmdbUrl, headers = tmdbHeaders()).text
-            } catch (e: Exception) {
-                StreamITALogger.log(TAG, "TMDB fallito: ${e.message}")
-                return null
-            }
-            val tmdbJson = JSONObject(tmdbText)
-            val resultsKey = if (isTvSeries) "tv_results" else "movie_results"
-            val results = tmdbJson.optJSONArray(resultsKey) ?: return null
-            if (results.length() == 0) return null
-
-            val first = results.getJSONObject(0)
-            val title = first.optString("title").ifBlank { first.optString("name") }.ifBlank { null } ?: return null
-            val originalTitle = first.optString("original_title").ifBlank { first.optString("original_name") }
-            val date = first.optString("release_date").ifBlank { first.optString("first_air_date") }
-            val year = date.take(4).toIntOrNull()
-            val titles = listOfNotNull(title, originalTitle).distinct()
-
-            StreamITALogger.log(TAG, "TMDB: '$title' ($year), originale: '$originalTitle'")
-
-            val sitemapXml = fetchSitemap()
-            val kind = if (isTvSeries) "tv-series" else "movies"
-            val entries = parseSitemap(sitemapXml, kind)
-            val url = findBestMatch(entries, titles, year) ?: return null
-
-            StreamITACache.put(cacheKey, url, StreamITACache.CacheProfile.CINEMACITY_SITEMAP)
-            url
-        }
-
-        return pageUrl
-    }
-
-    private suspend fun fetchSitemap(): String {
-        val cached = StreamITACache.get(SITEMAP_CACHE_KEY)
-        if (cached != null) return cached
-
-        val xml = app.get(SITEMAP_URL, headers = headers, interceptor = cfKiller).text
-        StreamITACache.put(SITEMAP_CACHE_KEY, xml, StreamITACache.CacheProfile.CINEMACITY_SITEMAP)
-        return xml
-    }
-
-    private data class SitemapEntry(
-        val url: String,
-        val kind: String,
-        val slug: String,
-        val title: String,
-        val year: Int?,
-    )
-
-    private fun parseSitemap(xml: String, kind: String): List<SitemapEntry> {
-        val entries = mutableListOf<SitemapEntry>()
-        val regex = Regex(
-            """<loc>(https://cinemacity\.cc/(movies|tv-series)/\d+-([a-z0-9-]+)\.html)</loc>""",
-            RegexOption.IGNORE_CASE
-        )
-        for (match in regex.findAll(xml)) {
-            val url = match.groupValues[1]
-            val entryKind = match.groupValues[2]
-            if (entryKind != kind) continue
-            val slug = match.groupValues[3]
-            val yearMatch = Regex("""-(\d{4})$""").find(slug)
-            val extractedYear = yearMatch?.groupValues?.get(1)?.toIntOrNull()
-            val titleSlug = if (extractedYear != null) slug.dropLast(5) else slug
-            val title = titleSlug.replace("-", " ")
-            entries.add(SitemapEntry(url, entryKind, slug, title, extractedYear))
-        }
-        return entries
-    }
-
-    private fun findBestMatch(
-        entries: List<SitemapEntry>,
-        titles: List<String>,
-        expectedYear: Int?,
-    ): String? {
-        var bestScore = -1.0
-        var bestUrl: String? = null
-
-        for (entry in entries) {
-            for (title in titles) {
-                val normalized = cleanMatchText(title)
-                val entryTitle = cleanMatchText(entry.title)
-                val entryTokens = entryTitle.split(" ").filter { it.length > 1 }.toSet()
-                val titleTokens = normalized.split(" ").filter { it.length > 1 }.toSet()
-
-                var score = when {
-                    entryTitle == normalized -> 1.0
-                    entryTitle.startsWith(normalized) || normalized.startsWith(entryTitle) -> 0.85
-                    entryTitle.contains(normalized) || normalized.contains(entryTitle) -> 0.6
-                    else -> {
-                        val intersection = entryTokens.intersect(titleTokens)
-                        if (intersection.isNotEmpty())
-                            intersection.size.toDouble() / maxOf(entryTokens.size, titleTokens.size, 1) * 0.7
-                        else 0.0
-                    }
-                }
-
-                if (expectedYear != null && entry.year != null) {
-                    score += if (entry.year == expectedYear) 0.3
-                    else -0.1 * abs(entry.year - expectedYear)
-                }
-
-                if (score > bestScore) {
-                    bestScore = score
-                    bestUrl = entry.url
-                }
-            }
-        }
-
-        if (bestScore < 0.4) {
-            StreamITALogger.log(TAG, "Nessun match sufficiente (best=$bestScore)")
-            return null
-        }
-        StreamITALogger.log(TAG, "Match: $bestUrl (score=$bestScore)")
-        return bestUrl
-    }
-
-    private fun cleanMatchText(value: String): String {
-        return value.lowercase().trim()
-            .replace(Regex("[^a-z0-9 ]"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
     }
 }

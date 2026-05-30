@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import it.dogior.hadEnough.CinemaCityScraper
+import it.dogior.hadEnough.StreamITALogger
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -23,6 +24,31 @@ class CinemaCityExtractor : ExtractorApi() {
 
     companion object {
         private const val TAG = "CinemaCityExtractor"
+        private const val WORKER_BASE = "https://cm.leanhuo61206.workers.dev"
+        private val headers = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        )
+    }
+
+    private suspend fun fetchViaWorker(url: String): String? {
+        val path = try {
+            val u = java.net.URL(url)
+            u.path + if (u.query != null) "?${u.query}" else ""
+        } catch (_: Exception) { url }
+        val workerUrl = "${WORKER_BASE}${path}"
+        StreamITALogger.log(TAG, "Worker → $workerUrl")
+        return try {
+            app.get(workerUrl, headers = headers).text
+        } catch (e: Exception) {
+            StreamITALogger.log(TAG, "Worker fallito: ${e.message}")
+            null
+        }
+    }
+
+    private fun isBlockedResponse(text: String): Boolean {
+        return text.length < 500 ||
+            text.contains("Just a moment", ignoreCase = true) ||
+            (text.contains("admin", ignoreCase = true) && text.contains("Unlimited"))
     }
 
     override suspend fun getUrl(
@@ -46,11 +72,18 @@ class CinemaCityExtractor : ExtractorApi() {
 
             Log.d(TAG, "Pagina trovata: $pageUrl")
 
-            val headers = mapOf(
-                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-            )
-
-            val html = app.get(pageUrl, headers = headers, interceptor = cfKiller).text
+            // Worker primario per pagina contenuto
+            var html = fetchViaWorker(pageUrl)
+            if (html != null && !isBlockedResponse(html)) {
+                Log.d(TAG, "Pagina via worker")
+            } else {
+                Log.d(TAG, "Worker bloccato, fallback CFK...")
+                html = app.get(pageUrl, headers = headers, interceptor = cfKiller).text
+                if (isBlockedResponse(html)) {
+                    Log.e(TAG, "Anche CFK bloccato")
+                    return
+                }
+            }
 
             // FIX 1: Link diretti
             val directLinks = extractDownloadLinks(html)
@@ -181,7 +214,10 @@ class CinemaCityExtractor : ExtractorApi() {
         val itaAudio = parts.find { Regex("""italian|italiano""", RegexOption.IGNORE_CASE).containsMatchIn(it) && it.endsWith(".m4a") }
             ?: return null
 
-        return cdnBase + rest
+        val hasM3u8 = parts.any { it.contains(".m3u8") }
+        val suffix = if (hasM3u8) "" else ".urlset/master.m3u8"
+
+        return cdnBase + rest + suffix
     }
 
     private fun resolveUrl(base: String, relative: String): String {
