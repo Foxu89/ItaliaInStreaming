@@ -11,6 +11,8 @@ import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.ui.home.HomeViewModel.Companion.getResumeWatching
 import com.fasterxml.jackson.module.kotlin.readValue
+import com.lagradost.cloudstream3.plugins.PluginManager
+import com.lagradost.cloudstream3.plugins.PluginData
 
 object ApiUtils {
     private fun Any.toStringData(): String {
@@ -57,7 +59,9 @@ object ApiUtils {
             setKey("sync_device_id", firstDevice.deviceId ?: "")
             if (getKey<String>("restore_device") == "true") {
                 val restoredValue = mapper.readValue<BackupFile>(firstDevice.syncedData ?: "")
+                val originalPlugins = PluginManager.getPluginsOnline().toList()
                 BackupUtils.restore(context, restoredValue, true, true)
+                BackupUtils.restoreExtensions(context, originalPlugins)
             }
         } else if (getKey<String>("backup_device") == "true") {
             val syncData = BackupUtils.getBackup(context, getResumeWatching())?.toJson() ?: ""

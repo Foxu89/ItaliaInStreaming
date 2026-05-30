@@ -82,7 +82,9 @@ class SyncPlugin : Plugin() {
                             deleteAllResumeStateIds()
                         }
                         val restoredValue = mapper.readValue<BackupFile>(firstDevice.syncedData ?: "")
+                        val originalPlugins = PluginManager.getPluginsOnline().toList()
                         BackupUtils.restore(context, restoredValue, true, true)
+                        BackupUtils.restoreExtensions(context, originalPlugins)
                         MainActivity.bookmarksUpdatedEvent(true)
                     }
                 }

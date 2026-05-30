@@ -6,6 +6,14 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStore.getDefaultSharedPrefs
 import com.lagradost.cloudstream3.utils.DataStore.getSharedPrefs
+import com.lagradost.cloudstream3.MainActivity
+import com.lagradost.cloudstream3.plugins.PLUGINS_KEY
+import com.lagradost.cloudstream3.plugins.PluginManager
+import com.lagradost.cloudstream3.plugins.PluginData
+import com.lagradost.cloudstream3.plugins.RepositoryManager
+import com.lagradost.cloudstream3.plugins.SitePlugin
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
+import java.io.File
 
 data class Editor(
     val editor : SharedPreferences.Editor
@@ -73,8 +81,6 @@ object BackupUtils {
         "download_path_key_visual",
         "backup_path_key",
         "backup_dir_path_key",
-        "PLUGINS_KEY",
-        "PLUGINS_KEY_LOCAL",
         "cs3-votes",
         "last_sync_api",
         "last_click_action",
@@ -209,6 +215,58 @@ object BackupUtils {
             context.restoreMap(backupFile.datastore.float)
             context.restoreMap(backupFile.datastore.long)
             context.restoreMap(backupFile.datastore.stringSet)
+        }
+    }
+
+    suspend fun restoreExtensions(context: Context?, originalPlugins: List<PluginData>) {
+        if (context == null) return
+        val restoredPlugins = PluginManager.getPluginsOnline().toList()
+        val originalUrls = originalPlugins.mapNotNull { it.url }.toSet()
+        val restoredUrls = restoredPlugins.mapNotNull { it.url }.toSet()
+
+        val toDownload = restoredPlugins.filter { plugin ->
+            plugin.url != null && plugin.url !in originalUrls && !File(plugin.filePath).exists()
+        }
+        val toRemove = originalPlugins.filter { plugin ->
+            plugin.url != null && plugin.url !in restoredUrls && "SyncStream" !in plugin.internalName
+        }
+
+        if (toDownload.isEmpty() && toRemove.isEmpty()) return
+
+        val repos = RepositoryManager.getRepositories()
+        val allOnlinePlugins = mutableListOf<Pair<String, SitePlugin>>()
+        for (repo in repos) {
+            try {
+                val plugins = RepositoryManager.getRepoPlugins(repo.url) ?: continue
+                allOnlinePlugins.addAll(plugins)
+            } catch (_: Exception) { }
+        }
+
+        for (plugin in toDownload) {
+            val match = allOnlinePlugins.find { it.second.url == plugin.url } ?: continue
+            val (repoUrl, sitePlugin) = match
+            val file = PluginManager.getPluginPath(context, plugin.internalName, repoUrl)
+            try {
+                val downloaded = RepositoryManager.downloadPluginToFile(context, sitePlugin.url, file, sitePlugin.fileHash) ?: continue
+                val data = PluginData(plugin.internalName, sitePlugin.url, true, downloaded.absolutePath, sitePlugin.version)
+                val updated = PluginManager.getPluginsOnline().toMutableList().apply {
+                    removeAll { it.url == data.url || it.filePath == data.filePath }
+                    add(data)
+                }.toTypedArray()
+                setKey(PLUGINS_KEY, updated)
+                PluginManager.loadSinglePlugin(context, plugin.internalName)
+            } catch (_: Exception) { }
+        }
+
+        for (plugin in toRemove) {
+            try {
+                PluginManager.unloadPlugin(plugin.filePath)
+                File(plugin.filePath).delete()
+            } catch (_: Exception) { }
+        }
+
+        if (toDownload.isNotEmpty() || toRemove.isNotEmpty()) {
+            MainActivity.afterPluginsLoadedEvent(true)
         }
     }
 }
