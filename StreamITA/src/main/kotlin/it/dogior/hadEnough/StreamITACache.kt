@@ -46,6 +46,7 @@ object StreamITACache {
         ANIME_SATURN_PLAYER(30 * 60 * 1000L),
         SUBTITLES(3 * 3600 * 1000L),
         TMDB_LOGO(24 * 3600 * 1000L),
+        CINEMACITY_SITEMAP(1 * 3600 * 1000L),
     }
 
     // ==================== Metodi pubblici ====================

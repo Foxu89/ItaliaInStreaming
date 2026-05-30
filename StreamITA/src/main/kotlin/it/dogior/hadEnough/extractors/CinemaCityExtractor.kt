@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import it.dogior.hadEnough.CinemaCityScraper
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -28,29 +29,24 @@ class CinemaCityExtractor : ExtractorApi() {
         callback: (ExtractorLink) -> Unit
     ) {
         try {
-            val imdbId = url // URL è direttamente l'IMDb ID tipo "tt1234567"
+            val imdbId = url
             val season = referer?.substringAfter("season=")?.substringBefore("&")?.toIntOrNull()
             val episode = referer?.substringAfter("episode=")?.substringBefore("&")?.toIntOrNull()
+            val isTvSeries = season != null
 
             Log.d(TAG, "Cerco CinemaCity per IMDb: $imdbId, S${season}E${episode}")
 
-            val headers = mapOf(
-                "Cookie" to "dle_user_id=32729; dle_password=894171c6a8dab18ee594d5c652009a35;"
-            )
-
-            // 1. Cerca la pagina del contenuto
-            val searchUrl = "$mainUrl/?do=search&subaction=search&search_start=0&full_search=0&story=$imdbId"
-            val searchDoc = app.get(searchUrl, headers = headers).document
-            
-            val pageUrl = searchDoc.selectFirst("div.dar-short_item > a")?.attr("href")
-                ?: run {
-                    Log.e(TAG, "Contenuto non trovato per $imdbId")
-                    return
-                }
+            val pageUrl = CinemaCityScraper.resolveViaSitemap(imdbId, isTvSeries) ?: run {
+                Log.e(TAG, "Nessun match sitemap per $imdbId")
+                return
+            }
 
             Log.d(TAG, "Pagina trovata: $pageUrl")
 
-            // 2. Estrai il JSON del player
+            val headers = mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            )
+
             val pageDoc = app.get(pageUrl, headers = headers).document
             val script = pageDoc.select("script:containsData(atob)")
                 .getOrNull(1)
@@ -69,12 +65,10 @@ class CinemaCityExtractor : ExtractorApi() {
             val fileArray = JSONArray(playerJson.getString("file"))
             val firstFile = fileArray.getJSONObject(0)
 
-            // 3. Estrai i link
             if (!firstFile.has("folder")) {
-                // === FILM ===
                 val fileUrl = firstFile.getString("file")
                 val quality = extractQuality(fileUrl)
-                
+
                 callback.invoke(
                     newExtractorLink(
                         source = name,
@@ -91,9 +85,8 @@ class CinemaCityExtractor : ExtractorApi() {
                     }
                 )
                 Log.d(TAG, "Link film estratto: $fileUrl")
-                
+
             } else {
-                // === SERIE TV ===
                 if (season == null || episode == null) {
                     Log.e(TAG, "Season/Episode mancanti per serie TV")
                     return
