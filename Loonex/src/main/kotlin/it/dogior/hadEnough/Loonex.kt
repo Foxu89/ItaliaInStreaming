@@ -18,9 +18,7 @@ import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.newExtractorLink
+import it.dogior.hadEnough.extractors.LoonexExtractor
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
@@ -50,7 +48,7 @@ class Loonex : MainAPI() {
                 parseCard(link, card)
             }
             return newHomePageResponse(
-                listOf(HomePageList(request.name, cards, false)),
+                listOf(HomePageList(request.name, cards, isHorizontalImages = true)),
                 false
             )
         }
@@ -63,6 +61,7 @@ class Loonex : MainAPI() {
 
             val titleEl = band.selectFirst("h3.brand-font")
             val sectionName = titleEl?.text()?.trim() ?: continue
+            if (sectionName == "Le Collezioni") continue
             val scroller = band.selectFirst("div.horizontal-scroller")
             if (scroller == null || scroller.select("div.scroller-item").isEmpty()) continue
 
@@ -72,7 +71,7 @@ class Loonex : MainAPI() {
                 parseCard(link, card)
             }
             if (items.isNotEmpty()) {
-                lists.add(HomePageList(sectionName, items, false))
+                lists.add(HomePageList(sectionName, items, isHorizontalImages = true))
             }
         }
 
@@ -86,7 +85,7 @@ class Loonex : MainAPI() {
                     parseCard(link, card)
                 }
                 if (items.isNotEmpty()) {
-                    lists.add(HomePageList("I più visti", items, false))
+                    lists.add(HomePageList("I più visti", items, isHorizontalImages = true))
                 }
             }
         }
@@ -113,7 +112,7 @@ class Loonex : MainAPI() {
 
         val title = document.selectFirst("h1.display-4")?.text()?.trim() ?: "Sconosciuto"
         val poster = document.selectFirst("img.detail-poster")?.attr("src") ?: ""
-        val plot = document.select("div.content-box-opaque div.text-secondary").first()?.text()?.trim() ?: ""
+        val plot = document.selectFirst("div.content-box-opaque > div.text-secondary")?.ownText()?.trim() ?: ""
         val tags = document.select("span.badge.bg-secondary").mapNotNull { it.text().trim().ifBlank { null } }
 
         val backdropEl = document.selectFirst("div.hero-backdrop")
@@ -177,45 +176,11 @@ class Loonex : MainAPI() {
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         if (data.isBlank()) return false
-
-        try {
-            val html = fetch(data)
-            val document = Jsoup.parse(html)
-
-            val iframe = document.selectFirst("iframe")
-            val videoSrc = document.selectFirst("video source")
-            val videoEl = document.selectFirst("video")
-
-            val videoUrl = videoSrc?.attr("src")
-                ?: videoEl?.attr("src")
-                ?: iframe?.attr("src")
-                ?: data
-
-            callback.invoke(
-                newExtractorLink(
-                    source = "Loonex",
-                    name = "Loonex",
-                    url = videoUrl,
-                    type = ExtractorLinkType.M3U8,
-                ) {
-                    this.referer = mainUrl
-                    this.quality = Qualities.Unknown.value
-                }
-            )
-            return true
-        } catch (e: Exception) {
-            callback.invoke(
-                newExtractorLink(
-                    source = "Loonex",
-                    name = "Loonex",
-                    url = data,
-                    type = ExtractorLinkType.M3U8,
-                ) {
-                    this.referer = mainUrl
-                    this.quality = Qualities.Unknown.value
-                }
-            )
-            return true
+        return try {
+            LoonexExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 

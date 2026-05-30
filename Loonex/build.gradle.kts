@@ -22,7 +22,7 @@ cloudstream {
     requiresResources = false
     language = "it"
 
-    iconUrl = ""
+    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/StreamingCommunity/loonex_icon.png"
 }
 dependencies{
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
