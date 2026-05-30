@@ -26,7 +26,9 @@ import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -286,7 +288,7 @@ class Loonex : MainAPI() {
                 this.posterUrl = poster
                 this.plot = plot
                 this.tags = tags
-                this.backgroundUrl = backgroundUrl
+                this.backgroundPosterUrl = backgroundUrl
                 this.year = Regex("""\d{4}""").find(title)?.value?.toIntOrNull()
             }
         }
@@ -297,7 +299,7 @@ class Loonex : MainAPI() {
             this.posterUrl = poster
             this.plot = plot
             this.tags = tags
-            this.backgroundUrl = backgroundUrl
+            this.backgroundPosterUrl = backgroundUrl
             this.year = Regex("""\d{4}""").find(title)?.value?.toIntOrNull()
         }
     }
@@ -324,27 +326,29 @@ class Loonex : MainAPI() {
                 ?: data
 
             callback.invoke(
-                ExtractorLink(
+                newExtractorLink(
                     source = "Loonex",
                     name = "Loonex",
                     url = videoUrl,
-                    referer = mainUrl,
-                    quality = Qualities.Unknown.value,
-                    isM3u8 = videoUrl.contains("m3u8")
-                )
+                    type = ExtractorLinkType.M3U8,
+                ) {
+                    this.referer = mainUrl
+                    this.quality = Qualities.Unknown.value
+                }
             )
             return true
         } catch (e: Exception) {
             Log.e("Loonex", "Errore in loadLinks: ${e.message}")
             callback.invoke(
-                ExtractorLink(
+                newExtractorLink(
                     source = "Loonex",
                     name = "Loonex",
                     url = data,
-                    referer = mainUrl,
-                    quality = Qualities.Unknown.value,
-                    isM3u8 = false
-                )
+                    type = ExtractorLinkType.M3U8,
+                ) {
+                    this.referer = mainUrl
+                    this.quality = Qualities.Unknown.value
+                }
             )
             return true
         }
