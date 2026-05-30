@@ -17,6 +17,7 @@ include(
 //    "GuardaSerie",
 //    "Huhu",
 //    "IlGenioDelloStreaming",
+    "Loonex",
 //    "OnlineSerieTV",
 //    "SectionOrganizer",
 //    "StreamingCommunity",
