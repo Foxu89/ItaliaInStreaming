@@ -231,31 +231,31 @@ object BackupUtils {
             plugin.url != null && plugin.url !in restoredUrls && "SyncStream" !in plugin.internalName
         }
 
-        if (toDownload.isEmpty() && toRemove.isEmpty()) return
+        if (toDownload.isNotEmpty()) {
+            val repos = RepositoryManager.getRepositories()
+            val allOnlinePlugins = mutableListOf<Pair<String, SitePlugin>>()
+            for (repo in repos) {
+                try {
+                    val plugins = RepositoryManager.getRepoPlugins(repo.url) ?: continue
+                    allOnlinePlugins.addAll(plugins)
+                } catch (_: Exception) { }
+            }
 
-        val repos = RepositoryManager.getRepositories()
-        val allOnlinePlugins = mutableListOf<Pair<String, SitePlugin>>()
-        for (repo in repos) {
-            try {
-                val plugins = RepositoryManager.getRepoPlugins(repo.url) ?: continue
-                allOnlinePlugins.addAll(plugins)
-            } catch (_: Exception) { }
-        }
-
-        for (plugin in toDownload) {
-            val match = allOnlinePlugins.find { it.second.url == plugin.url } ?: continue
-            val (repoUrl, sitePlugin) = match
-            val file = PluginManager.getPluginPath(context, plugin.internalName, repoUrl)
-            try {
-                val downloaded = RepositoryManager.downloadPluginToFile(context, sitePlugin.url, file, sitePlugin.fileHash) ?: continue
-                val data = PluginData(plugin.internalName, sitePlugin.url, true, downloaded.absolutePath, sitePlugin.version)
-                val updated = PluginManager.getPluginsOnline().toMutableList().apply {
-                    removeAll { it.url == data.url || it.filePath == data.filePath }
-                    add(data)
-                }.toTypedArray()
-                setKey(PLUGINS_KEY, updated)
-                PluginManager.loadSinglePlugin(context, plugin.internalName)
-            } catch (_: Exception) { }
+            for (plugin in toDownload) {
+                val match = allOnlinePlugins.find { it.second.url == plugin.url } ?: continue
+                val (repoUrl, sitePlugin) = match
+                val file = PluginManager.getPluginPath(context, plugin.internalName, repoUrl)
+                try {
+                    val downloaded = RepositoryManager.downloadPluginToFile(context, sitePlugin.url, file, sitePlugin.fileHash) ?: continue
+                    val data = PluginData(plugin.internalName, sitePlugin.url, true, downloaded.absolutePath, sitePlugin.version)
+                    val updated = PluginManager.getPluginsOnline().toMutableList().apply {
+                        removeAll { it.url == data.url || it.filePath == data.filePath }
+                        add(data)
+                    }.toTypedArray()
+                    setKey(PLUGINS_KEY, updated)
+                    PluginManager.loadSinglePlugin(context, plugin.internalName)
+                } catch (_: Exception) { }
+            }
         }
 
         for (plugin in toRemove) {
@@ -265,7 +265,18 @@ object BackupUtils {
             } catch (_: Exception) { }
         }
 
-        if (toDownload.isNotEmpty() || toRemove.isNotEmpty()) {
+        val toFixPath = originalPlugins.filter { op ->
+            restoredPlugins.any { rp -> rp.url == op.url && rp.filePath != op.filePath }
+        }
+        for (plugin in toFixPath) {
+            val updated = PluginManager.getPluginsOnline().toMutableList().apply {
+                removeAll { it.url == plugin.url }
+                add(plugin)
+            }.toTypedArray()
+            setKey(PLUGINS_KEY, updated)
+        }
+
+        if (toDownload.isNotEmpty() || toRemove.isNotEmpty() || toFixPath.isNotEmpty()) {
             MainActivity.afterPluginsLoadedEvent(true)
         }
     }
