@@ -3,14 +3,13 @@ package it.dogior.hadEnough
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.base64Decode
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.json.JSONArray
 import org.json.JSONObject
-import org.jsoup.Jsoup
 import kotlin.math.abs
 
 object CinemaCityScraper {
@@ -51,40 +50,163 @@ object CinemaCityScraper {
             StreamITALogger.log(TAG, "Pagina trovata: $pageUrl")
 
             val pageResponse = app.get(pageUrl, headers = headers, interceptor = cfKiller)
-            val doc = Jsoup.parse(pageResponse.text)
+            val html = pageResponse.text
 
-            val playerScript = doc.select("script:containsData(atob)").getOrNull(1)?.data()
-            if (playerScript == null) {
-                StreamITALogger.log(TAG, "PlayerJS non trovato")
-                return false
+            // FIX 1: Prova link diretti (MP4/M3U8)
+            val directLinks = extractDownloadLinks(html)
+            if (directLinks.isNotEmpty()) {
+                StreamITALogger.log(TAG, "Trovati ${directLinks.size} link diretti")
+                var selectedUrl: String? = null
+
+                for (link in directLinks) {
+                    if (link.second.contains("ita") || link.second.contains("italian") || link.second.contains("italiano")) {
+                        selectedUrl = link.first
+                        break
+                    }
+                }
+                if (selectedUrl == null) {
+                    for (link in directLinks) {
+                        if (!link.second.contains("eng") && !link.second.contains("sub")) {
+                            selectedUrl = link.first
+                            break
+                        }
+                    }
+                }
+                if (selectedUrl == null) selectedUrl = directLinks.first().first
+
+                val streamUrl = resolveUrl(pageUrl, selectedUrl)
+                StreamITALogger.log(TAG, "Link diretto: $streamUrl")
+
+                callback(
+                    newExtractorLink(
+                        source = "CinemaCity",
+                        name = "CinemaCity",
+                        url = streamUrl,
+                        type = INFER_TYPE,
+                    ) {
+                        this.referer = BASE_URL
+                        this.quality = Qualities.P1080.value
+                    }
+                )
+                StreamITALogger.log(TAG, "CinemaCity OK (link diretto)")
+                return true
             }
 
-            val decoded = base64Decode(
-                playerScript.substringAfter("atob(\"").substringBefore("\")")
-            )
-            val playerJson = JSONObject(
-                decoded.substringAfter("new Playerjs(").substringBeforeLast(");")
-            )
+            // FIX 2: Prova estrazione atob()
+            StreamITALogger.log(TAG, "Nessun link diretto, provo atob...")
+            val atobUrl = extractStreamFromAtob(html, season, episode)
+            if (atobUrl != null) {
+                StreamITALogger.log(TAG, "URL da atob: $atobUrl")
 
-            val rawFile = playerJson.opt("file") ?: return false
-            val fileArray: JSONArray = when (rawFile) {
-                is JSONArray -> rawFile
-                is String -> if (rawFile.startsWith("[")) JSONArray(rawFile)
-                else JSONArray().put(JSONObject().put("file", rawFile))
-                else -> return false
+                callback(
+                    newExtractorLink(
+                        source = "CinemaCity",
+                        name = if (isMovie) "CinemaCity" else "CinemaCity S${season}E${episode}",
+                        url = atobUrl,
+                        type = INFER_TYPE,
+                    ) {
+                        this.referer = BASE_URL
+                        this.quality = Qualities.P1080.value
+                        this.headers = mapOf(
+                            "Referer" to BASE_URL,
+                            "User-Agent" to headers["User-Agent"]!!
+                        )
+                    }
+                )
+                StreamITALogger.log(TAG, "CinemaCity OK (atob)")
+                return true
             }
 
-            return if (season != null && episode != null) {
-                extractSeriesLinks(fileArray, season, episode, pageUrl, callback)
-            } else {
-                extractMovieLink(fileArray, callback)
-            }
+            StreamITALogger.log(TAG, "Nessun link trovato in pagina")
         } catch (e: Exception) {
             StreamITALogger.log(TAG, "CinemaCity fallito: ${e.message}")
         }
 
         return false
     }
+
+    // ==================== LINK DIRETTI HTML ====================
+
+    private fun extractDownloadLinks(html: String): List<Pair<String, String>> {
+        val links = mutableListOf<Pair<String, String>>()
+        val regex = Regex(
+            """<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)</a>""",
+            RegexOption.IGNORE_CASE
+        )
+        for (match in regex.findAll(html)) {
+            val href = match.groupValues[1].trim()
+            val text = match.groupValues[2].replace(Regex("<[^>]+>"), "").trim()
+            if (!Regex("""\.(mp4|m3u8|mkv|avi|mov|webm)([?#].*)?$""", RegexOption.IGNORE_CASE).containsMatchIn(href)) continue
+            if (href.length < 10) continue
+            links.add(href to text.lowercase())
+        }
+        return links
+    }
+
+    // ==================== ESTRAZIONE ATOB ====================
+
+    private fun extractStreamFromAtob(html: String, season: Int?, episode: Int?): String? {
+        val atobRegex = Regex("""atob\s*\(\s*['"]([^"']{20,})['"]\s*\)""", RegexOption.IGNORE_CASE)
+        for (match in atobRegex.findAll(html)) {
+            try {
+                val b64 = match.groupValues[1]
+                val decoded = base64Decode(b64)
+                if (decoded.length < 20) continue
+
+                // Cerca file: '[JSON_ARRAY]' (stringa)
+                val fileMatch = Regex("""file\s*:\s*'(\[.*?\])'""", RegexOption.DOT_MATCHES_ALL).find(decoded) ?: continue
+                val jsonArray = JSONArray(fileMatch.groupValues[1])
+
+                if (jsonArray.length() == 0) continue
+
+                // Serie TV: folder esiste
+                if (season != null && episode != null) {
+                    val seasonIdx = season - 1
+                    val seasonObj = jsonArray.optJSONObject(seasonIdx) ?: continue
+                    val folder = seasonObj.optJSONArray("folder") ?: continue
+                    val epIdx = episode - 1
+                    val epObj = folder.optJSONObject(epIdx) ?: continue
+                    val fileVal = epObj.optString("file").ifBlank { continue }
+                    return buildDownloadUrl(fileVal) ?: fileVal
+                }
+
+                // Film
+                val first = jsonArray.optJSONObject(0) ?: continue
+                val fileVal = first.optString("file").ifBlank { continue }
+                return buildDownloadUrl(fileVal) ?: fileVal
+
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    // ==================== BUILD DOWNLOAD URL ====================
+
+    private fun buildDownloadUrl(fileVal: String): String? {
+        val baseEnd = fileVal.indexOf("/public_files/")
+        if (baseEnd == -1) return null
+        val cdnBase = fileVal.substring(0, baseEnd + "/public_files/".length)
+        val rest = fileVal.substring(baseEnd + "/public_files/".length)
+        val parts = rest.split(",")
+
+        val video = parts.find { it.contains("1080p") && it.endsWith(".mp4") }
+            ?: parts.find { it.endsWith(".mp4") } ?: return null
+        val itaAudio = parts.find { Regex("""italian|italiano""", RegexOption.IGNORE_CASE).containsMatchIn(it) && it.endsWith(".m4a") }
+            ?: return null
+
+        return cdnBase + rest
+    }
+
+    private fun resolveUrl(base: String, relative: String): String {
+        return try {
+            val baseUrl = java.net.URL(base)
+            java.net.URL(baseUrl, relative).toString()
+        } catch (_: Exception) {
+            relative
+        }
+    }
+
+    // ==================== SITEMAP MATCHING (INVARIATO) ====================
 
     internal suspend fun resolveViaSitemap(imdbId: String, isTvSeries: Boolean): String? {
         val cacheKey = "$TMDB_CACHE_KEY_PREFIX$imdbId"
@@ -215,75 +337,5 @@ object CinemaCityScraper {
             .replace(Regex("[^a-z0-9 ]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
-    }
-
-    private suspend fun extractMovieLink(
-        fileArray: JSONArray,
-        callback: (ExtractorLink) -> Unit,
-    ): Boolean {
-        val movieFile = fileArray.optJSONObject(0)?.optString("file")
-        if (movieFile.isNullOrBlank()) return false
-
-        callback(
-            newExtractorLink(
-                source = "CinemaCity",
-                name = "CinemaCity",
-                url = movieFile,
-                type = INFER_TYPE,
-            ) {
-                this.referer = BASE_URL
-                this.quality = Qualities.P1080.value
-            }
-        )
-        StreamITALogger.log(TAG, "CinemaCity OK (film)")
-        return true
-    }
-
-    private suspend fun extractSeriesLinks(
-        fileArray: JSONArray,
-        targetSeason: Int,
-        targetEpisode: Int,
-        referer: String,
-        callback: (ExtractorLink) -> Unit,
-    ): Boolean {
-        val seasonRegex = Regex("Season\\s*(\\d+)", RegexOption.IGNORE_CASE)
-        val episodeRegex = Regex("Episode\\s*(\\d+)", RegexOption.IGNORE_CASE)
-
-        for (i in 0 until fileArray.length()) {
-            val seasonJson = fileArray.optJSONObject(i) ?: continue
-            val seasonNumber = seasonRegex.find(seasonJson.optString("title"))
-                ?.groupValues?.get(1)?.toIntOrNull() ?: continue
-
-            if (seasonNumber != targetSeason) continue
-
-            val episodes = seasonJson.optJSONArray("folder") ?: continue
-            for (j in 0 until episodes.length()) {
-                val epJson = episodes.optJSONObject(j) ?: continue
-                val episodeNumber = episodeRegex.find(epJson.optString("title"))
-                    ?.groupValues?.get(1)?.toIntOrNull() ?: continue
-
-                if (episodeNumber != targetEpisode) continue
-
-                val file = epJson.optString("file")
-                if (file.isNotBlank()) {
-                    callback(
-                        newExtractorLink(
-                            source = "CinemaCity",
-                            name = "CinemaCity S${targetSeason}E${targetEpisode}",
-                            url = file,
-                            type = INFER_TYPE,
-                        ) {
-                            this.referer = referer
-                            this.quality = Qualities.P1080.value
-                        }
-                    )
-                    StreamITALogger.log(TAG, "CinemaCity OK: S${targetSeason}E${targetEpisode}")
-                    return true
-                }
-            }
-        }
-
-        StreamITALogger.log(TAG, "Episodio S${targetSeason}E${targetEpisode} non trovato")
-        return false
     }
 }
