@@ -14,20 +14,92 @@
         android:paddingBottom="20dp"
         tools:background="@color/cardview_dark_background">
 
+        <!-- Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="5dp"
+            android:text="Impostazioni di SyncStream"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:src="@android:drawable/divider_horizontal_dark"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:scaleType="fitXY"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:layout_marginBottom="10dp"
+            android:layout_marginTop="10dp" />
+
+        <!-- SEZIONE 1: CREDENZIALI (sempre attiva) -->
         <LinearLayout
+            android:id="@+id/login_section"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            android:padding="5dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="5dp"
-                android:text="Impostazioni di SyncStream"
-                android:textSize="20sp"
+                android:text="1. Credenziali GitHub"
+                android:textSize="16sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Token"
+                android:textSize="14sp"
+                android:layout_marginTop="8dp" />
+
+            <EditText
+                android:id="@+id/token"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="5dp"
+                android:inputType="text" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Numero progetto"
+                android:textSize="14sp"
+                android:layout_marginTop="8dp" />
+
+            <EditText
+                android:id="@+id/project_num"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="5dp"
+                android:inputType="number" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="10dp">
+
+                <Button
+                    android:id="@+id/btn_login"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="5dp"
+                    android:text="Login" />
+
+                <Button
+                    android:id="@+id/btn_reset"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="5dp"
+                    android:text="Reset" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
@@ -41,6 +113,68 @@
             android:layout_marginBottom="10dp"
             android:layout_marginTop="10dp" />
 
+        <!-- SEZIONE 2: CATEGORIE SYNC (disattivata fino al login) -->
+        <LinearLayout
+            android:id="@+id/sync_section"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="5dp"
+            android:alpha="0.3"
+            android:clickable="false"
+            android:enabled="false">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="2. Categorie Sync"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Attiva/disattiva il sync per categoria"
+                android:textSize="13sp" />
+
+            <!-- Tabella categorie (riempito da codice) -->
+            <LinearLayout
+                android:id="@+id/category_table"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp" />
+
+            <!-- Force Sync -->
+            <Button
+                android:id="@+id/btn_force_sync"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Force Sync Now" />
+
+            <!-- Last sync info -->
+            <TextView
+                android:id="@+id/last_sync_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text=""
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+        <ImageView
+            android:src="@android:drawable/divider_horizontal_dark"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:scaleType="fitXY"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:layout_marginBottom="10dp"
+            android:layout_marginTop="10dp" />
+
+        <!-- Guida rapida -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -52,68 +186,17 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:id="@+id/login_text"
+                android:text="Guida rapida"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <LinearLayout
+            <ImageView
+                android:id="@+id/btn_guide"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical|end">
-
-                <ImageView
-                    android:id="@+id/button_login"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="5dp"
-                    android:focusable="true" 
-                    android:nextFocusDown="@id/button_group"
-                    android:nextFocusUp="@id/button_login" />
-
-            </LinearLayout>
-
-        </LinearLayout>
-
-        <ImageView
-            android:src="@android:drawable/divider_horizontal_dark"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:scaleType="fitXY"
-            android:paddingLeft="2dp"
-            android:paddingRight="2dp"
-            android:layout_marginBottom="10dp"
-            android:layout_marginTop="10dp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="10dp"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:id="@+id/group_text"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical|end">
-
-                <ImageView
-                    android:id="@+id/button_group"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:nextFocusDown="@id/button_group"
-                    android:nextFocusUp="@id/button_login" />
-
-            </LinearLayout>
+                android:padding="5dp"
+                android:focusable="true"
+                android:src="@android:drawable/ic_menu_info_details" />
 
         </LinearLayout>
 
