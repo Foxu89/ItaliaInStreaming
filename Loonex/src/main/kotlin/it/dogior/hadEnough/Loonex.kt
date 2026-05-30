@@ -1,13 +1,5 @@
 package it.dogior.hadEnough
 
-import android.annotation.SuppressLint
-import android.content.Context
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
-import android.webkit.CookieManager
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
@@ -29,129 +21,8 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
-import okhttp3.Interceptor
-import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
-
-class CloudflareBypassInterceptor : Interceptor {
-
-    private var cachedCookies: String? = null
-    private val cookieLock = Any()
-
-    override fun intercept(chain: Interceptor.Chain): Response {
-        val url = chain.request().url.toString()
-
-        synchronized(cookieLock) {
-            if (cachedCookies != null) {
-                val request = chain.request().newBuilder()
-                    .addHeader("Cookie", cachedCookies!!)
-                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
-                    .build()
-                return chain.proceed(request)
-            }
-        }
-
-        Log.d("CloudflareBypass", "Bypassando Cloudflare con WebView...")
-        val result = runBlocking { fetchWithWebView(url) }
-
-        if (result.cookies.isNotBlank()) {
-            synchronized(cookieLock) {
-                cachedCookies = result.cookies
-            }
-            Log.d("CloudflareBypass", "Cloudflare bypassato! Cookie salvati.")
-        }
-
-        return Response.Builder()
-            .request(chain.request())
-            .protocol(okhttp3.Protocol.HTTP_1_1)
-            .code(200)
-            .message("OK")
-            .body(okhttp3.ResponseBody.create(null, result.html))
-            .build()
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private suspend fun fetchWithWebView(url: String): WebViewResult = withContext(Dispatchers.Main) {
-        suspendCancellableCoroutine { continuation ->
-            val latch = CountDownLatch(1)
-            var pageContent = ""
-            var cookiesObtained = ""
-
-            val context = getApplicationContext() ?: run {
-                continuation.resume(WebViewResult("", ""))
-                return@suspendCancellableCoroutine
-            }
-
-            val webView = WebView(context)
-
-            webView.settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                databaseEnabled = true
-                userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
-            }
-
-            webView.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, pageUrl: String?) {
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        webView.evaluateJavascript("window.scrollTo(0, 100);", null)
-
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            webView.evaluateJavascript("window.scrollTo(0, 300);", null)
-
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                val cookieManager = CookieManager.getInstance()
-                                cookiesObtained = cookieManager.getCookie(url) ?: ""
-
-                                webView.evaluateJavascript("document.documentElement.outerHTML") { result ->
-                                    pageContent = result?.trim('"')?.replace("\\\"", "\"") ?: ""
-                                    webView.stopLoading()
-                                    webView.destroy()
-                                    latch.countDown()
-                                }
-                            }, 2000)
-                        }, 1000)
-                    }, 3000)
-                }
-            }
-
-            webView.loadUrl(url)
-
-            val success = latch.await(15, TimeUnit.SECONDS)
-            if (!success) {
-                webView.stopLoading()
-                webView.destroy()
-            }
-
-            continuation.resume(WebViewResult(pageContent, cookiesObtained))
-        }
-    }
-
-    private fun getApplicationContext(): Context? {
-        return try {
-            val activityThreadClass = Class.forName("android.app.ActivityThread")
-            val currentActivityThreadMethod = activityThreadClass.getMethod("currentActivityThread")
-            val activityThread = currentActivityThreadMethod.invoke(null)
-            val getApplicationMethod = activityThreadClass.getMethod("getApplication")
-            getApplicationMethod.invoke(activityThread) as? Context
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private data class WebViewResult(val html: String, val cookies: String)
-
-    private fun <T> runBlocking(block: suspend () -> T): T {
-        return kotlinx.coroutines.runBlocking { block() }
-    }
-}
 
 class Loonex : MainAPI() {
     override var mainUrl = "https://loonex.eu/cartoni/"
@@ -160,18 +31,13 @@ class Loonex : MainAPI() {
     override val supportedTypes = setOf(TvType.TvSeries, TvType.Movie, TvType.Cartoon)
     override val hasMainPage = true
 
-    private val client = app.baseClient.newBuilder()
-        .addInterceptor(CloudflareBypassInterceptor())
-        .build()
-
     override val mainPage = mainPageOf(
         mainUrl to "Novità",
         "${mainUrl}index.php?cat=all" to "Tutti i Cartoni",
     )
 
     private suspend fun fetch(url: String): String {
-        val response = client.newCall(okhttp3.Request.Builder().url(url).build()).execute()
-        return response.body?.string() ?: ""
+        return app.get(url).text
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -338,7 +204,6 @@ class Loonex : MainAPI() {
             )
             return true
         } catch (e: Exception) {
-            Log.e("Loonex", "Errore in loadLinks: ${e.message}")
             callback.invoke(
                 newExtractorLink(
                     source = "Loonex",
