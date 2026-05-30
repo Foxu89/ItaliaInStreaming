@@ -1,5 +1,5 @@
 // use an integer for version numbers
-version = 1
+version = 2
 
 
 cloudstream {
@@ -22,7 +22,7 @@ cloudstream {
     requiresResources = false
     language = "it"
 
-    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/StreamingCommunity/loonex_icon.png"
+    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/Loonex/loonex_icon.png"
 }
 dependencies{
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
