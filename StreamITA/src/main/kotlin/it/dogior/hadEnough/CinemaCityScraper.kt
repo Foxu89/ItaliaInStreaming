@@ -6,8 +6,8 @@ import com.lagradost.cloudstream3.base64Decode
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.newExtractorLink
-import it.dogior.hadEnough.StreamITACache.Companion.CacheProfile
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -20,6 +20,8 @@ object CinemaCityScraper {
     private const val TMDB_URL = "https://api.themoviedb.org/3"
     private const val SITEMAP_CACHE_KEY = "CINEMACITY:SITEMAP"
     private const val TMDB_CACHE_KEY_PREFIX = "CINEMACITY:TMDB:"
+
+    private val cfKiller = CloudflareKiller()
 
     private val headers = mapOf(
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -48,7 +50,7 @@ object CinemaCityScraper {
 
             StreamITALogger.log(TAG, "Pagina trovata: $pageUrl")
 
-            val pageResponse = app.get(pageUrl, headers = headers)
+            val pageResponse = app.get(pageUrl, headers = headers, interceptor = cfKiller)
             val doc = Jsoup.parse(pageResponse.text)
 
             val playerScript = doc.select("script:containsData(atob)").getOrNull(1)?.data()
@@ -117,7 +119,7 @@ object CinemaCityScraper {
             val entries = parseSitemap(sitemapXml, kind)
             val url = findBestMatch(entries, titles, year) ?: return null
 
-            StreamITACache.put(cacheKey, url, CacheProfile.CINEMACITY_SITEMAP)
+            StreamITACache.put(cacheKey, url, StreamITACache.CacheProfile.CINEMACITY_SITEMAP)
             url
         }
 
@@ -128,8 +130,8 @@ object CinemaCityScraper {
         val cached = StreamITACache.get(SITEMAP_CACHE_KEY)
         if (cached != null) return cached
 
-        val xml = app.get(SITEMAP_URL, headers = headers).text
-        StreamITACache.put(SITEMAP_CACHE_KEY, xml, CacheProfile.CINEMACITY_SITEMAP)
+        val xml = app.get(SITEMAP_URL, headers = headers, interceptor = cfKiller).text
+        StreamITACache.put(SITEMAP_CACHE_KEY, xml, StreamITACache.CacheProfile.CINEMACITY_SITEMAP)
         return xml
     }
 
@@ -152,7 +154,7 @@ object CinemaCityScraper {
             val entryKind = match.groupValues[2]
             if (entryKind != kind) continue
             val slug = match.groupValues[3]
-            val yearMatch = Regex("-(\d{4})$").find(slug)
+            val yearMatch = Regex("""-(\d{4})$""").find(slug)
             val extractedYear = yearMatch?.groupValues?.get(1)?.toIntOrNull()
             val titleSlug = if (extractedYear != null) slug.dropLast(5) else slug
             val title = titleSlug.replace("-", " ")
@@ -215,7 +217,7 @@ object CinemaCityScraper {
             .trim()
     }
 
-    private fun extractMovieLink(
+    private suspend fun extractMovieLink(
         fileArray: JSONArray,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {

@@ -4,6 +4,7 @@ import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.base64Decode
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -17,6 +18,8 @@ class CinemaCityExtractor : ExtractorApi() {
     override val name = "CinemaCity"
     override val mainUrl = "https://cinemacity.cc"
     override val requiresReferer = true
+
+    private val cfKiller = CloudflareKiller()
 
     companion object {
         private const val TAG = "CinemaCityExtractor"
@@ -47,7 +50,7 @@ class CinemaCityExtractor : ExtractorApi() {
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
             )
 
-            val pageDoc = app.get(pageUrl, headers = headers).document
+            val pageDoc = app.get(pageUrl, headers = headers, interceptor = cfKiller).document
             val script = pageDoc.select("script:containsData(atob)")
                 .getOrNull(1)
                 ?.data()
