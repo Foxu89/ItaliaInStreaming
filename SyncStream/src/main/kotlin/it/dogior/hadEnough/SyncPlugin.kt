@@ -27,28 +27,26 @@ class SyncPlugin : Plugin() {
                 CoroutineScope(Dispatchers.IO).launch {
                     // Pull ogni 12 cicli (60s)
                     pullCounter++
+                    val ctx = context ?: return@launch
                     if (pullCounter >= 12 && ApiUtils.isLoggedIn()) {
                         pullCounter = 0
-                        ApiUtils.pullAndMergeCategories(context)
-                        // Re-snapshot dopo pull
+                        ApiUtils.pullAndMergeCategories(ctx)
                         for (cat in SyncCategory.entries) {
                             if (getKey<String>(SyncCategory.backupKey(cat)) == "true") {
-                                lastBackupSnapshots[cat] = BackupUtils.getBackupForCategory(context, cat, getResumeWatching())
+                                lastBackupSnapshots[cat] = BackupUtils.getBackupForCategory(ctx, cat, getResumeWatching())
                             }
                         }
                     }
 
-                    // Push categorie dirty
                     val hasDirty = dirtyCategories.any { getKey<String>(SyncCategory.backupKey(it)) == "true" }
                     if (hasDirty) {
-                        ApiUtils.pushAllCategories(context)
+                        ApiUtils.pushAllCategories(ctx)
                         dirtyCategories.clear()
                     }
 
-                    // Change detection: confronta snapshot correnti con ultimi push
                     for (cat in SyncCategory.entries) {
                         if (getKey<String>(SyncCategory.backupKey(cat)) != "true") continue
-                        val current = BackupUtils.getBackupForCategory(context, cat, getResumeWatching())
+                        val current = BackupUtils.getBackupForCategory(ctx, cat, getResumeWatching())
                         val lastSnapshot = lastBackupSnapshots[cat]
                         if (current != lastSnapshot) {
                             dirtyCategories.add(cat)

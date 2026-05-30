@@ -48,7 +48,7 @@ object ApiUtils {
         val res = apiCall(query.toStringData()) ?: return failureToken
         val projectId = res.data?.viewer?.projectV2?.id ?: return failure
         setKey("sync_project_id", projectId)
-        val deviceId = getKey<String>("device_id")
+        val deviceId = getKey<String>("device_id") ?: return false to "Device ID non trovato"
 
         val existing = findDevice(deviceId)
         if (existing != null) {
@@ -110,7 +110,7 @@ object ApiUtils {
 
     suspend fun pushAllCategories(context: Context?) {
         if (!isLoggedIn() || context == null) return
-        val deviceId = getKey<String>("device_id")
+        val deviceId = getKey<String>("device_id") ?: return
         val draftIssueId = getKey<String>("sync_device_id") ?: return
 
         val categories = mutableMapOf<String, CategoryData>()

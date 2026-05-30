@@ -256,7 +256,7 @@ class SyncSettingsFragment(private val plugin: Plugin) : BottomSheetDialogFragme
                 ApiUtils.pushAllCategories(appContext)
                 withContext(Dispatchers.Main) {
                     showToast("Sync completato")
-                    lastSyncInfo.text = "Ultimo sync: ${System.currentTimeMillis().takeLast(5)}..."
+                    lastSyncInfo.text = "Ultimo sync: ${System.currentTimeMillis().toString().takeLast(5)}..."
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
