@@ -27,6 +27,7 @@ object ApiUtils {
             )
             val data = """ { "query": ${query} } """
             val res = app.post(apiUrl, headers = header, json = data)
+
             return res.parsedSafe<APIRes>()
         } catch (e: Exception) {
             return null
@@ -37,6 +38,7 @@ object ApiUtils {
         val token = getKey<String>("sync_token")
         val projectNum = getKey<String>("sync_project_num")
         val projectId = getKey<String>("sync_project_id")
+
         return !(token.isNullOrEmpty() || projectNum.isNullOrEmpty() || projectId.isNullOrEmpty())
     }
 
@@ -48,115 +50,30 @@ object ApiUtils {
         val res = apiCall(query.toStringData()) ?: return failureToken
         val projectId = res.data?.viewer?.projectV2?.id ?: return failure
         setKey("sync_project_id", projectId)
-        val deviceId = getKey<String>("device_id") ?: return false to "Device ID non trovato"
-
-        val existing = findDevice(deviceId)
-        if (existing != null) {
-            setKey("sync_item_id", existing.itemId)
-            setKey("sync_device_id", existing.deviceId)
-        } else {
-            val syncData = buildInitialPayload(deviceId)
-            val dataJson = mapper.writeValueAsString(syncData)
-            val bodyB64 = Base64.encodeToString(dataJson.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP)
-            val mutation = """ mutation AddProjectV2DraftIssue { addProjectV2DraftIssue( input: { projectId: "$projectId", title: "$deviceId", body: "$bodyB64" } ) { projectItem { id content { ... on DraftIssue { id } } } } } """
-            val mutationRes = apiCall(mutation.toStringData()) ?: return failureToken
-            val itemId = mutationRes.data?.issue?.projectItem?.id ?: return false to mutationRes.errors?.get(0)?.message?.toString()
-            val draftId = mutationRes.data?.issue?.projectItem?.content?.id ?: return false to mutationRes.errors?.get(0)?.message?.toString()
-            setKey("sync_item_id", itemId)
-            setKey("sync_device_id", draftId)
-
-            // First time: try to restore from any existing device
-            val devices = fetchDevices()
-            if (devices?.isNotEmpty() == true) {
-                val otherDevice = devices.find { it.deviceId != deviceId && it.syncedData != null }
-                if (otherDevice != null) {
-                    try {
-                        val payload = mapper.readValue<SyncPayloadV2>(otherDevice.syncedData ?: "")
-                        restoreCategories(context, payload)
-                    } catch (_: Exception) {}
-                }
+        val devices: List<SyncDevice>? = fetchDevices()
+        if (devices?.isEmpty() == false && devices?.size ?: 0 > 0) {
+            val firstDevice: SyncDevice = devices!!.first()
+            setKey("sync_item_id", firstDevice.itemId ?: "")
+            setKey("sync_device_id", firstDevice.deviceId ?: "")
+            if (getKey<String>("restore_device") == "true") {
+                val restoredValue = mapper.readValue<BackupFile>(firstDevice.syncedData ?: "")
+                BackupUtils.restore(context, restoredValue, true, true)
             }
+        } else if (getKey<String>("backup_device") == "true") {
+            val syncData = BackupUtils.getBackup(context, getResumeWatching())?.toJson() ?: ""
+            val data = Base64.encodeToString(syncData.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP)
+            val query = """ mutation AddProjectV2DraftIssue { addProjectV2DraftIssue( input: { projectId: "$projectId", title: "${getKey<String>("device_id")}", body: "$data" } ) { projectItem { id content { ... on DraftIssue { id } } } } } """
+            val res = apiCall(query.toStringData()) ?: return failureToken
+            val itemId = res.data?.issue?.projectItem?.id ?: return false to res.errors?.get(0)?.message?.toString()
+            val deviceId = res.data?.issue?.projectItem?.content?.id ?: return false to res.errors?.get(0)?.message?.toString()
+            setKey("sync_item_id", itemId)
+            setKey("sync_device_id", deviceId)
+        } else {
+            setKey("sync_token", "")
+            setKey("sync_project_num", "")
+            return false to "Nessun backup trovato"
         }
         return true to "Dispositivo registrato correttamente"
-    }
-
-    private fun buildInitialPayload(deviceId: String): SyncPayloadV2 {
-        return SyncPayloadV2(
-            v = 2,
-            deviceId = deviceId,
-            categories = SyncCategory.entries.associate { cat ->
-                cat.id to CategoryData(ts = System.currentTimeMillis(), data = "")
-            }
-        )
-    }
-
-    private suspend fun restoreCategories(context: Context?, payload: SyncPayloadV2) {
-        if (context == null) return
-        for ((catId, catData) in payload.categories) {
-            if (catData.data.isBlank()) continue
-            val category = SyncCategory.fromId(catId) ?: continue
-            if (getKey<String>(SyncCategory.restoreKey(category)) != "true") continue
-            try {
-                val jsonBytes = Base64.decode(catData.data, Base64.URL_SAFE or Base64.NO_WRAP)
-                val cloudBackup = mapper.readValue<BackupFile>(String(jsonBytes, Charsets.UTF_8))
-                val localBackup = BackupUtils.getBackupForCategory(context, category, getResumeWatching())
-                val merged = BackupFile.merge(localBackup, cloudBackup)
-                if (merged != null) {
-                    BackupUtils.restoreCategoryData(context, category, merged)
-                }
-            } catch (_: Exception) {}
-        }
-    }
-
-    suspend fun pushAllCategories(context: Context?) {
-        if (!isLoggedIn() || context == null) return
-        val deviceId = getKey<String>("device_id") ?: return
-        val draftIssueId = getKey<String>("sync_device_id") ?: return
-
-        val categories = mutableMapOf<String, CategoryData>()
-        for (category in SyncCategory.entries) {
-            if (getKey<String>(SyncCategory.backupKey(category)) != "true") continue
-            val backup = BackupUtils.getBackupForCategory(context, category, getResumeWatching())
-            if (backup != null) {
-                val jsonStr = mapper.writeValueAsString(backup)
-                val b64 = Base64.encodeToString(jsonStr.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP)
-                categories[category.id] = CategoryData(ts = System.currentTimeMillis(), data = b64)
-            }
-        }
-
-        val payload = SyncPayloadV2(v = 2, deviceId = deviceId, categories = categories)
-        val payloadJson = mapper.writeValueAsString(payload)
-        val bodyB64 = Base64.encodeToString(payloadJson.toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP)
-        val mutation = """ mutation UpdateProjectV2DraftIssue { updateProjectV2DraftIssue( input: { draftIssueId: "$draftIssueId", title: "$deviceId", body: "$bodyB64" } ) { draftIssue { id } } } """
-        apiCall(mutation.toStringData())
-    }
-
-    suspend fun pullAndMergeCategories(context: Context?) {
-        if (!isLoggedIn() || context == null) return
-
-        val deviceId = getKey<String>("device_id")
-        val devices = fetchDevices() ?: return
-
-        // Trova il primo dispositivo non-nostro con dati
-        val sourceDevice = devices.find { it.deviceId != deviceId && it.syncedData != null } ?: return
-        try {
-            val payload = mapper.readValue<SyncPayloadV2>(sourceDevice.syncedData ?: "")
-            for ((catId, catData) in payload.categories) {
-                if (catData.data.isBlank()) continue
-                val category = SyncCategory.fromId(catId) ?: continue
-                if (getKey<String>(SyncCategory.restoreKey(category)) != "true") continue
-
-                val jsonBytes = Base64.decode(catData.data, Base64.URL_SAFE or Base64.NO_WRAP)
-                val cloudBackup = try { mapper.readValue<BackupFile>(String(jsonBytes, Charsets.UTF_8)) } catch (_: Exception) { continue }
-                val localBackup = BackupUtils.getBackupForCategory(context, category, getResumeWatching())
-                val merged = BackupFile.merge(localBackup, cloudBackup) ?: continue
-
-                // Scrivi merged solo se è diverso dal locale (ha ricevuto modifiche dal cloud)
-                if (merged != localBackup) {
-                    BackupUtils.restoreCategoryData(context, category, merged)
-                }
-            }
-        } catch (_: Exception) {}
     }
 
     suspend fun syncThisDevice(syncData: String): Pair<Boolean, String?> {
@@ -166,6 +83,7 @@ object ApiUtils {
         val deviceId = getKey<String>("sync_device_id")
         val query = """ mutation UpdateProjectV2DraftIssue { updateProjectV2DraftIssue( input: { draftIssueId: "$deviceId", title: "${getKey<String>("device_id")}", body: "$data" } ) { draftIssue { id } } } """
         apiCall(query.toStringData()) ?: return failure
+        
         return true to "Sync success"
     }
 
@@ -174,30 +92,9 @@ object ApiUtils {
         val projectNum = getKey<String>("sync_project_num")
         val query = """ query User { viewer { projectV2(number: ${projectNum}) { id items(first: 50) { nodes { id content { ... on DraftIssue { id title bodyText } } } totalCount } } } } """
         val res = apiCall(query.toStringData())
-        return res?.data?.viewer?.projectV2?.items?.nodes?.mapNotNull { node ->
-            try {
-                val rawBody = node.content.bodyText
-                // Try v2 first
-                val syncPayload = try {
-                    mapper.readValue<SyncPayloadV2>(rawBody)
-                } catch (_: Exception) {
-                    null
-                }
-                if (syncPayload != null) {
-                    val payloadJson = mapper.writeValueAsString(syncPayload)
-                    SyncDevice(node.content.title, node.content.id, node.id, payloadJson)
-                } else {
-                    // Fallback v1 (legacy)
-                    val data = Base64.decode(rawBody, Base64.URL_SAFE or Base64.NO_WRAP).toString(Charsets.UTF_8)
-                    SyncDevice(node.content.title, node.content.id, node.id, data)
-                }
-            } catch (_: Exception) {
-                null
-            }
+        return res?.data?.viewer?.projectV2?.items?.nodes?.map {
+            val data = Base64.decode(it.content.bodyText, Base64.URL_SAFE or Base64.NO_WRAP).toString(Charsets.UTF_8)
+            SyncDevice(it.content.title, it.content.id, it.id, data)
         }
-    }
-
-    private suspend fun findDevice(deviceId: String): SyncDevice? {
-        return fetchDevices()?.find { it.name == deviceId }
     }
 }

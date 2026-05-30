@@ -2,6 +2,7 @@ package it.dogior.hadEnough
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStore.getDefaultSharedPrefs
 import com.lagradost.cloudstream3.utils.DataStore.getSharedPrefs
@@ -72,6 +73,8 @@ object BackupUtils {
         "download_path_key_visual",
         "backup_path_key",
         "backup_dir_path_key",
+        "PLUGINS_KEY",
+        "PLUGINS_KEY_LOCAL",
         "cs3-votes",
         "last_sync_api",
         "last_click_action",
@@ -79,6 +82,7 @@ object BackupUtils {
         "library_folder",
         "result_resume_watching_migrated",
         "jsdelivr_proxy_key",
+        //custom
         "fshare_setup",
         "fshare_token",
         "bluphim_token",
@@ -107,185 +111,62 @@ object BackupUtils {
         "fstream_version",
     )
 
-    private val syncCategoryKeys = mapOf(
-        SyncCategory.EXTENSIONS to listOf(
-            "PLUGINS_KEY", "PLUGINS_KEY_LOCAL", "repositories",
-        ),
-        SyncCategory.BOOKMARKS to listOf(
-            "result_favorites_state_data", "result_watch_state", "result_watch_state_data",
-        ),
-        SyncCategory.RESUME_WATCHING to listOf(
-            "result_resume_watching", "video_pos_dur",
-            "download_header_cache", "download_resume",
-            "result_season", "result_dub", "result_episode",
-        ),
-        SyncCategory.SEARCH_HISTORY to listOf(
-            "search_history",
-        ),
-        SyncCategory.SETTINGS_PLAYER to listOf(
-            "player", "品質",
-        ),
-        SyncCategory.SETTINGS_SUBTITLES to listOf(
-            "subtitle", "subs",
-        ),
-        SyncCategory.SETTINGS_THEME to listOf(
-            "theme", "dark", "accent", "amoled",
-        ),
-        SyncCategory.SETTINGS_LAYOUT to listOf(
-            "layout", "home", "grid", "card", "landing",
-        ),
-        SyncCategory.SETTINGS_DOWNLOADS to listOf(
-            "download", "torrent",
-        ),
-    )
-
-    fun classifyKey(key: String): SyncCategory? {
-        if (nonTransferableKeys.any { key.startsWith(it) || key == it }) return null
-
-        for ((category, patterns) in syncCategoryKeys) {
-            if (patterns.any { key.contains(it, ignoreCase = true) }) return category
-        }
-
-        return SyncCategory.SETTINGS_GENERAL
+    fun String.isResume(): Boolean {
+        return !nonTransferableKeys.any { this.contains(it) }
     }
 
-    fun isResumeRelevant(key: String, resumeWatching: List<DataStoreHelper.ResumeWatchingResult>?): Boolean {
-        if (resumeWatching == null) return true
-        return when {
-            key.contains("download_header_cache") -> {
-                val id = key.split("/").getOrNull(1)?.toIntOrNull()
-                id?.let { intId ->
-                    resumeWatching.any { if (it.parentId != null) it.parentId == intId else it.id == intId }
+    fun String.isBackup(resumeWatching: List<DataStoreHelper.ResumeWatchingResult>? = null): Boolean {
+        var check = !nonTransferableKeys.any { this.contains(it) }
+        if (check) {
+            if (this.contains("download_header_cache")) {
+                val id = this.split("/").getOrNull(1)?.toIntOrNull()
+                check = id?.let { intId ->
+                    resumeWatching?.any { if (it.parentId != null) it.parentId == intId else it.id == intId } == true
+                } ?: false
+            } else if (this.contains("video_pos_dur")) {
+                val id = this.split("/").getOrNull(2)?.toIntOrNull()
+                check = id?.let { intId ->
+                    resumeWatching?.any { it.id == intId } == true
+                } ?: false
+            } else if (this.contains("result_season") || this.contains("result_dub") || this.contains("result_episode")) {
+                val id = this.split("/").getOrNull(2)?.toIntOrNull()
+                check = id?.let { intId ->
+                    resumeWatching?.any { it.parentId == intId } == true
                 } ?: false
             }
-            key.contains("video_pos_dur") -> {
-                val id = key.split("/").getOrNull(2)?.toIntOrNull()
-                id?.let { intId -> resumeWatching.any { it.id == intId } } ?: false
-            }
-            key.contains("result_season") || key.contains("result_dub") || key.contains("result_episode") -> {
-                val id = key.split("/").getOrNull(2)?.toIntOrNull()
-                id?.let { intId -> resumeWatching.any { it.parentId == intId } } ?: false
-            }
-            else -> true
         }
+        
+        return check
     }
 
-    fun extractPrefs(
-        context: Context,
-        category: SyncCategory,
-        resumeWatching: List<DataStoreHelper.ResumeWatchingResult>?,
-    ): Pair<Map<String, *>, Boolean> {
-        val isSettings = category in listOf(
-            SyncCategory.SETTINGS_PLAYER, SyncCategory.SETTINGS_SUBTITLES,
-            SyncCategory.SETTINGS_THEME, SyncCategory.SETTINGS_LAYOUT,
-            SyncCategory.SETTINGS_DOWNLOADS, SyncCategory.SETTINGS_GENERAL,
-        )
-        val prefs = if (isSettings) context.getDefaultSharedPrefs().all else context.getSharedPrefs().all
-        val filtered = prefs.filter { (key, _) ->
-            classifyKey(key) == category && isResumeRelevant(key, resumeWatching)
-        }
-        return filtered to isSettings
-    }
+    fun getBackup(context: Context?, resumeWatching: List<DataStoreHelper.ResumeWatchingResult>?): BackupFile? {
+        if (context == null) return null
 
-    fun buildBackupVars(map: Map<String, *>, keyTs: MutableMap<String, Long>, now: Long): BackupVars {
-        return BackupVars(
-            bool = map.filterValues { it is Boolean }.mapValues { (k, v) ->
-                keyTs.putIfAbsent(k, now); v as Boolean
-            },
-            int = map.filterValues { it is Int }.mapValues { (k, v) ->
-                keyTs.putIfAbsent(k, now); v as Int
-            },
-            string = map.filterValues { it is String }.mapValues { (k, v) ->
-                keyTs.putIfAbsent(k, now); v as String
-            },
-            float = map.filterValues { it is Float }.mapValues { (k, v) ->
-                keyTs.putIfAbsent(k, now); v as Float
-            },
-            long = map.filterValues { it is Long }.mapValues { (k, v) ->
-                keyTs.putIfAbsent(k, now); v as Long
-            },
-            stringSet = map.filterValues { it is Set<*> }.mapValues { (k, v) ->
-                keyTs.putIfAbsent(k, now); (v as? Set<*>)?.filterIsInstance<String>()?.toSet()
-            },
-        )
-    }
+        val allData = context.getSharedPrefs().all.filter { it.key.isBackup(resumeWatching) }
+        val allSettings = context.getDefaultSharedPrefs().all.filter { it.key.isBackup(resumeWatching) }
 
-    fun getBackupForCategory(
-        context: Context,
-        category: SyncCategory,
-        resumeWatching: List<DataStoreHelper.ResumeWatchingResult>?,
-    ): BackupFile? {
-        val now = System.currentTimeMillis()
-        val keyTs = mutableMapOf<String, Long>()
-
-        for (isSettings in listOf(false, true)) {
-            val prefs = if (isSettings) context.getDefaultSharedPrefs().all else context.getSharedPrefs().all
-            for ((key, _) in prefs) {
-                if (classifyKey(key) == category && isResumeRelevant(key, resumeWatching)) {
-                    keyTs[key] = now
-                }
-            }
-        }
-
-        if (keyTs.isEmpty()) return null
-
-        val (dataMap, isDataSettings) = extractPrefs(context, category, resumeWatching)
-        val (settingsMap, isSettingsSettings) = extractPrefs(context, category, resumeWatching)
-
-        val datastore = if (!isDataSettings && !isSettingsSettings) {
-            buildBackupVars(dataMap, keyTs, now)
-        } else if (!isDataSettings) {
-            buildBackupVars(dataMap, keyTs, now)
-        } else {
-            BackupVars(null, null, null, null, null, null)
-        }
-
-        val settings = if (isDataSettings || isSettingsSettings) {
-            buildBackupVars(settingsMap, keyTs, now)
-        } else {
-            BackupVars(null, null, null, null, null, null)
-        }
-
-        // Deduplicate: if key is in both sections, keep only datastore version with higher ts
-        val mergedKeyTs = keyTs.toMap()
-        return BackupFile(datastore = datastore, settings = settings, keyTs = mergedKeyTs)
-    }
-
-    fun restoreCategoryData(context: Context, category: SyncCategory, backup: BackupFile?) {
-        if (backup == null) return
-
-        val isSettings = category in listOf(
-            SyncCategory.SETTINGS_PLAYER, SyncCategory.SETTINGS_SUBTITLES,
-            SyncCategory.SETTINGS_THEME, SyncCategory.SETTINGS_LAYOUT,
-            SyncCategory.SETTINGS_DOWNLOADS, SyncCategory.SETTINGS_GENERAL,
+        val allDataSorted = BackupVars(
+            allData.filter { it.value is Boolean } as? Map<String, Boolean>,
+            allData.filter { it.value is Int } as? Map<String, Int>,
+            allData.filter { it.value is String } as? Map<String, String>,
+            allData.filter { it.value is Float } as? Map<String, Float>,
+            allData.filter { it.value is Long } as? Map<String, Long>,
+            allData.filter { it.value as? Set<String> != null } as? Map<String, Set<String>>
         )
 
-        if (!isSettings) {
-            restoreMap(context, backup.datastore.bool, false)
-            restoreMap(context, backup.datastore.int, false)
-            restoreMap(context, backup.datastore.string, false)
-            restoreMap(context, backup.datastore.float, false)
-            restoreMap(context, backup.datastore.long, false)
-            restoreMap(context, backup.datastore.stringSet, false)
-        } else {
-            restoreMap(context, backup.settings.bool, true)
-            restoreMap(context, backup.settings.int, true)
-            restoreMap(context, backup.settings.string, true)
-            restoreMap(context, backup.settings.float, true)
-            restoreMap(context, backup.settings.long, true)
-            restoreMap(context, backup.settings.stringSet, true)
-        }
-    }
+        val allSettingsSorted = BackupVars(
+            allSettings.filter { it.value is Boolean } as? Map<String, Boolean>,
+            allSettings.filter { it.value is Int } as? Map<String, Int>,
+            allSettings.filter { it.value is String } as? Map<String, String>,
+            allSettings.filter { it.value is Float } as? Map<String, Float>,
+            allSettings.filter { it.value is Long } as? Map<String, Long>,
+            allSettings.filter { it.value as? Set<String> != null } as? Map<String, Set<String>>
+        )
 
-    fun <T> restoreMap(context: Context, map: Map<String, T>?, isEditingAppSettings: Boolean) {
-        if (map == null) return
-        val editor2 = editor(context, isEditingAppSettings)
-        map.forEach { (key, value) ->
-            if (classifyKey(key) != null) {
-                editor2.setKeyRaw(key, value)
-            }
-        }
-        editor2.apply()
+        return BackupFile(
+            allDataSorted,
+            allSettingsSorted
+        )
     }
 
     fun editor(context : Context, isEditingAppSettings: Boolean = false) : Editor {
@@ -293,67 +174,41 @@ object BackupUtils {
         return Editor(editor)
     }
 
-    fun getBackup(context: Context?, resumeWatching: List<DataStoreHelper.ResumeWatchingResult>?): BackupFile? {
-        if (context == null) return null
-
-        val now = System.currentTimeMillis()
-        val keyTs = mutableMapOf<String, Long>()
-
-        val allData = context.getSharedPrefs().all
-        val allSettings = context.getDefaultSharedPrefs().all
-
-        for ((key, _) in allData) {
-            if (classifyKey(key) != null && isResumeRelevant(key, resumeWatching)) {
-                keyTs[key] = now
+    fun <T> Context.restoreMap(
+        map: Map<String, T>?,
+        isEditingAppSettings: Boolean = false
+    ) {
+        val editor2 = editor(this, isEditingAppSettings)
+        map?.forEach {
+            if (it.key.isResume()) {
+                editor2.setKeyRaw(it.key, it.value)
             }
         }
-        for ((key, _) in allSettings) {
-            if (classifyKey(key) != null && isResumeRelevant(key, resumeWatching)) {
-                keyTs[key] = now
-            }
-        }
-
-        val dataFiltered = allData.filter { (k, _) -> classifyKey(k) != null && isResumeRelevant(k, resumeWatching) }
-        val settingsFiltered = allSettings.filter { (k, _) -> classifyKey(k) != null && isResumeRelevant(k, resumeWatching) }
-
-        val allDataSorted = BackupVars(
-            dataFiltered.filter { it.value is Boolean } as? Map<String, Boolean>,
-            dataFiltered.filter { it.value is Int } as? Map<String, Int>,
-            dataFiltered.filter { it.value is String } as? Map<String, String>,
-            dataFiltered.filter { it.value is Float } as? Map<String, Float>,
-            dataFiltered.filter { it.value is Long } as? Map<String, Long>,
-            dataFiltered.filter { it.value as? Set<String> != null } as? Map<String, Set<String>>
-        )
-
-        val allSettingsSorted = BackupVars(
-            settingsFiltered.filter { it.value is Boolean } as? Map<String, Boolean>,
-            settingsFiltered.filter { it.value is Int } as? Map<String, Int>,
-            settingsFiltered.filter { it.value is String } as? Map<String, String>,
-            settingsFiltered.filter { it.value is Float } as? Map<String, Float>,
-            settingsFiltered.filter { it.value is Long } as? Map<String, Long>,
-            settingsFiltered.filter { it.value as? Set<String> != null } as? Map<String, Set<String>>
-        )
-
-        return BackupFile(allDataSorted, allSettingsSorted, keyTs)
+        editor2.apply()
     }
 
-    fun restore(context: Context?, backupFile: BackupFile, restoreSettings: Boolean, restoreDataStore: Boolean) {
+    fun restore(
+        context: Context?,
+        backupFile: BackupFile,
+        restoreSettings: Boolean,
+        restoreDataStore: Boolean
+    ) {
         if (context == null) return
         if (restoreSettings) {
-            restoreMap(context, backupFile.settings.bool, true)
-            restoreMap(context, backupFile.settings.int, true)
-            restoreMap(context, backupFile.settings.string, true)
-            restoreMap(context, backupFile.settings.float, true)
-            restoreMap(context, backupFile.settings.long, true)
-            restoreMap(context, backupFile.settings.stringSet, true)
+            context.restoreMap(backupFile.settings.bool, true)
+            context.restoreMap(backupFile.settings.int, true)
+            context.restoreMap(backupFile.settings.string, true)
+            context.restoreMap(backupFile.settings.float, true)
+            context.restoreMap(backupFile.settings.long, true)
+            context.restoreMap(backupFile.settings.stringSet, true)
         }
         if (restoreDataStore) {
-            restoreMap(context, backupFile.datastore.bool, false)
-            restoreMap(context, backupFile.datastore.int, false)
-            restoreMap(context, backupFile.datastore.string, false)
-            restoreMap(context, backupFile.datastore.float, false)
-            restoreMap(context, backupFile.datastore.long, false)
-            restoreMap(context, backupFile.datastore.stringSet, false)
+            context.restoreMap(backupFile.datastore.bool)
+            context.restoreMap(backupFile.datastore.int)
+            context.restoreMap(backupFile.datastore.string)
+            context.restoreMap(backupFile.datastore.float)
+            context.restoreMap(backupFile.datastore.long)
+            context.restoreMap(backupFile.datastore.stringSet)
         }
     }
 }
