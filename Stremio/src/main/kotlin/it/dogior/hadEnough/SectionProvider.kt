@@ -56,13 +56,18 @@ class SectionProvider(
             mainPageOf("placeholder://catalog" to name)
         } else {
             mainPageOf(
-                "$TMDB_API/trending/all/day?api_key=$API_KEY&region=IT&language=it" to "Trending",
-                "$TMDB_API/movie/popular?api_key=$API_KEY&region=IT&language=it" to "Film Popolari",
-                "$TMDB_API/tv/popular?api_key=$API_KEY&region=IT&language=it" to "Serie TV Popolari"
+                "$TMDB_API/trending/all/day?api_key=$API_KEY&region=IT&language=it" to labelTrending,
+                "$TMDB_API/movie/popular?api_key=$API_KEY&region=IT&language=it" to labelPopularMovies,
+                "$TMDB_API/tv/popular?api_key=$API_KEY&region=IT&language=it" to labelPopularTv
             )
         }
 
     companion object {
+        var labelTrending = "Trending"
+        var labelPopularMovies = "Film Popolari"
+        var labelPopularTv = "Serie TV Popolari"
+        var upcomingTag = " [UPCOMING]"
+
         const val TRACKER_LIST_URL = "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt"
         const val CINEMETA_URL = "https://v3-cinemeta.strem.io"
         private const val TMDB_API = "https://api.themoviedb.org/3"
@@ -325,7 +330,7 @@ class SectionProvider(
                             season = eps.seasonNumber,
                             episode = eps.episodeNumber
                         ).toJson()) {
-                            this.name = eps.name + if (isUpcoming(eps.airDate)) " [UPCOMING]" else ""
+                            this.name = eps.name + if (isUpcoming(eps.airDate)) upcomingTag else ""
                             this.season = eps.seasonNumber
                             this.episode = eps.episodeNumber
                             this.posterUrl = getImageUrl(eps.stillPath)

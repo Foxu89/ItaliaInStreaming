@@ -16,8 +16,21 @@ class StremioXPlugin : Plugin() {
     private val PREF_KEY_SECTIONS = "stremio_sections"
     private val PREF_KEY_OLD = "stremio_saved_links"
 
+    private fun str(name: String, default: String, vararg args: Any?): String {
+        val pkg = BuildConfig.LIBRARY_PACKAGE_NAME
+        val res = resources
+        val id = res?.getIdentifier(name, "string", pkg) ?: 0
+        val template = if (id != 0) res!!.getString(id) else default
+        return if (args.isNotEmpty()) String.format(template, *args) else template
+    }
+
     override fun load(context: Context) {
         migrateOldFormat(context)
+        // Load localized labels into SectionProvider
+        SectionProvider.labelTrending = str("tmdb_trending", "Trending")
+        SectionProvider.labelPopularMovies = str("tmdb_popular_movies", "Film Popolari")
+        SectionProvider.labelPopularTv = str("tmdb_popular_tv", "Serie TV Popolari")
+        SectionProvider.upcomingTag = str("upcoming_tag", " [UPCOMING]")
         reload(context)
         val activity = context as? AppCompatActivity
         openSettings = {
@@ -45,7 +58,7 @@ class StremioXPlugin : Plugin() {
             val type = obj.optString("type", "StremioX")
             if (link.isBlank()) continue
 
-            val sectionName = name.ifBlank { "Sezione ${migrated.size + 1}" }
+            val sectionName = name.ifBlank { str("migration_section_name", "Sezione %d", migrated.size + 1) }
             migrated.add(
                 SectionConfig(
                     id = System.currentTimeMillis() + i,
@@ -54,7 +67,7 @@ class StremioXPlugin : Plugin() {
                     streamAddons = if (type == "StremioX") {
                         listOf(StreamAddonConfig(
                             id = System.currentTimeMillis() + i,
-                            name = name.ifBlank { "Stream" },
+                            name = name.ifBlank { str("migration_addon_name", "Stream") },
                             url = link,
                             type = "https"
                         ))

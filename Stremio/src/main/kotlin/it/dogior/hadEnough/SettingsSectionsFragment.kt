@@ -36,6 +36,12 @@ class SettingsSectionsFragment(
     private val res = plugin.resources ?: throw Exception("Unable to access plugin resources")
     private val sections = mutableListOf<SectionConfig>()
 
+    private fun str(name: String, default: String, vararg args: Any?): String {
+        val id = res.getIdentifier(name, "string", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val template = if (id != 0) res.getString(id) else default
+        return if (args.isNotEmpty()) String.format(template, *args) else template
+    }
+
     override fun onStart() {
         super.onStart()
         (dialog as? BottomSheetDialog)?.behavior?.apply {
@@ -80,15 +86,15 @@ class SettingsSectionsFragment(
         saveBtn.setImageDrawable(getDrawable("save_icon"))
         saveBtn.setOnClickListener {
             saveSections(sections)
-            Toast.makeText(requireContext(), "Sezioni salvate", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), str("sections_saved", "Sezioni salvate"), Toast.LENGTH_SHORT).show()
             AlertDialog.Builder(requireContext())
-                .setTitle("Riavvia applicazione")
-                .setMessage("Riavviare per applicare le modifiche?")
-                .setPositiveButton("Riavvia") { _, _ ->
+                .setTitle(str("restart_title", "Riavvia applicazione"))
+                .setMessage(str("restart_message", "Riavviare per applicare le modifiche?"))
+                .setPositiveButton(str("restart_positive", "Riavvia")) { _, _ ->
                     dismiss()
                     restartApp()
                 }
-                .setNegativeButton("Più tardi", null)
+                .setNegativeButton(str("restart_negative", "Più tardi"), null)
                 .show()
         }
     }
@@ -110,7 +116,7 @@ class SettingsSectionsFragment(
             val type = obj.optString("type", "StremioX")
             if (link.isBlank()) continue
 
-            val sectionName = name.ifBlank { "Sezione ${migrated.size + 1}" }
+            val sectionName = name.ifBlank { str("migration_section_name", "Sezione %d", migrated.size + 1) }
             migrated.add(
                 SectionConfig(
                     id = System.currentTimeMillis() + i,
@@ -119,7 +125,7 @@ class SettingsSectionsFragment(
                     streamAddons = if (type == "StremioX") {
                         listOf(StreamAddonConfig(
                             id = System.currentTimeMillis() + i,
-                            name = name.ifBlank { "Stream" },
+                            name = name.ifBlank { str("migration_addon_name", "Stream") },
                             url = link,
                             type = "https"
                         ))
@@ -228,7 +234,7 @@ class SettingsSectionsFragment(
             headerRow.addView(nameText)
 
             val addonCount = TextView(requireContext()).apply {
-                text = "${section.streamAddons.size}/5 addon"
+                text = str("addon_count", "%d/5 addon", section.streamAddons.size)
                 textSize = 12f
                 setPadding(dpToPx(8), 0, dpToPx(8), 0)
             }
@@ -237,7 +243,7 @@ class SettingsSectionsFragment(
 
             // subheader: catalog type
             val catalogType = TextView(requireContext()).apply {
-                text = if (section.catalogUrl != null) "Catalogo" else "Catalogo: TMDB"
+                text = if (section.catalogUrl != null) str("catalog_custom", "Catalogo") else str("catalog_tmdb", "Catalogo: TMDB")
                 textSize = 12f
                 setPadding(dpToPx(8), dpToPx(4), dpToPx(8), 0)
             }
@@ -254,7 +260,7 @@ class SettingsSectionsFragment(
             }
 
             val editBtn = TextView(requireContext()).apply {
-                text = "MODIFICA"
+                text = str("edit_btn", "MODIFICA")
                 textSize = 13f
                 setTypeface(null, Typeface.BOLD)
                 gravity = Gravity.CENTER
@@ -270,7 +276,7 @@ class SettingsSectionsFragment(
             actionsRow.addView(editBtn)
 
             val deleteBtn = TextView(requireContext()).apply {
-                text = "RIMUOVI"
+                text = str("delete_btn", "RIMUOVI")
                 textSize = 13f
                 setTypeface(null, Typeface.BOLD)
                 gravity = Gravity.CENTER
@@ -283,13 +289,13 @@ class SettingsSectionsFragment(
                 setTextColor(Color.parseColor("#FFFF7F7F"))
                 setOnClickListener {
                     AlertDialog.Builder(requireContext())
-                        .setTitle("Rimuovi sezione")
-                        .setMessage("Rimuovere \"${section.name}\"?")
-                        .setPositiveButton("Rimuovi") { _, _ ->
+                        .setTitle(str("delete_section_title", "Rimuovi sezione"))
+                        .setMessage(str("delete_section_message", "Rimuovere \"%s\"?", section.name))
+                        .setPositiveButton(str("delete_confirm", "Rimuovi")) { _, _ ->
                             sections.remove(section)
                             rebuildRows(requireView())
                         }
-                        .setNegativeButton("Annulla", null)
+                        .setNegativeButton(str("cancel", "Annulla"), null)
                         .show()
                 }
             }
@@ -311,14 +317,14 @@ class SettingsSectionsFragment(
         }
 
         val titleLabel = TextView(ctx).apply {
-            text = "Nome sezione"
+            text = str("editor_name_label", "Nome sezione")
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
         }
         layout.addView(titleLabel)
 
         val nameInput = EditText(ctx).apply {
-            hint = "Es. Film, Serie TV..."
+            hint = str("editor_name_hint", "Es. Film, Serie TV\u2026")
             inputType = InputType.TYPE_CLASS_TEXT
             setText(existing?.name ?: "")
             setPadding(0, dpToPx(8), 0, dpToPx(16))
@@ -326,21 +332,21 @@ class SettingsSectionsFragment(
         layout.addView(nameInput)
 
         val catalogLabel = TextView(ctx).apply {
-            text = "URL catalogo (opzionale — vuoto = TMDB)"
+            text = str("editor_catalog_label", "URL catalogo (opzionale \u2014 vuoto = TMDB)")
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
         }
         layout.addView(catalogLabel)
 
         val catalogInput = EditText(ctx).apply {
-            hint = "https://v3-cinemeta.strem.io"
+            hint = str("editor_catalog_hint", "https://v3-cinemeta.strem.io")
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setText(existing?.catalogUrl ?: "")
         }
         layout.addView(catalogInput)
 
         val addonsLabel = TextView(ctx).apply {
-            text = "Stream addon (massimo 5)"
+            text = str("editor_addons_label", "Stream addon (massimo 5)")
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
             setPadding(0, dpToPx(16), 0, dpToPx(8))
@@ -363,21 +369,21 @@ class SettingsSectionsFragment(
             }
 
             val label = TextView(ctx).apply {
-                text = "Addon #${i + 1}"
+                text = str("editor_addon_label", "Addon #%d", i + 1)
                 textSize = 13f
                 setTypeface(null, Typeface.BOLD)
             }
             row.addView(label)
 
             val etName = EditText(ctx).apply {
-                hint = "Nome"
+                hint = str("editor_addon_name_hint", "Nome")
                 inputType = InputType.TYPE_CLASS_TEXT
                 if (i < existingAddons.size) setText(existingAddons[i].name)
             }
             row.addView(etName)
 
             val etUrl = EditText(ctx).apply {
-                hint = "https://example.com (manifest.json)"
+                hint = str("editor_addon_url_hint", "https://example.com (manifest.json)")
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
                 if (i < existingAddons.size) setText(existingAddons[i].url)
             }
@@ -389,19 +395,19 @@ class SettingsSectionsFragment(
 
         outer.addView(layout)
 
-        val title = if (existing != null) "Modifica Sezione" else "Nuova Sezione"
+        val title = if (existing != null) str("editor_title_edit", "Modifica Sezione") else str("editor_title_new", "Nuova Sezione")
         AlertDialog.Builder(ctx)
             .setTitle(title)
             .setView(outer)
-            .setPositiveButton("OK", null)
-            .setNegativeButton("Annulla", null)
+            .setPositiveButton(str("editor_ok", "OK"), null)
+            .setNegativeButton(str("editor_cancel", "Annulla"), null)
             .create().apply {
                 setOnShowListener {
                     getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                         val name = nameInput.text.toString().trim()
                         val catalogUrl = catalogInput.text.toString().trim().ifBlank { null }
                         if (name.isEmpty()) {
-                            Toast.makeText(ctx, "Inserisci un nome", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, str("editor_name_required", "Inserisci un nome"), Toast.LENGTH_SHORT).show()
                             return@setOnClickListener
                         }
 
@@ -413,7 +419,7 @@ class SettingsSectionsFragment(
                                 addons.add(StreamAddonConfig(
                                     id = if (existing != null && idx < existingAddons.size) existingAddons[idx].id
                                           else System.currentTimeMillis() + idx,
-                                    name = aname.ifBlank { "Addon ${idx + 1}" },
+                                    name = aname.ifBlank { str("editor_addon_default_name", "Addon %d", idx + 1) },
                                     url = aurl,
                                     type = "https"
                                 ))
