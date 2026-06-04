@@ -78,14 +78,14 @@ class SettingsFragment(
             }
 
             AlertDialog.Builder(requireContext())
-                .setTitle("Restart Required")
-                .setMessage("Changes have been saved. Do you want to restart the app to apply them?")
-                .setPositiveButton("Yes") { _, _ ->
+                .setTitle("Riavvia applicazione")
+                .setMessage("Impostazioni salvate. Vuoi riavviare l'applicazione ora per applicare subito le modifiche?")
+                .setPositiveButton("Riavvia") { _, _ ->
                     showToast("Saved and Restarting...")
                     dismiss()
                     restartApp()
                 }
-                .setNegativeButton("No") { dialog, _ ->
+                .setNegativeButton("Più tardi") { dialog, _ ->
                     showToast("Saved. Restart later to apply changes.")
                     dialog.dismiss()
                     dismiss()
@@ -98,14 +98,14 @@ class SettingsFragment(
         resetBtn.setOnClickListener {
             AlertDialog.Builder(requireContext())
                 .setTitle("Reset")
-                .setMessage("This will delete all saved settings.")
+                .setMessage("Questo cancellerà tutte le impostazioni salvate.")
                 .setPositiveButton("Reset") { _, _ ->
                     sharedPref.edit(commit = true) { clear() }
                     debridSpinner.setSelection(0, false)
                     debridKeyInput.text.clear()
                     restartApp()
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton("Annulla", null)
                 .show()
         }
 
