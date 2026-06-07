@@ -23,8 +23,7 @@ class CinemaCityExtractor : ExtractorApi() {
 
     companion object {
         private const val TAG = "CinemaCityExtractor"
-        private const val WORKER_BASE = "https://cm.leanhuo61206.workers.dev"
-        private const val CONTENT_WORKER_BASE = "https://cm.realbestia.com"
+        private const val WORKER_URL = "https://broad-mouse-85c7.appbeta870.workers.dev"
         private val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         )
@@ -35,7 +34,7 @@ class CinemaCityExtractor : ExtractorApi() {
             val u = java.net.URL(url)
             u.path + if (u.query != null) "?${u.query}" else ""
         } catch (_: Exception) { url }
-        val workerUrl = "${CONTENT_WORKER_BASE}${path}"
+        val workerUrl = "${WORKER_URL}${path}"
         StreamITALogger.log(TAG, "fetchViaWorker → $workerUrl (da url=$url)")
         return try {
             val start = System.currentTimeMillis()

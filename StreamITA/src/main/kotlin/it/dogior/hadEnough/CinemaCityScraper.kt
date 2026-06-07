@@ -18,8 +18,7 @@ object CinemaCityScraper {
     private const val BASE_URL = "https://cinemacity.cc"
     private const val SITEMAP_URL = "$BASE_URL/news_pages.xml"
     private const val TMDB_URL = "https://api.themoviedb.org/3"
-    private const val WORKER_BASE = "https://cm.leanhuo61206.workers.dev"
-    private const val CONTENT_WORKER_BASE = "https://cm.realbestia.com"
+    private const val WORKER_URL = "https://broad-mouse-85c7.appbeta870.workers.dev"
     private const val SITEMAP_CACHE_MS = 60 * 60 * 1000L
     private const val TMDB_CACHE_KEY_PREFIX = "CINEMACITY:TMDB:"
 
@@ -52,7 +51,7 @@ object CinemaCityScraper {
 
     private var sitemapCache: SitemapCache? = null
 
-    private suspend fun fetchViaWorker(url: String, workerBase: String = CONTENT_WORKER_BASE): String? {
+    private suspend fun fetchViaWorker(url: String, workerBase: String = WORKER_URL): String? {
         val path = try {
             val u = java.net.URL(url)
             u.path + if (u.query != null) "?${u.query}" else ""
@@ -196,40 +195,9 @@ object CinemaCityScraper {
             return sitemapCache!!.entries
         }
 
-        StreamITALogger.log(TAG, "Fetching sitemap catalog...")
-
-        try {
-            val sitemapPath = "/news_pages.xml"
-            val firstPageUrl = "$WORKER_BASE$sitemapPath?page=1&perPage=500"
-            StreamITALogger.log(TAG, "Sitemap page 1: $firstPageUrl")
-            val firstResp = app.get(firstPageUrl, headers = headers)
-            val totalEntries = firstResp.headers["x-total-entries"]?.toIntOrNull() ?: 0
-            val firstXml = firstResp.text
-            var allEntries = parseSitemapEntries(firstXml)
-
-            if (totalEntries > 0) {
-                val totalPages = (totalEntries + 499) / 500
-                for (p in 2..totalPages) {
-                    try {
-                        val pageUrl = "$WORKER_BASE$sitemapPath?page=$p&perPage=500"
-                        val resp = app.get(pageUrl, headers = headers)
-                        allEntries = allEntries + parseSitemapEntries(resp.text)
-                    } catch (_: Exception) {}
-                }
-            }
-
-            if (allEntries.isNotEmpty()) {
-                sitemapCache = SitemapCache(allEntries, now + SITEMAP_CACHE_MS)
-                StreamITALogger.log(TAG, "Sitemap loaded: ${allEntries.size} entries")
-                return allEntries
-            }
-        } catch (e: Exception) {
-            StreamITALogger.log(TAG, "Sitemap pagination fallito: ${e.message}")
-        }
-
-        StreamITALogger.log(TAG, "Fallback sitemap full fetch...")
-        val xml = fetchViaWorker(SITEMAP_URL, workerBase = WORKER_BASE) ?: return null
-        if (!isBlockedResponse(xml)) {
+        StreamITALogger.log(TAG, "Fetching sitemap catalog via worker...")
+        val xml = fetchViaWorker(SITEMAP_URL)
+        if (xml != null && !isBlockedResponse(xml)) {
             val entries = parseSitemapEntries(xml)
             if (entries.isNotEmpty()) {
                 sitemapCache = SitemapCache(entries, now + SITEMAP_CACHE_MS)
@@ -244,6 +212,7 @@ object CinemaCityScraper {
             val entries = parseSitemapEntries(cfkXml)
             if (entries.isNotEmpty()) {
                 sitemapCache = SitemapCache(entries, now + SITEMAP_CACHE_MS)
+                StreamITALogger.log(TAG, "Sitemap loaded via CFK: ${entries.size} entries")
                 return entries
             }
         }
