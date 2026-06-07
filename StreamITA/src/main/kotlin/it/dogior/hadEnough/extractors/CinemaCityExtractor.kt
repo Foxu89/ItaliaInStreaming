@@ -1,6 +1,5 @@
 package it.dogior.hadEnough.extractors
 
-import android.util.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.base64Decode
@@ -25,6 +24,7 @@ class CinemaCityExtractor : ExtractorApi() {
     companion object {
         private const val TAG = "CinemaCityExtractor"
         private const val WORKER_BASE = "https://cm.leanhuo61206.workers.dev"
+        private const val CONTENT_WORKER_BASE = "https://cm.realbestia.com"
         private val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         )
@@ -35,12 +35,19 @@ class CinemaCityExtractor : ExtractorApi() {
             val u = java.net.URL(url)
             u.path + if (u.query != null) "?${u.query}" else ""
         } catch (_: Exception) { url }
-        val workerUrl = "${WORKER_BASE}${path}"
-        StreamITALogger.log(TAG, "Worker → $workerUrl")
+        val workerUrl = "${CONTENT_WORKER_BASE}${path}"
+        StreamITALogger.log(TAG, "fetchViaWorker → $workerUrl (da url=$url)")
         return try {
-            app.get(workerUrl, headers = headers).text
+            val start = System.currentTimeMillis()
+            val text = app.get(workerUrl, headers = headers).text
+            val elapsed = System.currentTimeMillis() - start
+            StreamITALogger.log(TAG, "fetchViaWorker OK (${text.length} bytes, ${elapsed}ms) per $workerUrl")
+            if (text.length < 10) {
+                StreamITALogger.log(TAG, "fetchViaWorker: risposta troppo corta (${text.length} bytes)")
+                null
+            } else text
         } catch (e: Exception) {
-            StreamITALogger.log(TAG, "Worker fallito: ${e.message}")
+            StreamITALogger.log(TAG, "fetchViaWorker fallito per $workerUrl: ${e.message}")
             null
         }
     }
@@ -63,32 +70,32 @@ class CinemaCityExtractor : ExtractorApi() {
             val episode = referer?.substringAfter("episode=")?.substringBefore("&")?.toIntOrNull()
             val isTvSeries = season != null
 
-            Log.d(TAG, "Cerco CinemaCity per IMDb: $imdbId, S${season}E${episode}")
+            StreamITALogger.log(TAG, "Cerco CinemaCity per IMDb: $imdbId, S${season}E${episode}")
 
             val pageUrl = CinemaCityScraper.resolveViaSitemap(imdbId, isTvSeries) ?: run {
-                Log.e(TAG, "Nessun match sitemap per $imdbId")
+                StreamITALogger.log(TAG, "Nessun match sitemap per $imdbId")
                 return
             }
 
-            Log.d(TAG, "Pagina trovata: $pageUrl")
+            StreamITALogger.log(TAG, "Pagina trovata: $pageUrl")
 
             // Worker primario per pagina contenuto
             var html = fetchViaWorker(pageUrl)
             if (html != null && !isBlockedResponse(html)) {
-                Log.d(TAG, "Pagina via worker")
+                StreamITALogger.log(TAG, "Pagina via worker")
             } else {
-                Log.d(TAG, "Worker bloccato, fallback CFK...")
+                StreamITALogger.log(TAG, "Worker bloccato, fallback CFK...")
                 html = app.get(pageUrl, headers = headers, interceptor = cfKiller).text
                 if (isBlockedResponse(html)) {
-                    Log.e(TAG, "Anche CFK bloccato")
+                    StreamITALogger.log(TAG, "Anche CFK bloccato")
                     return
                 }
             }
 
-            // FIX 1: Link diretti
+            // Link diretti
             val directLinks = extractDownloadLinks(html)
             if (directLinks.isNotEmpty()) {
-                Log.d(TAG, "Trovati ${directLinks.size} link diretti")
+                StreamITALogger.log(TAG, "Trovati ${directLinks.size} link diretti")
                 var selectedUrl: String? = null
                 for (link in directLinks) {
                     if (link.second.contains("ita") || link.second.contains("italian") || link.second.contains("italiano")) {
@@ -105,7 +112,7 @@ class CinemaCityExtractor : ExtractorApi() {
                 if (selectedUrl == null) selectedUrl = directLinks.first().first
 
                 val streamUrl = resolveUrl(pageUrl, selectedUrl)
-                Log.d(TAG, "Link diretto: $streamUrl")
+                StreamITALogger.log(TAG, "Link diretto: $streamUrl")
 
                 callback.invoke(
                     newExtractorLink(
@@ -125,11 +132,11 @@ class CinemaCityExtractor : ExtractorApi() {
                 return
             }
 
-            // FIX 2: atob
-            Log.d(TAG, "Nessun link diretto, provo atob...")
+            // atob
+            StreamITALogger.log(TAG, "Nessun link diretto, provo atob...")
             val atobUrl = extractStreamFromAtob(html, season, episode)
             if (atobUrl != null) {
-                Log.d(TAG, "URL da atob: $atobUrl")
+                StreamITALogger.log(TAG, "URL da atob: $atobUrl")
 
                 callback.invoke(
                     newExtractorLink(
@@ -149,9 +156,9 @@ class CinemaCityExtractor : ExtractorApi() {
                 return
             }
 
-            Log.e(TAG, "Nessun link trovato")
+            StreamITALogger.log(TAG, "Nessun link trovato")
         } catch (e: Exception) {
-            Log.e(TAG, "Errore CinemaCity: ${e.message}")
+            StreamITALogger.log(TAG, "Errore CinemaCity: ${e.message}")
         }
     }
 
@@ -204,20 +211,34 @@ class CinemaCityExtractor : ExtractorApi() {
 
     private fun buildDownloadUrl(fileVal: String): String? {
         val baseEnd = fileVal.indexOf("/public_files/")
-        if (baseEnd == -1) return null
+        if (baseEnd == -1) {
+            StreamITALogger.log(TAG, "buildDownloadUrl: /public_files/ non trovato in $fileVal")
+            return null
+        }
         val cdnBase = fileVal.substring(0, baseEnd + "/public_files/".length)
         val rest = fileVal.substring(baseEnd + "/public_files/".length)
         val parts = rest.split(",")
 
         val video = parts.find { it.contains("1080p") && it.endsWith(".mp4") }
-            ?: parts.find { it.endsWith(".mp4") } ?: return null
+            ?: parts.find { it.endsWith(".mp4") }
+        if (video == null) {
+            StreamITALogger.log(TAG, "buildDownloadUrl: nessun video mp4 trovato in parts=$parts")
+            return null
+        }
+        StreamITALogger.log(TAG, "buildDownloadUrl: video=$video")
+
         val itaAudio = parts.find { Regex("""italian|italiano""", RegexOption.IGNORE_CASE).containsMatchIn(it) && it.endsWith(".m4a") }
-            ?: return null
+        if (itaAudio != null) {
+            StreamITALogger.log(TAG, "buildDownloadUrl: traccia italiana=$itaAudio")
+        } else {
+            StreamITALogger.log(TAG, "buildDownloadUrl: nessuna traccia italiana, procedo comunque")
+        }
 
         val hasM3u8 = parts.any { it.contains(".m3u8") }
         val suffix = if (hasM3u8) "" else ".urlset/master.m3u8"
-
-        return cdnBase + rest + suffix
+        val result = cdnBase + rest + suffix
+        StreamITALogger.log(TAG, "buildDownloadUrl: risultato=$result")
+        return result
     }
 
     private fun resolveUrl(base: String, relative: String): String {

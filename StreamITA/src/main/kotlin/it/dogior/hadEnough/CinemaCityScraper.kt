@@ -19,6 +19,7 @@ object CinemaCityScraper {
     private const val SITEMAP_URL = "$BASE_URL/news_pages.xml"
     private const val TMDB_URL = "https://api.themoviedb.org/3"
     private const val WORKER_BASE = "https://cm.leanhuo61206.workers.dev"
+    private const val CONTENT_WORKER_BASE = "https://cm.realbestia.com"
     private const val SITEMAP_CACHE_MS = 60 * 60 * 1000L
     private const val TMDB_CACHE_KEY_PREFIX = "CINEMACITY:TMDB:"
 
@@ -51,18 +52,24 @@ object CinemaCityScraper {
 
     private var sitemapCache: SitemapCache? = null
 
-    private suspend fun fetchViaWorker(url: String): String? {
+    private suspend fun fetchViaWorker(url: String, workerBase: String = CONTENT_WORKER_BASE): String? {
         val path = try {
             val u = java.net.URL(url)
             u.path + if (u.query != null) "?${u.query}" else ""
         } catch (_: Exception) { url }
-        val workerUrl = "${WORKER_BASE}${path}"
-        StreamITALogger.log(TAG, "Worker → $workerUrl")
+        val workerUrl = "${workerBase}${path}"
+        StreamITALogger.log(TAG, "fetchViaWorker → $workerUrl (base=$workerBase, url=$url)")
         return try {
+            val start = System.currentTimeMillis()
             val text = app.get(workerUrl, headers = headers).text
-            if (text.length < 10) null else text
+            val elapsed = System.currentTimeMillis() - start
+            StreamITALogger.log(TAG, "fetchViaWorker OK (${text.length} bytes, ${elapsed}ms) per $workerUrl")
+            if (text.length < 10) {
+                StreamITALogger.log(TAG, "fetchViaWorker: risposta troppo corta (${text.length} bytes)")
+                null
+            } else text
         } catch (e: Exception) {
-            StreamITALogger.log(TAG, "Worker fallito: ${e.message}")
+            StreamITALogger.log(TAG, "fetchViaWorker fallito per $workerUrl: ${e.message}")
             null
         }
     }
@@ -221,7 +228,7 @@ object CinemaCityScraper {
         }
 
         StreamITALogger.log(TAG, "Fallback sitemap full fetch...")
-        val xml = fetchViaWorker(SITEMAP_URL) ?: return null
+        val xml = fetchViaWorker(SITEMAP_URL, workerBase = WORKER_BASE) ?: return null
         if (!isBlockedResponse(xml)) {
             val entries = parseSitemapEntries(xml)
             if (entries.isNotEmpty()) {
@@ -478,20 +485,34 @@ object CinemaCityScraper {
 
     private fun buildDownloadUrl(fileVal: String): String? {
         val baseEnd = fileVal.indexOf("/public_files/")
-        if (baseEnd == -1) return null
+        if (baseEnd == -1) {
+            StreamITALogger.log(TAG, "buildDownloadUrl: /public_files/ non trovato in $fileVal")
+            return null
+        }
         val cdnBase = fileVal.substring(0, baseEnd + "/public_files/".length)
         val rest = fileVal.substring(baseEnd + "/public_files/".length)
         val parts = rest.split(",")
 
         val video = parts.find { it.contains("1080p") && it.endsWith(".mp4") }
-            ?: parts.find { it.endsWith(".mp4") } ?: return null
+            ?: parts.find { it.endsWith(".mp4") }
+        if (video == null) {
+            StreamITALogger.log(TAG, "buildDownloadUrl: nessun video mp4 trovato in parts=$parts")
+            return null
+        }
+        StreamITALogger.log(TAG, "buildDownloadUrl: video selezionato=$video")
+
         val itaAudio = parts.find { Regex("""italian|italiano""", RegexOption.IGNORE_CASE).containsMatchIn(it) && it.endsWith(".m4a") }
-            ?: return null
+        if (itaAudio != null) {
+            StreamITALogger.log(TAG, "buildDownloadUrl: traccia italiana trovata=$itaAudio")
+        } else {
+            StreamITALogger.log(TAG, "buildDownloadUrl: nessuna traccia italiana, procedo comunque")
+        }
 
         val hasM3u8 = parts.any { it.contains(".m3u8") }
         val suffix = if (hasM3u8) "" else ".urlset/master.m3u8"
-
-        return cdnBase + rest + suffix
+        val result = cdnBase + rest + suffix
+        StreamITALogger.log(TAG, "buildDownloadUrl: risultato=$result (hasM3u8=$hasM3u8)")
+        return result
     }
 
     private fun resolveUrl(base: String, relative: String): String {
