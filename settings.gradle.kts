@@ -12,6 +12,7 @@ include(
 //    "Arte",
 //    "CalcioStreaming",
 //    "CB01",
+    "Cinemacity",
 //    "CorsaroNero",
 //    "DaddyLive",
 //    "GuardaSerie",
