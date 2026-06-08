@@ -1,6 +1,13 @@
 package it.dogior.hadEnough
 
+import android.app.Activity
+import android.app.AlertDialog
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.util.Log
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
@@ -25,9 +32,11 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import it.dogior.hadEnough.extractors.MaxStreamExtractor
 import it.dogior.hadEnough.extractors.StreamTapeExtractor
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.SocketTimeoutException
+import kotlin.coroutines.resume
 
 class OnlineSerieTV : MainAPI() {
     override var mainUrl = "https://lingering-truth-455c.appbeta870.workers.dev"
@@ -275,22 +284,120 @@ class OnlineSerieTV : MainAPI() {
         return true
     }
 
+    private fun getActivity(): Activity? {
+        return try {
+            val clazz = Class.forName("com.lagradost.cloudstream3.CommonActivity")
+            val field = clazz.getDeclaredField("activity")
+            field.isAccessible = true
+            field.get(null) as? Activity
+        } catch (e: Exception) {
+            Log.e("UprotPopup", "Reflection fallita: ${e.message}")
+            null
+        }
+    }
+
+    private suspend fun showCaptchaDialog(base64Data: String): String? {
+        return suspendCancellableCoroutine { continuation ->
+            val activity = getActivity()
+            if (activity == null) {
+                Log.e("UprotPopup", "Activity non disponibile")
+                if (continuation.isActive) continuation.resume(null)
+                return@suspendCancellableCoroutine
+            }
+
+            activity.runOnUiThread {
+                try {
+                    val imageBytes = Base64.decode(base64Data, Base64.DEFAULT)
+                    val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+
+                    val layout = LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(50, 40, 50, 40)
+                    }
+
+                    val imageView = ImageView(activity).apply {
+                        setImageBitmap(bitmap)
+                        adjustViewBounds = true
+                    }
+
+                    val inputEditText = EditText(activity).apply {
+                        hint = "Inserisci i numeri che vedi"
+                        inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                    }
+
+                    layout.addView(imageView)
+                    layout.addView(inputEditText)
+
+                    val dialog = AlertDialog.Builder(activity)
+                        .setTitle("Verifica Richiesta")
+                        .setMessage("Risolvi il CAPTCHA per avviare il video")
+                        .setView(layout)
+                        .setCancelable(false)
+                        .setPositiveButton("Sblocca") { _, _ ->
+                            val codice = inputEditText.text.toString().trim()
+                            if (continuation.isActive) continuation.resume(codice)
+                        }
+                        .setNegativeButton("Annulla") { _, _ ->
+                            if (continuation.isActive) continuation.resume(null)
+                        }
+                        .create()
+
+                    dialog.show()
+                } catch (e: Exception) {
+                    Log.e("UprotPopup", "Errore dialog: ${e.message}")
+                    if (continuation.isActive) continuation.resume(null)
+                }
+            }
+        }
+    }
+
     private suspend fun bypassUprot(link: String): String? {
         val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
-
-        // Generate headers (replace with your own method to generate fake headers)
         val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
         )
 
-        // Make the HTTP request
         val response = app.get(updatedLink, headers = headers, timeout = 10_000)
-
-        // Parse the HTML using Jsoup
         val document = response.document
-        Log.d("Uprot", document.toString())//.select("a").toString())
-        val maxstreamUrl = document.selectFirst("a")?.attr("href")
+        Log.d("Uprot", document.toString())
 
+        // Check if there's already a direct link (no captcha)
+        val tokenElement = document.selectFirst("input[name=token]")
+        if (tokenElement == null) {
+            Log.d("Uprot", "Nessun captcha, cerco link diretto")
+            return document.selectFirst("a[href]")?.attr("href")
+        }
+        Log.d("Uprot", "Captcha rilevato, estraggo immagine e token")
+
+        // Extract token and captcha image
+        val token = tokenElement.attr("value")
+        val imgSrc = document.selectFirst("img[alt=CAPTCHA]")?.attr("src") ?: ""
+        if (imgSrc.isEmpty() || token.isEmpty()) {
+            Log.e("Uprot", "Token o immagine non trovati")
+            return null
+        }
+
+        val base64Data = imgSrc.substringAfter("base64,")
+
+        // Show dialog to user
+        val captchaRisolto = showCaptchaDialog(base64Data)
+        if (captchaRisolto.isNullOrEmpty()) {
+            Log.d("Uprot", "Captcha annullato dall'utente")
+            return null
+        }
+        Log.d("Uprot", "Captcha ricevuto: $captchaRisolto")
+
+        // Submit form
+        val postResponse = app.post(
+            updatedLink,
+            headers = headers,
+            data = mapOf("token" to token, "capt" to captchaRisolto),
+            timeout = 10_000
+        )
+
+        val finalDoc = postResponse.document
+        val maxstreamUrl = finalDoc.selectFirst("a[href]")?.attr("href")
+        Log.d("Uprot", "Link finale: $maxstreamUrl")
         return maxstreamUrl
     }
 }
