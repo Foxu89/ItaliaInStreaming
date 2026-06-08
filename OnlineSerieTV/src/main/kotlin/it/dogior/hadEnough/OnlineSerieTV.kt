@@ -287,9 +287,8 @@ class OnlineSerieTV : MainAPI() {
     private fun getActivity(): Activity? {
         return try {
             val clazz = Class.forName("com.lagradost.cloudstream3.CommonActivity")
-            val field = clazz.getDeclaredField("activity")
-            field.isAccessible = true
-            field.get(null) as? Activity
+            val instance = clazz.getDeclaredField("INSTANCE").apply { isAccessible = true }.get(null)
+            clazz.getDeclaredMethod("getActivity").invoke(instance) as? Activity
         } catch (e: Exception) {
             Log.e("UprotPopup", "Reflection fallita: ${e.message}")
             null
@@ -395,9 +394,20 @@ class OnlineSerieTV : MainAPI() {
             timeout = 10_000
         )
 
+        // Get final URL after redirects
+        val finalUrl = postResponse.url
+        Log.d("Uprot", "URL dopo POST: $finalUrl")
+
+        // If redirected to a video host, return it
+        if (finalUrl != null && !finalUrl.contains("uprot.net")) {
+            Log.d("Uprot", "Redirect a: $finalUrl")
+            return finalUrl
+        }
+
+        // Fallback: parse HTML for link (captcha might still be wrong)
         val finalDoc = postResponse.document
-        val maxstreamUrl = finalDoc.selectFirst("a[href]")?.attr("href")
-        Log.d("Uprot", "Link finale: $maxstreamUrl")
-        return maxstreamUrl
+        val extractedLink = finalDoc.selectFirst("a[href*='maxstream'], a[href*='streamtape'], a[href*='stream']")?.attr("href")
+        Log.d("Uprot", "Link estratto: $extractedLink")
+        return extractedLink
     }
 }
