@@ -270,14 +270,21 @@ class OnlineSerieTV : MainAPI() {
         links.forEach {
             if (it.contains("uprot")) {
                 val url = bypassUprot(it)
-                Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
+                Log.d("OnlineSerieTV:Links", "🚀 Bypassed Url: $url")
                 if (url != null) {
+                    Log.d("OnlineSerieTV:Links", "🔍 url contiene streamtape? ${url.contains("streamtape")}")
+                    Log.d("OnlineSerieTV:Links", "🔍 url contiene maxwe241? ${url.contains("maxwe241")}")
                     if (url.contains("streamtape")) {
+                        Log.d("OnlineSerieTV:Links", "🎬 Uso StreamTapeExtractor")
                         StreamTapeExtractor().getUrl(url, null, subtitleCallback, callback)
                     } else {
+                        Log.d("OnlineSerieTV:Links", "🎬 Uso MaxStreamExtractor")
                         MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
                     }
+                    Log.d("OnlineSerieTV:Links", "🔁 Chiamo loadExtractor su: $url")
                     loadExtractor(url, subtitleCallback, callback)
+                } else {
+                    Log.e("OnlineSerieTV:Links", "❌ bypassUprot ha ritornato null!")
                 }
             }
         }
