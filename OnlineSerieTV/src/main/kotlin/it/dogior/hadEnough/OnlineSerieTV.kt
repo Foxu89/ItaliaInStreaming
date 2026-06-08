@@ -29,7 +29,7 @@ import org.jsoup.nodes.Element
 import java.net.SocketTimeoutException
 
 class OnlineSerieTV : MainAPI() {
-    override var mainUrl = "https://onlineserietv.com"
+    override var mainUrl = "https://lingering-truth-455c.appbeta870.workers.dev"
     override var name = "OnlineSerieTV"
     override val supportedTypes = setOf(
         TvType.Movie, TvType.TvSeries,
