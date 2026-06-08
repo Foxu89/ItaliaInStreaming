@@ -5,7 +5,7 @@ import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
-import com.lagradost.cloudstream3.LoadResponse.Companion.addRating
+import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
@@ -18,6 +18,7 @@ import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
+import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -206,7 +207,7 @@ class OnlineSerieTV : MainAPI() {
             val plot = response.select(".post > p:nth-child(16)").text().trim()
             newMovieLoadResponse(title, url, TvType.Movie, streamUrl) {
                 addPoster(poster)
-                addRating(rating)
+                addScore(rating)
                 this.duration = duration.toIntOrNull()
                 this.year = year.toIntOrNull()
                 this.tags = genres.split(",")
@@ -217,7 +218,7 @@ class OnlineSerieTV : MainAPI() {
             val plot = response.select(".post > p:nth-child(17)").text().trim()
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 addPoster(poster)
-                addRating(rating)
+                addScore(rating)
                 this.year = year.toIntOrNull()
                 this.tags = genres.split(",")
                 this.plot = plot
@@ -240,8 +241,7 @@ class OnlineSerieTV : MainAPI() {
             } else {
                 val title = it.select("td:nth-child(1)").text()
                 val links = it.select("a").map { a -> "\"${a.attr("href")}\"" }
-                Episode("$links").apply {
-//                    name = title
+                newEpisode("$links") {
                     this.season = season
                     this.episode = title.substringAfter("x").substringBefore(" ").toIntOrNull()
                 }

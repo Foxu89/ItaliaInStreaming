@@ -22,5 +22,5 @@ cloudstream {
     requiresResources = false
     language = "it"
 
-    iconUrl = "https://onlineserietv.com/wp-content/uploads/2023/01/cropped-tv-1.png"
+    iconUrl = "https://lingering-truth-455c.appbeta870.workers.dev/wp-content/uploads/2023/01/cropped-tv-1.png"
 }
