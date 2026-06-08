@@ -3,9 +3,11 @@ package it.dogior.hadEnough.extractors
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.M3u8Helper
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.getAndUnpack
@@ -20,6 +22,40 @@ class MaxStreamExtractor : ExtractorApi() {
         referer: String?,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
+    ) {
+        // Prima: tenta con WebViewResolver (bypassa Cloudflare)
+        try {
+            val resolver = WebViewResolver(
+                interceptUrl = Regex("""\.m3u8"""),
+                useOkhttp = false,
+                timeout = 25_000L
+            )
+            val response = app.get(url, referer = referer ?: url, interceptor = resolver)
+            val videoUrl = response.url
+
+            if (videoUrl.isNotEmpty() && videoUrl.contains(".m3u8")) {
+                Log.d("MaxStream", "M3U8 intercettato: $videoUrl")
+                M3u8Helper.generateM3u8(
+                    name,
+                    videoUrl,
+                    url,
+                    headers = mapOf("referer" to (referer ?: url))
+                ).forEach(callback)
+                return
+            }
+        } catch (e: Exception) {
+            Log.d("MaxStream", "WebViewResolver fallito: ${e.message}")
+        }
+
+        // Fallback: JS unpacking diretto (se Cloudflare non c'e')
+        Log.d("MaxStream", "Tentativo fallback JS unpacking...")
+        fallbackJsUnpack(url, referer, callback)
+    }
+
+    private suspend fun fallbackJsUnpack(
+        url: String,
+        referer: String?,
+        callback: (ExtractorLink) -> Unit
     ) {
         val headers = mapOf(
             "Accept" to "*/*",
