@@ -34,7 +34,7 @@ class MaxStreamExtractor : ExtractorApi() {
         Log.d("MaxStream", "🌐 iframeUrl: $iframeUrl")
 
         val response = app.get(iframeUrl)
-        Log.d("MaxStream", "📡 response.status: ${response.status}  url: ${response.url}")
+        Log.d("MaxStream", "📡 response.code: ${response.code}  url: ${response.url}")
         val html = response.body.string()
         Log.d("MaxStream", "📄 HTML ricevuto, lunghezza: ${html.length}")
         Log.d("MaxStream", "📄 HTML primi 500:\n${html.take(500)}")
