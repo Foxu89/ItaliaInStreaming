@@ -1,9 +1,6 @@
 // use an integer for version numbers
-version = 4
+version = 3
 
-dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-}
 
 cloudstream {
     // All of these properties are optional, you can safely remove them
@@ -18,12 +15,12 @@ cloudstream {
     * 2: Slow
     * 3: Beta only
     * */
-    status = 1
+    status = 0
 
     tvTypes = listOf("Movie", "TvSeries", "Cartoon", "Anime", "Documentary")
 
     requiresResources = false
     language = "it"
 
-    iconUrl = "https://onlineserietv.online/wp-content/uploads/2023/01/cropped-tv-1.png"
+    iconUrl = "https://onlineserietv.com/wp-content/uploads/2023/01/cropped-tv-1.png"
 }
