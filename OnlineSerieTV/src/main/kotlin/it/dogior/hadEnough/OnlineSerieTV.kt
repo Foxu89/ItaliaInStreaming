@@ -270,21 +270,14 @@ class OnlineSerieTV : MainAPI() {
         links.forEach {
             if (it.contains("uprot")) {
                 val url = bypassUprot(it)
-                Log.d("OnlineSerieTV:Links", "🚀 Bypassed Url: $url")
+                Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
                 if (url != null) {
-                    Log.d("OnlineSerieTV:Links", "🔍 url contiene streamtape? ${url.contains("streamtape")}")
-                    Log.d("OnlineSerieTV:Links", "🔍 url contiene maxwe241? ${url.contains("maxwe241")}")
                     if (url.contains("streamtape")) {
-                        Log.d("OnlineSerieTV:Links", "🎬 Uso StreamTapeExtractor")
                         StreamTapeExtractor().getUrl(url, null, subtitleCallback, callback)
                     } else {
-                        Log.d("OnlineSerieTV:Links", "🎬 Uso MaxStreamExtractor")
                         MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
                     }
-                    Log.d("OnlineSerieTV:Links", "🔁 Chiamo loadExtractor su: $url")
                     loadExtractor(url, subtitleCallback, callback)
-                } else {
-                    Log.e("OnlineSerieTV:Links", "❌ bypassUprot ha ritornato null!")
                 }
             }
         }
@@ -371,7 +364,9 @@ class OnlineSerieTV : MainAPI() {
         val tokenElement = document.selectFirst("input[name=token]")
         if (tokenElement == null) {
             Log.d("Uprot", "Nessun captcha, cerco link diretto")
-            return document.selectFirst("a[href]")?.attr("href")
+            val link = extractUprotLink(document)
+            Log.d("Uprot", "Link estratto: $link")
+            return link
         }
         Log.d("Uprot", "Captcha rilevato, estraggo immagine e token")
 
@@ -411,10 +406,21 @@ class OnlineSerieTV : MainAPI() {
             return finalUrl
         }
 
-        // Fallback: parse HTML for link (captcha might still be wrong)
+        // Pagina intermedia con pulsante: estrai link prioritario
         val finalDoc = postResponse.document
-        val extractedLink = finalDoc.selectFirst("a[href*='maxstream'], a[href*='streamtape'], a[href*='stream']")?.attr("href")
-        Log.d("Uprot", "Link estratto: $extractedLink")
+        val extractedLink = extractUprotLink(finalDoc)
+        Log.d("Uprot", "🚀 Link finale estratto: $extractedLink")
         return extractedLink
+    }
+
+    private fun extractUprotLink(doc: org.jsoup.nodes.Document): String? {
+        // 1. Pulsante #buttok (nascosto ma è quello giusto)
+        val buttok = doc.selectFirst("#buttok")?.parent()?.attr("href")
+        if (buttok != null) return buttok
+        // 2. Link uprots
+        val uprots = doc.selectFirst("a[href*='uprots']")?.attr("href")
+        if (uprots != null) return uprots
+        // 3. Fallback generico maxstream/streamtape
+        return doc.selectFirst("a[href*='maxstream'], a[href*='streamtape'], a[href*='stream']")?.attr("href")
     }
 }

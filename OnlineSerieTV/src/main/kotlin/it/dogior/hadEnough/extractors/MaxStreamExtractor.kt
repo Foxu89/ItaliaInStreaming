@@ -6,11 +6,7 @@ import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.M3u8Helper
-import com.lagradost.cloudstream3.utils.newExtractorLink
-import com.lagradost.cloudstream3.utils.Qualities
-import com.lagradost.cloudstream3.utils.getAndUnpack
 
 class MaxStreamExtractor : ExtractorApi() {
     override var name = "MaxStream"
@@ -23,67 +19,55 @@ class MaxStreamExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ) {
-        // Prima: tenta con WebViewResolver (bypassa Cloudflare)
-        try {
-            val resolver = WebViewResolver(
-                interceptUrl = Regex("""\.m3u8"""),
-                useOkhttp = false,
-                timeout = 25_000L
-            )
-            val response = app.get(url, referer = referer ?: url, interceptor = resolver)
-            val videoUrl = response.url
+        Log.d("MaxStream", "🔷 getUrl() ricevuto: $url")
 
-            if (videoUrl.isNotEmpty() && videoUrl.contains(".m3u8")) {
-                Log.d("MaxStream", "M3U8 intercettato: $videoUrl")
-                M3u8Helper.generateM3u8(
-                    name,
-                    videoUrl,
-                    url,
-                    headers = mapOf("referer" to (referer ?: url))
-                ).forEach(callback)
+        // Step 1: se URL è uprots/, carica WebView per bypassare Cloudflare sul redirect
+        val finalUrl = if (url.contains("uprots/")) {
+            Log.d("MaxStream", "🌐 URL uprots, avvio WebViewResolver...")
+            val resolver = WebViewResolver(
+                interceptUrl = Regex("""/watch_free/"""),
+                useOkhttp = false,
+                timeout = 20_000L
+            )
+            val (interceptedRequest, _) = resolver.resolveUsingWebView(url)
+            val intercepted = interceptedRequest?.url?.toString()
+            Log.d("MaxStream", "📡 Intercettato: $intercepted")
+            if (intercepted == null) {
+                Log.e("MaxStream", "❌ Nessun watch_free intercettato")
                 return
             }
-        } catch (e: Exception) {
-            Log.d("MaxStream", "WebViewResolver fallito: ${e.message}")
+            intercepted
+        } else {
+            url
         }
 
-        // Fallback: JS unpacking diretto (se Cloudflare non c'e')
-        Log.d("MaxStream", "Tentativo fallback JS unpacking...")
-        fallbackJsUnpack(url, referer, callback)
-    }
+        // Step 2: estrai videoId da /watch_free/xxx/{VIDEOID}/hash
+        val videoId = Regex("""watch_free/[^/]+/([^/]+)""").find(finalUrl)?.groupValues?.get(1)
+        if (videoId == null) {
+            Log.e("MaxStream", "❌ VideoId non estratto da: $finalUrl")
+            return
+        }
+        Log.d("MaxStream", "✅ videoId: $videoId")
 
-    private suspend fun fallbackJsUnpack(
-        url: String,
-        referer: String?,
-        callback: (ExtractorLink) -> Unit
-    ) {
-        val headers = mapOf(
-            "Accept" to "*/*",
-            "Connection" to "keep-alive",
-            "User-Agent" to "Mozilla/5.0 (Windows NT 6.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Safari/537.36",
-            "Accept-Language" to "en-US;q=0.5,en;q=0.3",
-            "Cache-Control" to "max-age=0",
-            "Upgrade-Insecure-Requests" to "1"
-        )
-        val response = app.get(url, headers = headers, timeout = 10_000)
-        val responseBody = response.body.string()
+        // Step 3: fetch iframe e regex M3U8
+        val iframeUrl = "https://maxstream.video/emhuih/$videoId"
+        Log.d("MaxStream", "🌐 Fetch iframe: $iframeUrl")
 
-        val script =
-            "eval(function(p,a,c,k,e,d)" + responseBody.substringAfter("<script type='text/javascript'>eval(function(p,a,c,k,e,d)")
-                .substringBefore(")))") + ")))"
-        val unpackedScript = getAndUnpack(script)
-        val src = unpackedScript.substringAfter("src:\"").substringBefore("\",")
-        Log.d("MaxStream", "Script: $src")
-        callback.invoke(
-            newExtractorLink(
-                source = name,
-                name = name,
-                url = src,
-                type = ExtractorLinkType.M3U8
-            ){
-                this.referer = referer ?: ""
-                this.quality = Qualities.Unknown.value
-            }
-        )
+        val html = app.get(iframeUrl).body.string()
+        val m3u8Url = Regex("""src:\s*"([^"]+master\.m3u8[^"]*)""").find(html)?.groupValues?.get(1)
+
+        if (m3u8Url == null) {
+            Log.e("MaxStream", "❌ M3U8 non trovato nell'HTML")
+            return
+        }
+
+        Log.d("MaxStream", "✅✅ M3U8: $m3u8Url")
+
+        M3u8Helper.generateM3u8(
+            name,
+            m3u8Url,
+            iframeUrl,
+            headers = mapOf("referer" to "https://maxstream.video/")
+        ).forEach(callback)
     }
 }
