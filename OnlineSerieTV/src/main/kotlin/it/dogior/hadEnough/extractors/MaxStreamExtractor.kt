@@ -28,29 +28,21 @@ class MaxStreamExtractor : ExtractorApi() {
         Log.d("MaxStream", "🟦 getUrl() INIZIO")
         Log.d("MaxStream", "🟦 URL ricevuto: $url")
 
-        // Estrai videoId dall'URL (watch_free/xxx/{VIDEOID}/hash)
-        val videoId = Regex("""watch_free/[^/]+/([^/]+)""").find(url)?.groupValues?.get(1)
-        if (videoId == null) {
-            Log.e("MaxStream", "❌ videoId non estratto da: $url")
-            return
-        }
-        Log.d("MaxStream", "✅ videoId: $videoId")
-
-        val iframeUrl = "https://maxstream.video/emhuih/$videoId"
-        Log.d("MaxStream", "🟡 Fetch iframe con CloudflareKiller: $iframeUrl")
-
         try {
             val request = okhttp3.Request.Builder()
-                .url(iframeUrl)
+                .url(url)
                 .header("Referer", url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                 .build()
 
+            Log.d("MaxStream", "🟡 Fetch URL con CloudflareKiller...")
             val response = cfClient.newCall(request).execute()
+            val finalUrl = response.request.url.toString()
             val html = response.body?.string() ?: ""
             response.close()
 
+            Log.d("MaxStream", "🟡 URL finale: $finalUrl")
             Log.d("MaxStream", "🟡 HTML ricevuto, lunghezza: ${html.length}")
 
             val m3u8Match = Regex("""src:\s*"([^"]+master\.m3u8[^"]*)""").find(html)
@@ -65,7 +57,7 @@ class MaxStreamExtractor : ExtractorApi() {
 
             Log.d("MaxStream", "✅✅✅ M3U8: $m3u8Url")
             M3u8Helper.generateM3u8(
-                name, m3u8Url, iframeUrl,
+                name, m3u8Url, finalUrl,
                 headers = mapOf("referer" to "https://maxstream.video/")
             ).forEach(callback)
             Log.d("MaxStream", "🎉 Done!")
