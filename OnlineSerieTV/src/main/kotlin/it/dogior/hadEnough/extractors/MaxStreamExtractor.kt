@@ -3,7 +3,7 @@ package it.dogior.hadEnough.extractors
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.network.WebViewResolver
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.M3u8Helper
@@ -12,6 +12,12 @@ class MaxStreamExtractor : ExtractorApi() {
     override var name = "MaxStream"
     override var mainUrl = "https://maxstream.video/"
     override val requiresReferer = false
+
+    private val cfClient by lazy {
+        app.baseClient.newBuilder()
+            .addInterceptor(CloudflareKiller())
+            .build()
+    }
 
     override suspend fun getUrl(
         url: String,
@@ -22,65 +28,49 @@ class MaxStreamExtractor : ExtractorApi() {
         Log.d("MaxStream", "🟦 getUrl() INIZIO")
         Log.d("MaxStream", "🟦 URL ricevuto: $url")
 
-        // Step 1: WebViewResolver per intercettare /watch_free/ su maxwe241.site
-        Log.d("MaxStream", "🟡 Step 1: WebViewResolver(/watch_free/)...")
-        val resolver1 = WebViewResolver(
-            interceptUrl = Regex("""/watch_free/"""),
-            useOkhttp = false,
-            timeout = 30_000L
-        )
-        val response1 = app.get(url, referer = referer ?: url, interceptor = resolver1)
-        val maxweUrl = response1.url
-        Log.d("MaxStream", "🟡 Step 1 - URL intercettato: $maxweUrl")
-
-        if (maxweUrl.isEmpty() || !maxweUrl.contains("/watch_free/")) {
-            Log.e("MaxStream", "❌ Step 1 fallito: /watch_free/ non trovato in $maxweUrl")
-            return
-        }
-
-        // Estrai videoId da /watch_free/xxx/{VIDEOID}/hash
-        val videoIdMatch = Regex("""watch_free/[^/]+/([^/]+)""").find(maxweUrl)
-        val videoId = videoIdMatch?.groupValues?.get(1)
+        // Estrai videoId dall'URL (watch_free/xxx/{VIDEOID}/hash)
+        val videoId = Regex("""watch_free/[^/]+/([^/]+)""").find(url)?.groupValues?.get(1)
         if (videoId == null) {
-            Log.e("MaxStream", "❌ videoId non estratto da: $maxweUrl")
+            Log.e("MaxStream", "❌ videoId non estratto da: $url")
             return
         }
-        Log.d("MaxStream", "✅ Step 1 - videoId: $videoId")
+        Log.d("MaxStream", "✅ videoId: $videoId")
 
-        // Step 2: WebViewResolver per caricare maxstream.video/emhuih/{videoId}
-        // e intercettare la pagina HTML (non l'M3U8)
         val iframeUrl = "https://maxstream.video/emhuih/$videoId"
-        Log.d("MaxStream", "🟡 Step 2: WebViewResolver(/emhuih/) su $iframeUrl")
+        Log.d("MaxStream", "🟡 Fetch iframe con CloudflareKiller: $iframeUrl")
 
-        val resolver2 = WebViewResolver(
-            interceptUrl = Regex("""/emhuih/"""),
-            useOkhttp = false,
-            timeout = 30_000L
-        )
-        val response2 = app.get(iframeUrl, interceptor = resolver2)
-        val responseUrl = response2.url
-        Log.d("MaxStream", "🟡 Step 2 - URL response: $responseUrl")
+        try {
+            val request = okhttp3.Request.Builder()
+                .url(iframeUrl)
+                .header("Referer", url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .build()
 
-        val html = response2.body.string()
-        Log.d("MaxStream", "🟡 Step 2 - HTML ricevuto, lunghezza: ${html.length}")
+            val response = cfClient.newCall(request).execute()
+            val html = response.body?.string() ?: ""
+            response.close()
 
-        // Cerca master.m3u8 nell'HTML
-        val m3u8Match = Regex("""src:\s*"([^"]+master\.m3u8[^"]*)""").find(html)
-        val m3u8Url = m3u8Match?.groupValues?.get(1)
+            Log.d("MaxStream", "🟡 HTML ricevuto, lunghezza: ${html.length}")
 
-        if (m3u8Url == null) {
-            Log.e("MaxStream", "❌ M3U8 non trovato nell'HTML!")
-            Log.d("MaxStream", "🔍 HTML primi 1000:\n${html.take(1000)}")
-            Log.d("MaxStream", "🔍 master.m3u8 presente? ${html.contains("master.m3u8")}")
-            Log.d("MaxStream", "🔍 sources presente? ${html.contains("sources")}")
-            return
+            val m3u8Match = Regex("""src:\s*"([^"]+master\.m3u8[^"]*)""").find(html)
+            val m3u8Url = m3u8Match?.groupValues?.get(1)
+
+            if (m3u8Url == null) {
+                Log.e("MaxStream", "❌ M3U8 non trovato nell'HTML!")
+                Log.d("MaxStream", "🔍 master.m3u8 presente? ${html.contains("master.m3u8")}")
+                Log.d("MaxStream", "🔍 sources presente? ${html.contains("sources")}")
+                return
+            }
+
+            Log.d("MaxStream", "✅✅✅ M3U8: $m3u8Url")
+            M3u8Helper.generateM3u8(
+                name, m3u8Url, iframeUrl,
+                headers = mapOf("referer" to "https://maxstream.video/")
+            ).forEach(callback)
+            Log.d("MaxStream", "🎉 Done!")
+        } catch (e: Exception) {
+            Log.e("MaxStream", "❌ Errore: ${e.message}")
         }
-
-        Log.d("MaxStream", "✅✅✅ M3U8 TROVATO: $m3u8Url")
-        M3u8Helper.generateM3u8(
-            name, m3u8Url, iframeUrl,
-            headers = mapOf("referer" to "https://maxstream.video/")
-        ).forEach(callback)
-        Log.d("MaxStream", "🎉 Done!")
     }
 }
