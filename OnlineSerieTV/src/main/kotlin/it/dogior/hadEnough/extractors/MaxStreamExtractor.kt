@@ -36,11 +36,19 @@ class MaxStreamExtractor : ExtractorApi() {
                 if (videoId != null) {
                     Log.d("MaxStream", "videoId: $videoId")
                     val iframeUrl = "https://maxstream.video/emhuih/$videoId"
-                    val html = app.get(iframeUrl).body.string()
-                    val m3u8Url = Regex("""src:\s*"([^"]+master\.m3u8[^"]*)""")
-                        .find(html)?.groupValues?.get(1)
-                    if (m3u8Url != null) {
-                        Log.d("MaxStream", "M3U8 vero: $m3u8Url")
+
+                    // Secondo WebViewResolver: bypassa Cloudflare su maxstream.video,
+                    // intercetta la richiesta M3U8 fatta da videojs
+                    val resolver2 = WebViewResolver(
+                        interceptUrl = Regex("""\.m3u8"""),
+                        useOkhttp = false,
+                        timeout = 25_000L
+                    )
+                    val response2 = app.get(iframeUrl, interceptor = resolver2)
+                    val m3u8Url = response2.url
+
+                    if (m3u8Url.isNotEmpty() && m3u8Url.contains(".m3u8")) {
+                        Log.d("MaxStream", "M3U8 intercettato: $m3u8Url")
                         M3u8Helper.generateM3u8(
                             name, m3u8Url, iframeUrl,
                             headers = mapOf("referer" to "https://maxstream.video/")
