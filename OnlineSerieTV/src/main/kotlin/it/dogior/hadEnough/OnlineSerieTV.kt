@@ -269,23 +269,15 @@ class OnlineSerieTV : MainAPI() {
         val links = parseJson<List<String>>(data)
         links.forEach {
             if (it.contains("uprot")) {
-                Log.d("OnlineSerieTV:Links", "🔹🔹🔹 Processo link uprot: $it")
                 val url = bypassUprot(it)
-                Log.d("OnlineSerieTV:Links", "🔹 bypassUprot ritornato: $url")
+                Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
                 if (url != null) {
-                    Log.d("OnlineSerieTV:Links", "🔹 streamtape? ${url.contains("streamtape")}  watch_free? ${url.contains("watch_free")}  uprots? ${url.contains("uprots/")}")
                     if (url.contains("streamtape")) {
-                        Log.d("OnlineSerieTV:Links", "🎬 Chiamo StreamTapeExtractor")
                         StreamTapeExtractor().getUrl(url, null, subtitleCallback, callback)
                     } else {
-                        Log.d("OnlineSerieTV:Links", "🎬 Chiamo MaxStreamExtractor")
                         MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
                     }
-                    Log.d("OnlineSerieTV:Links", "🔹 Chiamo loadExtractor su: $url")
                     loadExtractor(url, subtitleCallback, callback)
-                    Log.d("OnlineSerieTV:Links", "🔹 Finito per questo link")
-                } else {
-                    Log.e("OnlineSerieTV:Links", "❌ bypassUprot ha ritornato null!")
                 }
             }
         }
@@ -366,17 +358,13 @@ class OnlineSerieTV : MainAPI() {
 
         val response = app.get(updatedLink, headers = headers, timeout = 10_000)
         val document = response.document
-        Log.d("Uprot", "🟡 Pagina uprot caricata, url finale: ${response.url}")
-        Log.d("Uprot", "🟡 HTML uprot primi 1500:\n${document.toString().take(1500)}")
+        Log.d("Uprot", document.toString())
 
         // Check if there's already a direct link (no captcha)
         val tokenElement = document.selectFirst("input[name=token]")
-        Log.d("Uprot", "🔍 input[name=token] trovato? ${tokenElement != null}")
         if (tokenElement == null) {
             Log.d("Uprot", "Nessun captcha, cerco link diretto")
-            val link = extractUprotLink(document)
-            Log.d("Uprot", "Link estratto: $link")
-            return link
+            return document.selectFirst("a[href]")?.attr("href")
         }
         Log.d("Uprot", "Captcha rilevato, estraggo immagine e token")
 
@@ -408,56 +396,18 @@ class OnlineSerieTV : MainAPI() {
 
         // Get final URL after redirects
         val finalUrl = postResponse.url
-        Log.d("Uprot", "📡 URL dopo POST: $finalUrl")
-        Log.d("Uprot", "📡 finalUrl contains uprot? ${finalUrl?.contains("uprot.net")}")
+        Log.d("Uprot", "URL dopo POST: $finalUrl")
 
         // If redirected to a video host, return it
         if (finalUrl != null && !finalUrl.contains("uprot.net")) {
-            Log.d("Uprot", "✅ Redirect diretto a: $finalUrl")
-            Log.d("Uprot", "✅ Contiene watch_free? ${finalUrl.contains("watch_free")}")
-            Log.d("Uprot", "✅ Contiene uprots? ${finalUrl.contains("uprots")}")
+            Log.d("Uprot", "Redirect a: $finalUrl")
             return finalUrl
         }
 
-        // Pagina intermedia con pulsante: estrai link prioritario
+        // Fallback: parse HTML for link (captcha might still be wrong)
         val finalDoc = postResponse.document
-        Log.d("Uprot", "🟡 HTML POST response primi 2000:\n${finalDoc.toString().take(2000)}")
-        Log.d("Uprot", "🟡 POST response url: ${postResponse.url}")
-        val extractedLink = extractUprotLink(finalDoc)
-        Log.d("Uprot", "🚀 Link finale estratto: $extractedLink")
+        val extractedLink = finalDoc.selectFirst("a[href*='maxstream'], a[href*='streamtape'], a[href*='stream']")?.attr("href")
+        Log.d("Uprot", "Link estratto: $extractedLink")
         return extractedLink
-    }
-
-    private fun extractUprotLink(doc: org.jsoup.nodes.Document): String? {
-        Log.d("Uprot", "🔍 extractUprotLink() - HTML: ${doc.toString().take(2000)}")
-        // 1. Pulsante #buttok (nascosto ma è quello giusto)
-        val buttokEl = doc.selectFirst("#buttok")
-        Log.d("Uprot", "🔍 #buttok trovato? ${buttokEl != null}")
-        val buttokHref = buttokEl?.parent()?.attr("href")
-        Log.d("Uprot", "🔍 parent href: $buttokHref")
-        if (buttokHref != null && buttokHref.isNotEmpty()) {
-            Log.d("Uprot", "✅ Usato #buttok parent href: $buttokHref")
-            return buttokHref
-        }
-        // 2. Link uprots
-        val uprotsEl = doc.selectFirst("a[href*='uprots']")
-        Log.d("Uprot", "🔍 a[href*='uprots'] trovato? ${uprotsEl != null}  href: ${uprotsEl?.attr("href")}")
-        if (uprotsEl != null) {
-            val href = uprotsEl.attr("href")
-            if (href.isNotEmpty()) {
-                Log.d("Uprot", "✅ Usato a[href*='uprots']: $href")
-                return href
-            }
-        }
-        // 3. Fallback generico maxstream/streamtape
-        val fallbackEl = doc.selectFirst("a[href*='maxstream'], a[href*='streamtape'], a[href*='stream']")
-        Log.d("Uprot", "🔍 fallback trovato? ${fallbackEl != null}  href: ${fallbackEl?.attr("href")}")
-        val fallbackHref = fallbackEl?.attr("href")
-        if (fallbackHref != null && fallbackHref.isNotEmpty()) {
-            Log.d("Uprot", "✅ Usato fallback: $fallbackHref")
-        } else {
-            Log.e("Uprot", "❌ NESSUN link trovato nel documento!")
-        }
-        return fallbackHref
     }
 }
