@@ -371,12 +371,20 @@ class OnlineSerieTV : MainAPI() {
         // ---- GESTIONE FXF ----
         if (isFxf) {
             Log.d("Uprot", "🔷🔷 Gestione FXF")
-            val fxfCaptchaImg = document.selectFirst("img[alt=Captcha]")
-            val fxfCaptchaInput = document.selectFirst("input[name=captcha]")
+            var currentDoc = document
+            var tentativi = 0
+            val maxTentativi = 3
 
-            if (fxfCaptchaImg != null && fxfCaptchaInput != null) {
-                // Captcha presente
-                Log.d("Uprot", "🟠 Captcha FXF rilevato")
+            while (tentativi < maxTentativi) {
+                tentativi++
+                Log.d("Uprot", "🟠 Tentativo $tentativi/$maxTentativi")
+
+                val fxfCaptchaImg = currentDoc.selectFirst("img[alt=Captcha]")
+                if (fxfCaptchaImg == null) {
+                    Log.d("Uprot", "🟢 Nessun captcha, passo all'estrazione link")
+                    break
+                }
+
                 val imgSrc = fxfCaptchaImg.attr("src")
                 val base64Data = imgSrc.substringAfter("base64,")
                 val captchaRisolto = showCaptchaDialog(base64Data)
@@ -386,13 +394,12 @@ class OnlineSerieTV : MainAPI() {
                 }
                 Log.d("Uprot", "✅ Captcha ricevuto: $captchaRisolto")
 
-                // POST per fxf: solo captcha (NO token)
                 val postResponse = app.post(
                     updatedLink, headers = headers,
                     data = mapOf("captcha" to captchaRisolto),
                     timeout = 10_000
                 )
-                Log.d("Uprot", "🟡 POST completato, URL finale: ${postResponse.url}")
+                Log.d("Uprot", "🟡 POST $tentativi, URL finale: ${postResponse.url}")
 
                 // Redirect fuori da uprot?
                 val postFinalUrl = postResponse.url
@@ -401,24 +408,38 @@ class OnlineSerieTV : MainAPI() {
                     return postFinalUrl
                 }
 
-                // Cerca link nella pagina dopo POST
-                val postDoc = postResponse.document
-                val postLink = postDoc.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
-                    ?: postDoc.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
+                currentDoc = postResponse.document
+                Log.d("Uprot", "📄 HTML dopo POST: ${currentDoc.text().take(800)}")
+
+                // Se ancora c'è captcha → loop continua (captcha sbagliato)
+                if (currentDoc.selectFirst("img[alt=Captcha]") != null) {
+                    Log.e("Uprot", "❌ Captcha sbagliato, riprovo...")
+                    continue
+                }
+
+                // Captcha giusto! Estrai link
+                val postLink = currentDoc.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
+                    ?: currentDoc.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
                 if (postLink != null) {
-                    Log.d("Uprot", "✅ Link FXF dopo captcha: $postLink")
+                    Log.d("Uprot", "✅ Link FXF trovato: $postLink")
                     return postLink
                 }
-                Log.e("Uprot", "❌ Link FXF non trovato dopo captcha")
+
+                Log.e("Uprot", "❌ Link non trovato dopo captcha riuscito")
                 return null
             }
 
-            // Nessun captcha FXF → estrai link direttamente
-            Log.d("Uprot", "🟢 Nessun captcha FXF, estraggo link diretto")
-            val directLink = document.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
-                ?: document.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
-            Log.d("Uprot", "🔗 Link FXF diretto: $directLink")
-            return directLink
+            // Nessun captcha sul documento corrente → estrai link direttamente
+            if (tentativi <= maxTentativi) {
+                Log.d("Uprot", "🟢 Estraggo link dal documento corrente")
+                val directLink = currentDoc.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
+                    ?: currentDoc.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
+                Log.d("Uprot", "🔗 Link FXF: $directLink")
+                return directLink
+            }
+
+            Log.e("Uprot", "❌ Fallito dopo $maxTentativi tentativi")
+            return null
         }
 
         // ---- GESTIONE MSF (logica esistente migliorata) ----
