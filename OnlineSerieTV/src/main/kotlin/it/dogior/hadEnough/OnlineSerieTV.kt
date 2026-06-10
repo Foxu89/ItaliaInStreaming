@@ -362,7 +362,8 @@ class OnlineSerieTV : MainAPI() {
 
         // Check if there's already a direct link (no captcha)
         val tokenElement = document.selectFirst("input[name=token]")
-        if (tokenElement == null) {
+        val captchaImg = document.selectFirst("img[alt=CAPTCHA]")
+        if (tokenElement == null || captchaImg == null) {
             Log.d("Uprot", "Nessun captcha, cerco link diretto")
             return document.selectFirst("a[href]")?.attr("href")
         }
@@ -370,11 +371,7 @@ class OnlineSerieTV : MainAPI() {
 
         // Extract token and captcha image
         val token = tokenElement.attr("value")
-        val imgSrc = document.selectFirst("img[alt=CAPTCHA]")?.attr("src") ?: ""
-        if (imgSrc.isEmpty() || token.isEmpty()) {
-            Log.e("Uprot", "Token o immagine non trovati")
-            return null
-        }
+        val imgSrc = captchaImg.attr("src")
 
         val base64Data = imgSrc.substringAfter("base64,")
 
