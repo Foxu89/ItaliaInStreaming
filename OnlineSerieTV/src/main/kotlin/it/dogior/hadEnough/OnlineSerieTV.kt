@@ -355,60 +355,123 @@ class OnlineSerieTV : MainAPI() {
     }
 
     private suspend fun bypassUprot(link: String): String? {
+        val isFxf = "fxf" in link
         val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
+        Log.d("Uprot", "🟦 bypassUprot() INIZIO")
+        Log.d("Uprot", "🟦 Link: $link  isFxf: $isFxf")
+
         val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
         )
 
         val response = app.get(updatedLink, headers = headers, timeout = 10_000)
         val document = response.document
-        Log.d("Uprot", document.toString())
+        Log.d("Uprot", "🟡 GET completato, URL finale: ${response.url}")
 
-        // Check if there's already a direct link (no captcha)
+        // ---- GESTIONE FXF ----
+        if (isFxf) {
+            Log.d("Uprot", "🔷🔷 Gestione FXF")
+            val fxfCaptchaImg = document.selectFirst("img[alt=Captcha]")
+            val fxfCaptchaInput = document.selectFirst("input[name=captcha]")
+
+            if (fxfCaptchaImg != null && fxfCaptchaInput != null) {
+                // Captcha presente
+                Log.d("Uprot", "🟠 Captcha FXF rilevato")
+                val imgSrc = fxfCaptchaImg.attr("src")
+                val base64Data = imgSrc.substringAfter("base64,")
+                val captchaRisolto = showCaptchaDialog(base64Data)
+                if (captchaRisolto.isNullOrEmpty()) {
+                    Log.d("Uprot", "❌ Captcha annullato dall'utente")
+                    return null
+                }
+                Log.d("Uprot", "✅ Captcha ricevuto: $captchaRisolto")
+
+                // POST per fxf: solo captcha (NO token)
+                val postResponse = app.post(
+                    updatedLink, headers = headers,
+                    data = mapOf("captcha" to captchaRisolto),
+                    timeout = 10_000
+                )
+                Log.d("Uprot", "🟡 POST completato, URL finale: ${postResponse.url}")
+
+                // Redirect fuori da uprot?
+                val postFinalUrl = postResponse.url
+                if (postFinalUrl != null && !postFinalUrl.contains("uprot.net")) {
+                    Log.d("Uprot", "✅ Redirect diretto FXF: $postFinalUrl")
+                    return postFinalUrl
+                }
+
+                // Cerca link nella pagina dopo POST
+                val postDoc = postResponse.document
+                val postLink = postDoc.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
+                    ?: postDoc.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
+                if (postLink != null) {
+                    Log.d("Uprot", "✅ Link FXF dopo captcha: $postLink")
+                    return postLink
+                }
+                Log.e("Uprot", "❌ Link FXF non trovato dopo captcha")
+                return null
+            }
+
+            // Nessun captcha FXF → estrai link direttamente
+            Log.d("Uprot", "🟢 Nessun captcha FXF, estraggo link diretto")
+            val directLink = document.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
+                ?: document.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
+            Log.d("Uprot", "🔗 Link FXF diretto: $directLink")
+            return directLink
+        }
+
+        // ---- GESTIONE MSF (logica esistente migliorata) ----
+        Log.d("Uprot", "🔷🔷 Gestione MSF")
         val tokenElement = document.selectFirst("input[name=token]")
         val captchaImg = document.selectFirst("img[alt=CAPTCHA]")
-        if (tokenElement == null || captchaImg == null) {
-            Log.d("Uprot", "Nessun captcha, cerco link diretto")
-            return document.selectFirst("a[href]")?.attr("href")
-        }
-        Log.d("Uprot", "Captcha rilevato, estraggo immagine e token")
 
-        // Extract token and captcha image
+        if (tokenElement == null || captchaImg == null) {
+            Log.d("Uprot", "🟢 Nessun captcha MSF, cerco link diretto")
+            val directLink = document.selectFirst("a[href*='maxstream'], a[href*='maxwe'], a[href*='uprots']")?.attr("href")
+            Log.d("Uprot", "🔗 Link MSF diretto: $directLink")
+            return directLink
+        }
+
+        Log.d("Uprot", "🟠 Captcha MSF rilevato")
         val token = tokenElement.attr("value")
         val imgSrc = captchaImg.attr("src")
-
         val base64Data = imgSrc.substringAfter("base64,")
 
-        // Show dialog to user
         val captchaRisolto = showCaptchaDialog(base64Data)
         if (captchaRisolto.isNullOrEmpty()) {
-            Log.d("Uprot", "Captcha annullato dall'utente")
+            Log.d("Uprot", "❌ Captcha annullato dall'utente")
             return null
         }
-        Log.d("Uprot", "Captcha ricevuto: $captchaRisolto")
+        Log.d("Uprot", "✅ Captcha ricevuto: $captchaRisolto")
 
-        // Submit form
         val postResponse = app.post(
-            updatedLink,
-            headers = headers,
+            updatedLink, headers = headers,
             data = mapOf("token" to token, "capt" to captchaRisolto),
             timeout = 10_000
         )
+        Log.d("Uprot", "🟡 POST completato, URL finale: ${postResponse.url}")
 
-        // Get final URL after redirects
         val finalUrl = postResponse.url
-        Log.d("Uprot", "URL dopo POST: $finalUrl")
-
-        // If redirected to a video host, return it
         if (finalUrl != null && !finalUrl.contains("uprot.net")) {
-            Log.d("Uprot", "Redirect a: $finalUrl")
+            Log.d("Uprot", "✅ Redirect diretto MSF: $finalUrl")
             return finalUrl
         }
 
-        // Fallback: parse HTML for link (captcha might still be wrong)
-        val finalDoc = postResponse.document
-        val extractedLink = finalDoc.selectFirst("a[href*='maxstream'], a[href*='fxy32'], a[href*='stream']")?.attr("href")
-        Log.d("Uprot", "Link estratto: $extractedLink")
-        return extractedLink
+        // Cerca link: #buttok parent href → uprots → maxstream
+        val postDoc = postResponse.document
+        val buttokLink = postDoc.selectFirst("#buttok")?.parent()?.attr("href")
+        if (buttokLink != null && buttokLink.isNotEmpty()) {
+            Log.d("Uprot", "✅ Link da #buttok: $buttokLink")
+            return buttokLink
+        }
+        val uprotsLink = postDoc.selectFirst("a[href*='uprots']")?.attr("href")
+        if (uprotsLink != null) {
+            Log.d("Uprot", "✅ Link da uprots: $uprotsLink")
+            return uprotsLink
+        }
+        val fallbackLink = postDoc.selectFirst("a[href*='maxstream'], a[href*='maxwe']")?.attr("href")
+        Log.d("Uprot", "🔗 Fallback link: $fallbackLink")
+        return fallbackLink
     }
 }
