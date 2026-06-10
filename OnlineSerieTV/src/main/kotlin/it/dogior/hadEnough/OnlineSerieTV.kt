@@ -30,8 +30,8 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
+import it.dogior.hadEnough.extractors.FlexyExtractor
 import it.dogior.hadEnough.extractors.MaxStreamExtractor
-import it.dogior.hadEnough.extractors.StreamTapeExtractor
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -268,16 +268,20 @@ class OnlineSerieTV : MainAPI() {
         Log.d("OnlineSerieTV:Links", "Data: $data")
         val links = parseJson<List<String>>(data)
         links.forEach {
-            if (it.contains("uprot")) {
-                val url = bypassUprot(it)
-                Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
-                if (url != null) {
-                    if (url.contains("streamtape")) {
-                        StreamTapeExtractor().getUrl(url, null, subtitleCallback, callback)
-                    } else {
-                        MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
-                    }
-                    loadExtractor(url, subtitleCallback, callback)
+            if (!it.contains("uprot")) return@forEach
+            if (it.contains("msd")) {
+                Log.d("OnlineSerieTV:Links", "⏭ Skip Scarica: $it")
+                return@forEach
+            }
+            val url = bypassUprot(it)
+            Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
+            if (url != null) {
+                if (it.contains("fxf")) {
+                    Log.d("OnlineSerieTV:Links", "🎬 FlexyExtractor")
+                    FlexyExtractor().getUrl(url, null, subtitleCallback, callback)
+                } else {
+                    Log.d("OnlineSerieTV:Links", "🎬 MaxStreamExtractor")
+                    MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
                 }
             }
         }
@@ -403,7 +407,7 @@ class OnlineSerieTV : MainAPI() {
 
         // Fallback: parse HTML for link (captcha might still be wrong)
         val finalDoc = postResponse.document
-        val extractedLink = finalDoc.selectFirst("a[href*='maxstream'], a[href*='streamtape'], a[href*='stream']")?.attr("href")
+        val extractedLink = finalDoc.selectFirst("a[href*='maxstream'], a[href*='fxy32'], a[href*='stream']")?.attr("href")
         Log.d("Uprot", "Link estratto: $extractedLink")
         return extractedLink
     }
