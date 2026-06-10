@@ -27,11 +27,9 @@ import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
-import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
-import it.dogior.hadEnough.extractors.FlexyExtractor
 import it.dogior.hadEnough.extractors.MaxStreamExtractor
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.jsoup.nodes.Document
@@ -214,7 +212,7 @@ class OnlineSerieTV : MainAPI() {
 
         return if (isMovie) {
             val streamUrl = response.select("#hostlinks").select("a").map { it.attr("href") }
-            val plot = response.select(".post > p:nth-child(16)").text().trim()
+            val plot = response.selectFirst("b:contains(Trama)")?.nextElementSibling()?.text()?.trim() ?: ""
             newMovieLoadResponse(title, url, TvType.Movie, streamUrl) {
                 addPoster(poster)
                 addScore(rating)
@@ -225,7 +223,7 @@ class OnlineSerieTV : MainAPI() {
             }
         } else {
             val episodes = getEpisodes(response)
-            val plot = response.select(".post > p:nth-child(17)").text().trim()
+            val plot = response.selectFirst("b:contains(Trama)")?.nextElementSibling()?.text()?.trim() ?: ""
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 addPoster(poster)
                 addScore(rating)
@@ -276,27 +274,7 @@ class OnlineSerieTV : MainAPI() {
             }
 
             if (it.contains("fxf")) {
-                Log.d("OnlineSerieTV:Links", "🎬 FXF: WebView captcha su $it")
-                try {
-                    val resolver = WebViewResolver(
-                        interceptUrl = Regex("""\b\B"""),
-                        useOkhttp = false,
-                        timeout = 120_000L
-                    )
-                    val resp = app.get(it, referer = it, interceptor = resolver)
-                    val doc = resp.document
-                    Log.d("OnlineSerieTV:Links", "📄 HTML dopo WebView: ${doc?.text()?.take(400)}")
-                    val flexyUrl = doc?.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
-                        ?: doc?.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
-                    Log.d("OnlineSerieTV:Links", "🎬 FXF: link uprots: $flexyUrl")
-                    if (flexyUrl != null) {
-                        FlexyExtractor().getUrl(flexyUrl, null, subtitleCallback, callback)
-                    } else {
-                        Log.e("OnlineSerieTV:Links", "❌ FXF: link uprots non trovato nell'HTML")
-                    }
-                } catch (e: Exception) {
-                    Log.e("OnlineSerieTV:Links", "❌ FXF WebView error: ${e.message}")
-                }
+                Log.d("OnlineSerieTV:Links", "⏭️ Skip FXF (disattivato): $it")
             } else {
                 val url = bypassUprot(it)
                 Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
