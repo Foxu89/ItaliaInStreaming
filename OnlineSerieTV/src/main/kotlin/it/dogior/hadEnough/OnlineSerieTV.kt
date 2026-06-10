@@ -27,6 +27,7 @@ import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
@@ -270,16 +271,36 @@ class OnlineSerieTV : MainAPI() {
         links.forEach {
             if (!it.contains("uprot")) return@forEach
             if (it.contains("msd")) {
-                Log.d("OnlineSerieTV:Links", "⏭ Skip Scarica: $it")
+                Log.d("OnlineSerieTV:Links", "⏭️ Skip Scarica: $it")
                 return@forEach
             }
-            val url = bypassUprot(it)
-            Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
-            if (url != null) {
-                if (it.contains("fxf")) {
-                    Log.d("OnlineSerieTV:Links", "🎬 FlexyExtractor")
-                    FlexyExtractor().getUrl(url, null, subtitleCallback, callback)
-                } else {
+
+            if (it.contains("fxf")) {
+                Log.d("OnlineSerieTV:Links", "🎬 FXF: WebView captcha su $it")
+                try {
+                    val resolver = WebViewResolver(
+                        interceptUrl = Regex("""\b\B"""),
+                        useOkhttp = false,
+                        timeout = 120_000L
+                    )
+                    val resp = app.get(it, referer = it, interceptor = resolver)
+                    val doc = resp.document
+                    Log.d("OnlineSerieTV:Links", "📄 HTML dopo WebView: ${doc?.text()?.take(400)}")
+                    val flexyUrl = doc?.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
+                        ?: doc?.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
+                    Log.d("OnlineSerieTV:Links", "🎬 FXF: link uprots: $flexyUrl")
+                    if (flexyUrl != null) {
+                        FlexyExtractor().getUrl(flexyUrl, null, subtitleCallback, callback)
+                    } else {
+                        Log.e("OnlineSerieTV:Links", "❌ FXF: link uprots non trovato nell'HTML")
+                    }
+                } catch (e: Exception) {
+                    Log.e("OnlineSerieTV:Links", "❌ FXF WebView error: ${e.message}")
+                }
+            } else {
+                val url = bypassUprot(it)
+                Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
+                if (url != null) {
                     Log.d("OnlineSerieTV:Links", "🎬 MaxStreamExtractor")
                     MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
                 }
@@ -355,10 +376,8 @@ class OnlineSerieTV : MainAPI() {
     }
 
     private suspend fun bypassUprot(link: String): String? {
-        val isFxf = "fxf" in link
         val updatedLink = if ("msf" in link) link.replace("msf", "mse") else link
-        Log.d("Uprot", "🟦 bypassUprot() INIZIO")
-        Log.d("Uprot", "🟦 Link: $link  isFxf: $isFxf")
+        Log.d("Uprot", "🟦 bypassUprot() MSF: $updatedLink")
 
         val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -368,82 +387,6 @@ class OnlineSerieTV : MainAPI() {
         val document = response.document
         Log.d("Uprot", "🟡 GET completato, URL finale: ${response.url}")
 
-        // ---- GESTIONE FXF ----
-        if (isFxf) {
-            Log.d("Uprot", "🔷🔷 Gestione FXF")
-            var currentDoc = document
-            var tentativi = 0
-            val maxTentativi = 3
-
-            while (tentativi < maxTentativi) {
-                tentativi++
-                Log.d("Uprot", "🟠 Tentativo $tentativi/$maxTentativi")
-
-                val fxfCaptchaImg = currentDoc.selectFirst("img[alt=Captcha]")
-                if (fxfCaptchaImg == null) {
-                    Log.d("Uprot", "🟢 Nessun captcha, passo all'estrazione link")
-                    break
-                }
-
-                val imgSrc = fxfCaptchaImg.attr("src")
-                val base64Data = imgSrc.substringAfter("base64,")
-                val captchaRisolto = showCaptchaDialog(base64Data)
-                if (captchaRisolto.isNullOrEmpty()) {
-                    Log.d("Uprot", "❌ Captcha annullato dall'utente")
-                    return null
-                }
-                Log.d("Uprot", "✅ Captcha ricevuto: $captchaRisolto")
-
-                val postResponse = app.post(
-                    updatedLink, headers = headers,
-                    data = mapOf("captcha" to captchaRisolto),
-                    timeout = 10_000
-                )
-                Log.d("Uprot", "🟡 POST $tentativi, URL finale: ${postResponse.url}")
-
-                // Redirect fuori da uprot?
-                val postFinalUrl = postResponse.url
-                if (postFinalUrl != null && !postFinalUrl.contains("uprot.net")) {
-                    Log.d("Uprot", "✅ Redirect diretto FXF: $postFinalUrl")
-                    return postFinalUrl
-                }
-
-                currentDoc = postResponse.document
-                Log.d("Uprot", "📄 HTML dopo POST: ${currentDoc.text().take(800)}")
-
-                // Se ancora c'è captcha → loop continua (captcha sbagliato)
-                if (currentDoc.selectFirst("img[alt=Captcha]") != null) {
-                    Log.e("Uprot", "❌ Captcha sbagliato, riprovo...")
-                    continue
-                }
-
-                // Captcha giusto! Estrai link
-                val postLink = currentDoc.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
-                    ?: currentDoc.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
-                if (postLink != null) {
-                    Log.d("Uprot", "✅ Link FXF trovato: $postLink")
-                    return postLink
-                }
-
-                Log.e("Uprot", "❌ Link non trovato dopo captcha riuscito")
-                return null
-            }
-
-            // Nessun captcha sul documento corrente → estrai link direttamente
-            if (tentativi <= maxTentativi) {
-                Log.d("Uprot", "🟢 Estraggo link dal documento corrente")
-                val directLink = currentDoc.selectFirst("#ad_space a[href*='uprots']")?.attr("href")
-                    ?: currentDoc.selectFirst("a[href*='flexy.stream/uprots/']")?.attr("href")
-                Log.d("Uprot", "🔗 Link FXF: $directLink")
-                return directLink
-            }
-
-            Log.e("Uprot", "❌ Fallito dopo $maxTentativi tentativi")
-            return null
-        }
-
-        // ---- GESTIONE MSF (logica esistente migliorata) ----
-        Log.d("Uprot", "🔷🔷 Gestione MSF")
         val tokenElement = document.selectFirst("input[name=token]")
         val captchaImg = document.selectFirst("img[alt=CAPTCHA]")
 
@@ -479,7 +422,6 @@ class OnlineSerieTV : MainAPI() {
             return finalUrl
         }
 
-        // Cerca link: #buttok parent href → uprots → maxstream
         val postDoc = postResponse.document
         val buttokLink = postDoc.selectFirst("#buttok")?.parent()?.attr("href")
         if (buttokLink != null && buttokLink.isNotEmpty()) {
