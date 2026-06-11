@@ -114,11 +114,14 @@ class Loonex : MainAPI() {
         val document = Jsoup.parse(html)
 
         val title = document.selectFirst("h1.display-4")?.text()?.trim() ?: "Sconosciuto"
-        val poster = document.selectFirst("img.detail-poster")?.attr("src")?.let {
+        val poster = document.selectFirst("meta[property=og:image]")?.attr("content")?.let {
+            if (it.startsWith("/")) "https://loonex.eu$it" else it
+        } ?: document.selectFirst("img.detail-poster")?.attr("src")?.let {
             if (it.startsWith("/")) "https://loonex.eu$it" else it
         } ?: ""
         val plot = document.selectFirst("div.content-box-opaque div.text-secondary")?.ownText()?.trim()
             ?: document.selectFirst("div.text-secondary")?.ownText()?.trim()
+            ?: document.selectFirst("meta[name=description]")?.attr("content")?.trim()
             ?: ""
         val tags = document.select("span.badge.bg-secondary").mapNotNull { it.text().trim().ifBlank { null } }
         val trailerUrl = document.selectFirst("iframe.poster-trailer-iframe")?.attr("src")?.let {
@@ -138,7 +141,7 @@ class Loonex : MainAPI() {
 
             seasonTabs.forEachIndexed { index, tabButton ->
                 val seasonText = tabButton.text().trim()
-                val seasonNum = Regex("""Stagione (\d+)""").find(seasonText)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: (index + 1)
+                val seasonNum = index + 1
                 seasonsData.add(SeasonData(seasonNum, seasonText))
                 val targetId = tabButton.attr("data-bs-target").removePrefix("#")
                 val tabPane = tabContent?.selectFirst("div.tab-pane#$targetId") ?: return@forEachIndexed
@@ -204,7 +207,12 @@ class Loonex : MainAPI() {
         val fullUrl = if (href.startsWith("http")) href else mainUrl.trimEnd('/') + "/" + href.removePrefix("/")
 
         val title = card.selectFirst(".card-title-cine")?.text()?.trim() ?: return null
-        val poster = card.selectFirst(".card-img-bg")?.attr("src") ?: ""
+        val poster = card.selectFirst(".card-img-bg")?.attr("src")?.let {
+            if (it.startsWith("//")) "https:$it"
+            else if (it.startsWith("/")) "https://loonex.eu$it"
+            else if (!it.startsWith("http")) "${mainUrl.trimEnd('/')}/$it"
+            else it
+        } ?: ""
         val isMovie = card.selectFirst(".badge-custom.movie-badge") != null
         val type = if (isMovie) TvType.Movie else TvType.TvSeries
 
