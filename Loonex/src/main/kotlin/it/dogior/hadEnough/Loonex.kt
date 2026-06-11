@@ -16,6 +16,7 @@ import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
+import com.lagradost.cloudstream3.SeasonData
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import it.dogior.hadEnough.extractors.LoonexExtractor
@@ -111,9 +112,16 @@ class Loonex : MainAPI() {
         val document = Jsoup.parse(html)
 
         val title = document.selectFirst("h1.display-4")?.text()?.trim() ?: "Sconosciuto"
-        val poster = document.selectFirst("img.detail-poster")?.attr("src") ?: ""
-        val plot = document.selectFirst("div.content-box-opaque > div.text-secondary")?.ownText()?.trim() ?: ""
+        val poster = document.selectFirst("img.detail-poster")?.attr("src")?.let {
+            if (it.startsWith("/")) "https://loonex.eu$it" else it
+        } ?: ""
+        val plot = document.selectFirst("div.content-box-opaque div.text-secondary")?.ownText()?.trim()
+            ?: document.selectFirst("div.text-secondary")?.ownText()?.trim()
+            ?: ""
         val tags = document.select("span.badge.bg-secondary").mapNotNull { it.text().trim().ifBlank { null } }
+        val trailerUrl = document.selectFirst("iframe.poster-trailer-iframe")?.attr("src")?.let {
+            if (it.startsWith("//")) "https:$it" else if (it.startsWith("/")) "https://loonex.eu$it" else it
+        } ?: ""
 
         val backdropEl = document.selectFirst("div.hero-backdrop")
         val backdropStyle = backdropEl?.attr("style") ?: ""
@@ -124,10 +132,12 @@ class Loonex : MainAPI() {
         if (seasonTabs.isNotEmpty()) {
             val episodes = mutableListOf<Episode>()
             val tabContent = document.selectFirst("div.tab-content#season-tabsContent")
+            val seasonsData = mutableListOf<SeasonData>()
 
             seasonTabs.forEachIndexed { index, tabButton ->
                 val seasonText = tabButton.text().trim()
-                val seasonNum = Regex("""Stagione (\d+)""").find(seasonText)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                val seasonNum = Regex("""Stagione (\d+)""").find(seasonText)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: (index + 1)
+                seasonsData.add(SeasonData(seasonNum, seasonText))
                 val targetId = tabButton.attr("data-bs-target").removePrefix("#")
                 val tabPane = tabContent?.selectFirst("div.tab-pane#$targetId") ?: return@forEachIndexed
 
@@ -136,14 +146,14 @@ class Loonex : MainAPI() {
                     val epTitle = row.selectFirst(".episode-title")?.text()?.trim() ?: "Episodio ${epIndex + 1}"
                     val playUrl = row.selectFirst("a.btn-play-sm")?.attr("href") ?: return@forEachIndexed
 
-                    var epNum = Regex("""^(\d+):""").find(epTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
-                    if (epNum == null) {
-                        epNum = Regex("""Episodio (\d+)""").find(epTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
-                    }
+                    val epNum = Regex("""^(\d+):""").find(epTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                        ?: Regex("""^(\d+) -""").find(epTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                        ?: Regex("""Episodio \d+x(\d+)""").find(epTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                        ?: Regex("""Episodio (\d+)""").find(epTitle)?.groupValues?.getOrNull(1)?.toIntOrNull()
 
                     episodes.add(newEpisode(playUrl) {
                         name = epTitle
-                        season = seasonNum ?: (index + 1)
+                        season = seasonNum
                         episode = epNum ?: (epIndex + 1)
                     })
                 }
@@ -154,6 +164,8 @@ class Loonex : MainAPI() {
                 this.plot = plot
                 this.tags = tags
                 this.backgroundPosterUrl = backgroundUrl
+                addSeasonNames(seasonsData)
+                addTrailer(trailerUrl)
                 this.year = Regex("""\d{4}""").find(title)?.value?.toIntOrNull()
             }
         }
@@ -165,6 +177,7 @@ class Loonex : MainAPI() {
             this.plot = plot
             this.tags = tags
             this.backgroundPosterUrl = backgroundUrl
+            addTrailer(trailerUrl)
             this.year = Regex("""\d{4}""").find(title)?.value?.toIntOrNull()
         }
     }
