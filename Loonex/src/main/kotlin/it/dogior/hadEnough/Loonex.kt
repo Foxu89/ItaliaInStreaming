@@ -65,6 +65,31 @@ class Loonex : MainAPI() {
             val titleEl = band.selectFirst("h3.brand-font")
             val sectionName = titleEl?.text()?.trim() ?: continue
             if (sectionName == "Le Collezioni") continue
+
+            if (sectionName.contains("Consigliato", ignoreCase = true)) {
+                val link = band.selectFirst("a[href*=?cartone=]") ?: continue
+                val href = link.attr("href")
+                val fullUrl = if (href.startsWith("http")) href
+                    else mainUrl.trimEnd('/') + "/" + href.removePrefix("/")
+
+                val poster = band.selectFirst("img.img-fluid.rounded-4")?.attr("src")?.let {
+                    if (it.startsWith("//")) "https:$it"
+                    else if (it.startsWith("/")) "https://loonex.eu$it"
+                    else if (!it.startsWith("http")) "${mainUrl.trimEnd('/')}/$it"
+                    else it
+                } ?: continue
+
+                val title = band.selectFirst("img.cartoon-title-logo")?.attr("alt")?.trim()
+                    ?: href.substringAfter("?cartone=").substringBeforeLast("-")
+                        .split("-").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+
+                val item = newTvSeriesSearchResponse(title, fullUrl, TvType.TvSeries) {
+                    this.posterUrl = poster
+                }
+                lists.add(HomePageList(sectionName, listOf(item), isHorizontalImages = true))
+                continue
+            }
+
             val scroller = band.selectFirst("div.horizontal-scroller")
             if (scroller == null || scroller.select("div.scroller-item").isEmpty()) continue
 
@@ -114,13 +139,12 @@ class Loonex : MainAPI() {
         val document = Jsoup.parse(html)
 
         val title = document.selectFirst("h1.display-4")?.text()?.trim() ?: "Sconosciuto"
-        val poster = document.selectFirst("meta[property=og:image]")?.attr("content")?.let {
-            if (it.startsWith("/")) "https://loonex.eu$it" else it
-        } ?: document.selectFirst("img.detail-poster")?.attr("src")?.let {
-            if (it.startsWith("/")) "https://loonex.eu$it" else it
-        } ?: ""
-        val plot = document.selectFirst("div.content-box-opaque div.text-secondary")?.ownText()?.trim()
-            ?: document.selectFirst("div.text-secondary")?.ownText()?.trim()
+        val poster = document.selectFirst("img.detail-poster")?.attr("abs:src")
+            ?: document.selectFirst("meta[property=og:image]")?.attr("content")?.let {
+                if (it.startsWith("/")) "https://loonex.eu$it" else it
+            } ?: ""
+        val plot = document.selectFirst("div.content-box-opaque div.text-secondary:not(.text-sm)")?.ownText()?.trim()
+            ?: document.selectFirst("div.text-secondary:not(.text-sm)")?.ownText()?.trim()
             ?: document.selectFirst("meta[name=description]")?.attr("content")?.trim()
             ?: ""
         val tags = document.select("span.badge.bg-secondary").mapNotNull { it.text().trim().ifBlank { null } }
