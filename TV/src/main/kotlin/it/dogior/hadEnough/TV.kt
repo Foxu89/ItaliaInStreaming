@@ -104,6 +104,10 @@ class TV(
         val headers = channel?.headers ?: emptyMap()
         val userAgent = channel?.userAgent
 
+        val allHeaders = mutableMapOf<String, String>()
+        if (!userAgent.isNullOrBlank()) allHeaders["User-Agent"] = userAgent
+        allHeaders.putAll(headers.filterKeys { it != "referrer" })
+
         callback(
             newExtractorLink(
                 this.name,
@@ -112,8 +116,7 @@ class TV(
                 type = ExtractorLinkType.M3U8
             ) {
                 this.referer = headers["referrer"] ?: ""
-                if (!userAgent.isNullOrBlank()) addHeader("User-Agent", userAgent)
-                headers.filterKeys { it != "referrer" }.forEach { (k, v) -> addHeader(k, v) }
+                this.headers = allHeaders
                 this.quality = Qualities.Unknown.value
             }
         )
