@@ -99,6 +99,11 @@ class TV(
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
+        val json = sharedPref?.getString(data, null)
+        val channel = if (json != null) parseJson<TVChannel>(json) else null
+        val headers = channel?.headers ?: emptyMap()
+        val userAgent = channel?.userAgent
+
         callback(
             newExtractorLink(
                 this.name,
@@ -106,7 +111,9 @@ class TV(
                 data,
                 type = ExtractorLinkType.M3U8
             ) {
-                this.referer = ""
+                this.referer = headers["referrer"] ?: ""
+                if (!userAgent.isNullOrBlank()) addHeader("User-Agent", userAgent)
+                headers.filterKeys { it != "referrer" }.forEach { (k, v) -> addHeader(k, v) }
                 this.quality = Qualities.Unknown.value
             }
         )
