@@ -44,7 +44,8 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
                 "filter" to emptyMap<String, String>(),
                 "cursor" to cursor
             )
-            val response = app.post("$mainUrl/mediaurl-catalog.json", json = body.toJson())
+            val headers = mapOf("Content-Type" to "application/json")
+            val response = app.post("$mainUrl/mediaurl-catalog.json", headers = headers, json = body)
             val catalog = parseJson<CatalogResponse>(response.body.string())
             allChannels.addAll(catalog.items.map { item ->
                 Channel(
@@ -110,7 +111,8 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         val channel = parseJson<Channel>(url)
 
         val resolveBody = mapOf("url" to channel.url)
-        val response = app.post("$mainUrl/mediaurl-resolve.json", json = resolveBody.toJson())
+        val headers = mapOf("Content-Type" to "application/json")
+        val response = app.post("$mainUrl/mediaurl-resolve.json", headers = headers, json = resolveBody)
         val resolved = parseJson<ResolveResponse>(response.body.string())
 
         return newLiveStreamLoadResponse(
