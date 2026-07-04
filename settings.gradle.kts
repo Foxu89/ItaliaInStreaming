@@ -12,21 +12,20 @@ include(
 //    "Arte",
 //    "CalcioStreaming",
 //    "CB01",
-    "Cinemacity",
+//    "Cinemacity",
 //    "CorsaroNero",
 //    "DaddyLive",
 //    "GuardaSerie",
-//    "Huhu",
+    "Huhu",
 //    "IlGenioDelloStreaming",
-    "Loonex",
     "OnlineSerieTV",
 //    "SectionOrganizer",
 //    "StreamingCommunity",
     "StreamITA",
     "Stremio",
 //    "SyncStream",
-    "TV",
+//    "TV",
  //   "ToonItalia",
-    "Torrentio"
+//    "Torrentio"
 //    "YouTube"
 )
