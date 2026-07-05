@@ -106,15 +106,12 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         val enabledCountries = countries.filter { it.value }.keys.toList()
         val allChannels = mutableListOf<Channel>()
         val reqHeaders = mutableMapOf("Content-Type" to "application/json")
-        if (isVavoo) {
-            reqHeaders["User-Agent"] = "okhttp/4.11.0"
-            val sig = getVypnSignature()
-            if (sig != null) reqHeaders["mediahubmx-signature"] = sig
-        }
+        val sig = if (isVavoo) getVypnSignature() else null
+        if (sig != null) reqHeaders["mediahubmx-signature"] = sig
         val endpoint = if (isVavoo) "mediahubmx-catalog.json" else "mediaurl-catalog.json"
 
         for (country in enabledCountries) {
-            var cursor: Long? = if (isVavoo) 0L else null
+            var cursor: Long? = null
             do {
                 val body: Map<String, Any?> = if (isVavoo) {
                     mapOf(
@@ -202,36 +199,22 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
 
     override suspend fun load(url: String): LoadResponse {
         val channel = parseJson<Channel>(url)
-        val resolvedUrl = if (isVavoo) {
-            try {
-                val sig = getVypnSignature()
-                if (sig != null) {
-                    val reqHeaders = mapOf(
-                        "Content-Type" to "application/json",
-                        "User-Agent" to "MediaHubMX/2",
-                        "mediahubmx-signature" to sig
-                    )
-                    val resolveBody = mapOf("language" to "de", "region" to "AT", "url" to channel.url, "clientVersion" to "3.1.0")
-                    val response = app.post("$mainUrl/mediahubmx-resolve.json", headers = reqHeaders, json = resolveBody)
-                    parseJson<List<ResolveResponse>>(response.body.string()).first().url
-                } else null
-            } catch (e: Exception) {
-                null
-            }
+        val reqHeaders = mutableMapOf("Content-Type" to "application/json")
+        val sig = if (isVavoo) getVypnSignature() else null
+        if (sig != null) reqHeaders["mediahubmx-signature"] = sig
+        val endpoint = if (isVavoo) "mediahubmx-resolve.json" else "mediaurl-resolve.json"
+        val resolveBody: Map<String, Any?> = if (isVavoo) {
+            mapOf("language" to "de", "region" to "AT", "url" to channel.url, "clientVersion" to "3.1.0")
         } else {
-            try {
-                val resolveBody = mapOf("url" to channel.url)
-                val response = app.post("$mainUrl/mediaurl-resolve.json", headers = mapOf("Content-Type" to "application/json"), json = resolveBody)
-                parseJson<List<ResolveResponse>>(response.body.string()).first().url
-            } catch (e: Exception) {
-                null
-            }
+            mapOf("url" to channel.url)
         }
+        val response = app.post("$mainUrl/$endpoint", headers = reqHeaders, json = resolveBody)
+        val resolved = parseJson<List<ResolveResponse>>(response.body.string()).first()
 
         return newLiveStreamLoadResponse(
             channel.name,
             url,
-            resolvedUrl ?: ""
+            resolved.url
         ) {
             posterUrl = Companion.posterUrl
             tags = listOf(channel.group ?: "")
@@ -245,39 +228,49 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         val channel = parseJson<Channel>(data)
+        val streamUrl: String? = try {
+            val reqHeaders = mutableMapOf("Content-Type" to "application/json")
+            val sig = if (isVavoo) getVypnSignature() else null
+            if (sig != null) reqHeaders["mediahubmx-signature"] = sig
+            val endpoint = if (isVavoo) "mediahubmx-resolve.json" else "mediaurl-resolve.json"
+            val resolveBody: Map<String, Any?> = if (isVavoo) {
+                mapOf("language" to "de", "region" to "AT", "url" to channel.url, "clientVersion" to "3.1.0")
+            } else {
+                mapOf("url" to channel.url)
+            }
+            val response = app.post("$mainUrl/$endpoint", headers = reqHeaders, json = resolveBody)
+            parseJson<List<ResolveResponse>>(response.body.string()).first().url
+        } catch (e: Exception) {
+            if (isVavoo) {
+                try {
+                    val resolveBody = mapOf("url" to channel.url)
+                    val response = app.post("$mainUrl/mediaurl-resolve.json", headers = mapOf("Content-Type" to "application/json"), json = resolveBody)
+                    parseJson<List<ResolveResponse>>(response.body.string()).first().url
+                } catch (e2: Exception) {
+                    null
+                }
+            } else null
+        }
 
-        if (isVavoo) {
-            // Try signed m3u8 resolve
-            try {
-                val sig = getVypnSignature()
-                if (sig != null) {
-                    val reqHeaders = mapOf(
-                        "Content-Type" to "application/json",
-                        "User-Agent" to "MediaHubMX/2",
-                        "mediahubmx-signature" to sig
-                    )
-                    val resolveBody = mapOf("language" to "de", "region" to "AT", "url" to channel.url, "clientVersion" to "3.1.0")
-                    val response = app.post("$mainUrl/mediahubmx-resolve.json", headers = reqHeaders, json = resolveBody)
-                    val streamUrl = parseJson<List<ResolveResponse>>(response.body.string()).first().url
-                    callback(
-                        newExtractorLink(
-                            this.name,
-                            this.name,
-                            streamUrl,
-                            type = ExtractorLinkType.M3U8
-                        ) {
-                            this.referer = mainUrl
-                            this.quality = Qualities.Unknown.value
-                            this.headers = mapOf(
-                                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                                "Referer" to mainUrl
-                            )
-                        }
+        if (streamUrl != null) {
+            callback(
+                newExtractorLink(
+                    this.name,
+                    this.name,
+                    streamUrl,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = mainUrl
+                    this.quality = Qualities.Unknown.value
+                    this.headers = mapOf(
+                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        "Referer" to mainUrl
                     )
                 }
-            } catch (_: Exception) { }
+            )
+        }
 
-            // TS fallback
+        if (isVavoo) {
             try {
                 val tsSig = getTsSignature()
                 if (tsSig != null) {
@@ -293,35 +286,14 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
                                 this.referer = "https://vavoo.tv/"
                                 this.quality = Qualities.Unknown.value
                                 this.headers = mapOf(
-                                    "User-Agent" to "VAVOO/2.6",
-                                    "Referer" to "https://vavoo.tv/"
+                                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                                    "Referer" to "https://vavoo.tv/",
+                                    "Origin" to "https://vavoo.tv"
                                 )
                             }
                         )
                     }
                 }
-            } catch (_: Exception) { }
-        } else {
-            // Non-vavoo domains: mediaurl-resolve.json
-            try {
-                val resolveBody = mapOf("url" to channel.url)
-                val response = app.post("$mainUrl/mediaurl-resolve.json", headers = mapOf("Content-Type" to "application/json"), json = resolveBody)
-                val streamUrl = parseJson<List<ResolveResponse>>(response.body.string()).first().url
-                callback(
-                    newExtractorLink(
-                        this.name,
-                        this.name,
-                        streamUrl,
-                        type = ExtractorLinkType.M3U8
-                    ) {
-                        this.referer = mainUrl
-                        this.quality = Qualities.Unknown.value
-                        this.headers = mapOf(
-                            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                            "Referer" to mainUrl
-                        )
-                    }
-                )
             } catch (_: Exception) { }
         }
 
