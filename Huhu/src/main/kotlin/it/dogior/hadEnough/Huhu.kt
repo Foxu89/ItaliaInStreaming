@@ -231,7 +231,7 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         return newLiveStreamLoadResponse(
             channel.name,
             url,
-            resolvedUrl
+            resolvedUrl ?: ""
         ) {
             posterUrl = Companion.posterUrl
             tags = listOf(channel.group ?: "")
