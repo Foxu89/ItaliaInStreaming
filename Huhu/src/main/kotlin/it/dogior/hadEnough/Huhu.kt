@@ -132,18 +132,21 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val channel = parseJson<Channel>(data)
-
-        val resolveBody = mapOf("url" to channel.url)
-        val reqHeaders = mapOf("Content-Type" to "application/json")
-        val response = app.post("$mainUrl/mediaurl-resolve.json", headers = reqHeaders, json = resolveBody)
-        val resolved = parseJson<List<ResolveResponse>>(response.body.string()).first()
+        val streamUrl = try {
+            val channel = parseJson<Channel>(data)
+            val resolveBody = mapOf("url" to channel.url)
+            val reqHeaders = mapOf("Content-Type" to "application/json")
+            val response = app.post("$mainUrl/mediaurl-resolve.json", headers = reqHeaders, json = resolveBody)
+            parseJson<List<ResolveResponse>>(response.body.string()).first().url
+        } catch (e: Exception) {
+            data
+        }
 
         callback(
             newExtractorLink(
                 this.name,
                 this.name,
-                resolved.url,
+                streamUrl,
                 type = ExtractorLinkType.M3U8
             ) {
                 this.referer = mainUrl
