@@ -111,15 +111,10 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     override suspend fun load(url: String): LoadResponse {
         val channel = parseJson<Channel>(url)
 
-        val resolveBody = mapOf("url" to channel.url)
-        val headers = mapOf("Content-Type" to "application/json")
-        val response = app.post("$mainUrl/mediaurl-resolve.json", headers = headers, json = resolveBody)
-        val resolved = parseJson<List<ResolveResponse>>(response.body.string()).first()
-
         return newLiveStreamLoadResponse(
             channel.name,
             url,
-            resolved.url
+            ""
         ) {
             posterUrl = Companion.posterUrl
             tags = listOf(channel.group ?: "")
@@ -132,15 +127,26 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
+        val channel = parseJson<Channel>(data)
+
+        val resolveBody = mapOf("url" to channel.url)
+        val reqHeaders = mapOf("Content-Type" to "application/json")
+        val response = app.post("$mainUrl/mediaurl-resolve.json", headers = reqHeaders, json = resolveBody)
+        val resolved = parseJson<List<ResolveResponse>>(response.body.string()).first()
+
         callback(
             newExtractorLink(
                 this.name,
                 this.name,
-                data,
+                resolved.url,
                 type = ExtractorLinkType.M3U8
             ) {
-                this.referer = ""
+                this.referer = mainUrl
                 this.quality = Qualities.Unknown.value
+                this.headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Referer" to mainUrl
+                )
             }
         )
         return true
