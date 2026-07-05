@@ -34,32 +34,33 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     private suspend fun getChannels(): List<Channel> {
         val enabledCountries = countries.filter { it.value }.keys.toList()
         val allChannels = mutableListOf<Channel>()
-        var cursor: Long? = null
+        val headers = mapOf("Content-Type" to "application/json")
 
-        do {
-            val body = mapOf(
-                "catalogId" to "iptv",
-                "search" to "",
-                "sort" to "trending",
-                "filter" to emptyMap<String, String>(),
-                "cursor" to cursor
-            )
-            val headers = mapOf("Content-Type" to "application/json")
-            val response = app.post("$mainUrl/mediaurl-catalog.json", headers = headers, json = body)
-            val catalog = parseJson<CatalogResponse>(response.body.string())
-            allChannels.addAll(catalog.items.map { item ->
-                Channel(
-                    id = item.ids.id,
-                    name = item.name,
-                    logo = item.logo,
-                    url = item.url,
-                    group = item.group
+        for (country in enabledCountries) {
+            var cursor: Long? = null
+            do {
+                val body = mapOf(
+                    "catalogId" to "iptv",
+                    "search" to "",
+                    "sort" to "trending",
+                    "filter" to mapOf("group" to country),
+                    "cursor" to cursor
                 )
-            })
-            cursor = catalog.nextCursor
-        } while (cursor != null)
+                val response = app.post("$mainUrl/mediaurl-catalog.json", headers = headers, json = body)
+                val catalog = parseJson<CatalogResponse>(response.body.string())
+                allChannels.addAll(catalog.items.map { item ->
+                    Channel(
+                        id = item.ids.id,
+                        name = item.name,
+                        url = item.url,
+                        group = item.group
+                    )
+                })
+                cursor = catalog.nextCursor
+            } while (cursor != null)
+        }
 
-        return allChannels.filter { it.group in enabledCountries }
+        return allChannels
     }
 
     companion object {
@@ -67,7 +68,7 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
 
         @Suppress("ConstPropertyName")
         const val posterUrl =
-            "https://raw.githubusercontent.com/doGior/doGiorsHadEnough/master/Huhu/tv.png"
+            "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/Huhu/tv.png"
     }
 
     fun Channel.toSearchResponse(): LiveSearchResponse {
@@ -76,7 +77,7 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
             this.toJson(),
             TvType.Live
         ) {
-            posterUrl = logo ?: Huhu.posterUrl
+            posterUrl = Huhu.posterUrl
         }
     }
 
@@ -113,14 +114,14 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         val resolveBody = mapOf("url" to channel.url)
         val headers = mapOf("Content-Type" to "application/json")
         val response = app.post("$mainUrl/mediaurl-resolve.json", headers = headers, json = resolveBody)
-        val resolved = parseJson<ResolveResponse>(response.body.string())
+        val resolved = parseJson<List<ResolveResponse>>(response.body.string()).first()
 
         return newLiveStreamLoadResponse(
             channel.name,
             url,
             resolved.url
         ) {
-            posterUrl = channel.logo ?: Companion.posterUrl
+            posterUrl = Companion.posterUrl
             tags = listOf(channel.group ?: "")
         }
     }
@@ -152,8 +153,7 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
         val ids: Ids,
         val url: String,
         val name: String,
-        @JsonProperty("group") val group: String?,
-        val logo: String?
+        @JsonProperty("group") val group: String?
     )
 
     data class Ids(val id: String)
@@ -181,7 +181,6 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     data class Channel(
         val id: String,
         val name: String,
-        val logo: String?,
         val url: String,
         @JsonProperty("group") val group: String?
     )
