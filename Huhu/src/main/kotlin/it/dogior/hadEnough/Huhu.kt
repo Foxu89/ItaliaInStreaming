@@ -111,10 +111,15 @@ class Huhu(domain: String, private val countries: Map<String, Boolean>, language
     override suspend fun load(url: String): LoadResponse {
         val channel = parseJson<Channel>(url)
 
+        val resolveBody = mapOf("url" to channel.url)
+        val reqHeaders = mapOf("Content-Type" to "application/json")
+        val response = app.post("$mainUrl/mediaurl-resolve.json", headers = reqHeaders, json = resolveBody)
+        val resolved = parseJson<List<ResolveResponse>>(response.body.string()).first()
+
         return newLiveStreamLoadResponse(
             channel.name,
             url,
-            ""
+            resolved.url
         ) {
             posterUrl = Companion.posterUrl
             tags = listOf(channel.group ?: "")
