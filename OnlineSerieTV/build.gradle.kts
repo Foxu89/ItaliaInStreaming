@@ -1,5 +1,5 @@
 // use an integer for version numbers
-version = 22
+version = 23
 
 
 cloudstream {
@@ -22,5 +22,5 @@ cloudstream {
     requiresResources = false
     language = "it"
 
-    iconUrl = "https://lingering-truth-455c.appbeta870.workers.dev/wp-content/uploads/2023/01/cropped-tv-1.png"
+    iconUrl = "https://onlineserietv.lol/wp-content/uploads/2023/01/cropped-tv-1.png"
 }
