@@ -32,6 +32,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import it.dogior.hadEnough.extractors.MaxStreamExtractor
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.SocketTimeoutException
@@ -46,6 +47,17 @@ class OnlineSerieTV : MainAPI() {
     )
     override var lang = "it"
     override val hasMainPage = true
+
+    private suspend fun cachedGet(
+        url: String,
+        cacheKey: String,
+        profile: OnlineSerieTVCache.CacheProfile
+    ): Document {
+        OnlineSerieTVCache.get(cacheKey)?.let { return Jsoup.parse(it) }
+        val doc = app.get(url, timeout = 15000).document
+        OnlineSerieTVCache.put(cacheKey, doc.html(), profile)
+        return doc
+    }
 
     override val mainPage = mainPageOf(
 //        mainUrl to "Top 10 Film",
@@ -87,12 +99,14 @@ class OnlineSerieTV : MainAPI() {
         )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
-        val response = try {
-            app.get(request.data).document
-        } catch (e: SocketTimeoutException) {
-            return null
+        val cacheKey = "OSV:PAGE:${request.data}"
+        val doc = try {
+            cachedGet(request.data, cacheKey, OnlineSerieTVCache.CacheProfile.PAGE)
+        } catch (e: Exception) {
+            OnlineSerieTVCache.get(cacheKey, allowExpired = true)?.let { Jsoup.parse(it) }
+                ?: return null
         }
-        val searchResponses = getItems(request.name, response)
+        val searchResponses = getItems(request.name, doc)
         return newHomePageResponse(HomePageList(request.name, searchResponses), false)
     }
 
@@ -187,8 +201,9 @@ class OnlineSerieTV : MainAPI() {
 
     // this function gets called when you search for something
     override suspend fun search(query: String): List<SearchResponse> {
-        val response = app.get("$mainUrl/?s=$query")
-        val page = response.document
+        val url = "$mainUrl/?s=$query"
+        val cacheKey = "OSV:SEARCH:$query"
+        val page = cachedGet(url, cacheKey, OnlineSerieTVCache.CacheProfile.SEARCH)
         val itemGrid = page.selectFirst("#box_movies")!!
         val items = itemGrid.select(".movie")
         val searchResponses = items.map {
@@ -198,7 +213,8 @@ class OnlineSerieTV : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val response = app.get(url).document
+        val cacheKey = "OSV:DETAIL:$url"
+        val response = cachedGet(url, cacheKey, OnlineSerieTVCache.CacheProfile.DETAIL)
         val dati = response.selectFirst(".headingder")!!
         val poster = dati.select(".imgs > img").attr("src").replace(Regex("""-\d+x\d+"""), "")
         val title = dati.select(".dataplus > div:nth-child(1) > h1").text().trim()
