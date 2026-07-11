@@ -49,7 +49,7 @@ class GuardaPlay : MainAPI() {
             val poster = art.select(".post-thumbnail img").attr("src")
             if (title.isEmpty() || url.isEmpty()) return@mapNotNull null
             newTvSeriesSearchResponse(title, url) {
-                this.posterUrl = poster
+                this.posterUrl = fixPoster(poster)
             }
         }
         return newHomePageResponse(HomePageList(request.name, homes), false)
@@ -66,14 +66,14 @@ class GuardaPlay : MainAPI() {
             val poster = art.select(".post-thumbnail img").attr("src")
             if (title.isEmpty() || url.isEmpty()) return@mapNotNull null
             newTvSeriesSearchResponse(title, url) {
-                this.posterUrl = poster
+                this.posterUrl = fixPoster(poster)
             }
         }
     }
 
     override suspend fun load(url: String): LoadResponse? {
         val doc = app.get(url).document
-        val title = doc.select(".entry-title").text().trim()
+        val title = doc.select("article.post.single .entry-title, h1.entry-title").text().trim()
         val poster = doc.select(".post-thumbnail img").attr("src")
         val year = doc.select(".year").text().trim()
         val rating = doc.select(".vote .num").text().trim()
@@ -81,19 +81,24 @@ class GuardaPlay : MainAPI() {
         val genres = doc.select(".genres a").eachText()
         val durationText = doc.select(".duration").text().trim()
 
-        val embedUrl = doc.select("#options-0 iframe").attr("src")
+        val embedUrl = doc.select("#options-0 iframe").attr("src").replace("&#038;", "&")
         val streamUrl = if (embedUrl.isNotEmpty()) listOf(embedUrl) else emptyList()
 
         val durationMinutes = parseDuration(durationText)
 
         return newMovieLoadResponse(title, url, TvType.Movie, streamUrl) {
-            this.posterUrl = poster
+            this.posterUrl = fixPoster(poster)
             this.year = year.toIntOrNull()
             this.plot = plot
             this.tags = genres
             addScore(rating)
             this.duration = durationMinutes
         }
+    }
+
+    private fun fixPoster(url: String): String {
+        if (url.startsWith("//")) return "https:$url"
+        return url
     }
 
     private fun parseDuration(text: String): Int? {
