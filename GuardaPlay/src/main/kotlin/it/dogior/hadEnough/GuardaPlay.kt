@@ -4,6 +4,7 @@ import android.util.Log
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.LoadResponse.Companion.addScore
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
@@ -48,7 +49,7 @@ class GuardaPlay : MainAPI() {
             val poster = art.select(".post-thumbnail img").attr("src")
             if (title.isEmpty() || url.isEmpty()) return@mapNotNull null
             newTvSeriesSearchResponse(title, url) {
-                this.posterUrl = fixUrl(poster)
+                this.posterUrl = poster
             }
         }
         return newHomePageResponse(HomePageList(request.name, homes), false)
@@ -65,7 +66,7 @@ class GuardaPlay : MainAPI() {
             val poster = art.select(".post-thumbnail img").attr("src")
             if (title.isEmpty() || url.isEmpty()) return@mapNotNull null
             newTvSeriesSearchResponse(title, url) {
-                this.posterUrl = fixUrl(poster)
+                this.posterUrl = poster
             }
         }
     }
@@ -81,16 +82,16 @@ class GuardaPlay : MainAPI() {
         val durationText = doc.select(".duration").text().trim()
 
         val embedUrl = doc.select("#options-0 iframe").attr("src")
-        val streamUrl = if (embedUrl.isNotEmpty()) listOf(fixUrl(embedUrl)) else emptyList()
+        val streamUrl = if (embedUrl.isNotEmpty()) listOf(embedUrl) else emptyList()
 
         val durationMinutes = parseDuration(durationText)
 
         return newMovieLoadResponse(title, url, TvType.Movie, streamUrl) {
-            this.posterUrl = fixUrl(poster)
+            this.posterUrl = poster
             this.year = year.toIntOrNull()
             this.plot = plot
             this.tags = genres
-            rating?.toFloatOrNull()?.let { addScore(it) }
+            addScore(rating)
             this.duration = durationMinutes
         }
     }
