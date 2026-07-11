@@ -16,6 +16,7 @@ include(
 //    "CorsaroNero",
 //    "DaddyLive",
 //    "GuardaSerie",
+    "GuardaPlay",
     "Huhu",
 //    "IlGenioDelloStreaming",
     "OnlineSerieTV",
