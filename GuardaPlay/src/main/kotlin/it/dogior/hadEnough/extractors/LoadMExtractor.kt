@@ -72,9 +72,15 @@ class LoadMExtractor : ExtractorApi() {
 
         if (videoUrl != null) {
             Log.i(TAG, "🎬🎬🎬 VIDEO TROVATO! URL: $videoUrl")
+            val cookies = try {
+                android.webkit.CookieManager.getInstance().getCookie(videoUrl)
+            } catch (_: Exception) { null }
+            val headers = mutableMapOf("referer" to "https://loadm.cam/")
+            if (!cookies.isNullOrEmpty()) headers["Cookie"] = cookies
+            Log.d(TAG, "🍪 Cookies: $cookies")
             M3u8Helper.generateM3u8(
                 name, videoUrl, url,
-                headers = mapOf("referer" to "https://loadm.cam/")
+                headers = headers
             ).forEach { link ->
                 Log.d(TAG, "📤 Callback inviato: ${link.url}")
                 callback(link)
@@ -140,13 +146,13 @@ class LoadMExtractor : ExtractorApi() {
                                 Log.i(TAG, "🎯🎯🎯 TARGET ACQUIRED !!! -> $requestUrl")
                                 Log.i(TAG, "🎯🎯🎯 Trovato dopo $requestCount richieste totali")
 
-                                Handler(Looper.getMainLooper()).post {
+                                Handler(Looper.getMainLooper()).postDelayed({
                                     webView.stopLoading()
                                     webView.destroy()
                                     latch.countDown()
                                     continuation.resume(requestUrl)
-                                }
-                                return WebResourceResponse("text/plain", "utf-8", "".byteInputStream())
+                                }, 2000)
+                                return null
                             }
 
                             return super.shouldInterceptRequest(view, request)
