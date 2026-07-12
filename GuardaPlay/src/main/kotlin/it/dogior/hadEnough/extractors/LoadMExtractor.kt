@@ -89,8 +89,6 @@ class LoadMExtractor : ExtractorApi() {
         return suspendCancellableCoroutine { continuation ->
             val latch = CountDownLatch(1)
             var found = false
-            var iframeUrl: String? = null
-            var navigatedToLoadm = false
             var requestCount = 0
             var pageLoadCount = 0
 
@@ -137,11 +135,6 @@ class LoadMExtractor : ExtractorApi() {
 
                             Log.d(TAG, "📡 [#$requestCount] $method -> ${requestUrl.take(300)}")
 
-                            if (iframeUrl == null && !navigatedToLoadm && (requestUrl.contains("loadm.cam") || requestUrl.contains("loadm."))) {
-                                iframeUrl = requestUrl
-                                Log.i(TAG, "🎯 IFRAME LOADM TROVATO: $requestUrl")
-                            }
-
                             if (!found && isVideoUrl(requestUrl)) {
                                 found = true
                                 Log.i(TAG, "🎯🎯🎯 TARGET ACQUIRED !!! -> $requestUrl")
@@ -169,18 +162,7 @@ class LoadMExtractor : ExtractorApi() {
                             Log.d(TAG, "✅ [$pageLoadCount] onPageFinished: $pageUrl")
                             super.onPageFinished(view, pageUrl)
 
-                            val isEmbed = pageUrl?.contains("guardaplay.store") == true || pageUrl?.contains("trembed") == true
-                            val isLoadm = pageUrl?.contains("loadm.cam") == true || pageUrl?.contains("loadm.") == true
-
-                            if (isEmbed && iframeUrl != null && !navigatedToLoadm) {
-                                navigatedToLoadm = true
-                                Log.d(TAG, "🔄 Navigo a loadm: $iframeUrl")
-                                Handler(Looper.getMainLooper()).postDelayed({
-                                    webView.loadUrl(iframeUrl!!)
-                                }, 1000)
-                            }
-
-                            if (isLoadm) {
+                            if (pageUrl?.contains("loadm.cam") == true || pageUrl?.contains("loadm.") == true) {
                                 Log.d(TAG, "⏳ Attendo 1.5s poi clicco #player-button...")
                                 Handler(Looper.getMainLooper()).postDelayed({
                                     Log.d(TAG, "💉 Eseguo evaluateJavascript...")
