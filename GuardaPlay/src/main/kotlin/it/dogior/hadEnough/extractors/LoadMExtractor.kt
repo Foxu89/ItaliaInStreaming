@@ -53,7 +53,7 @@ class LoadMExtractor : ExtractorApi() {
                 Log.d(TAG, "⛔ isVideoUrl() -> FALSE (img/css/js) per: ${url.take(200)}")
                 return false
             }
-            val result = lowerUrl.contains(".m3u8") || lowerUrl.contains(".mp4")
+            val result = lowerUrl.contains("m3u8") || lowerUrl.contains(".mp4")
             Log.d(TAG, if (result) "✅ isVideoUrl() -> TRUE per: ${url.take(200)}" else "⛔ isVideoUrl() -> FALSE (no m3u8/mp4) per: ${url.take(200)}")
             return result
         }
@@ -135,10 +135,6 @@ class LoadMExtractor : ExtractorApi() {
 
                             Log.d(TAG, "📡 [#$requestCount] $method -> ${requestUrl.take(300)}")
 
-                            if (requestUrl.contains("loadm.cam") || requestUrl.contains("loadm.")) {
-                                Log.d(TAG, "🔴🔴🔴 RICHIESTA A LOADM DETECTATA: $requestUrl")
-                            }
-
                             if (!found && isVideoUrl(requestUrl)) {
                                 found = true
                                 Log.i(TAG, "🎯🎯🎯 TARGET ACQUIRED !!! -> $requestUrl")
@@ -166,29 +162,19 @@ class LoadMExtractor : ExtractorApi() {
                             Log.d(TAG, "✅ [$pageLoadCount] onPageFinished: $pageUrl")
                             super.onPageFinished(view, pageUrl)
 
-                            Log.d(TAG, "⏳ Attendo 2s poi eseguo JS injection...")
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                Log.d(TAG, "💉 Eseguo evaluateJavascript...")
-                                webView.evaluateJavascript("""
-                                    (function() {
-                                        console.log('🔧 JS injection eseguita');
-                                        try { Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en', 'it'] }); } catch(e) { console.log('errore languages: ' + e); }
-                                        try { Object.defineProperty(navigator, 'language', { get: () => 'it' }); } catch(e) { console.log('errore language: ' + e); }
-                                        try { delete window.webdriver; } catch(e) { console.log('errore webdriver: ' + e); }
-                                        try { window.chrome = { runtime: {} }; } catch(e) { console.log('errore chrome: ' + e); }
-
-                                        var el = document.getElementById('player-loading') || document.querySelector('.player-loading');
-                                        if(el) { console.log('🖱️ clicked player-loading'); el.click(); } else { console.log('⚠️ player-loading non trovato'); }
-
-                                        var v = document.querySelector('video');
-                                        if(v) { console.log('▶️ video found, playing'); v.muted = true; v.play(); } else { console.log('⚠️ video element non trovato'); }
-
-                                        var btns = document.querySelectorAll('.vjs-big-play-button, #vplayer, .play-button, media-play-button, .vp-play, .player-play');
-                                        console.log('🔘 trovati ' + btns.length + ' bottoni play');
-                                        btns.forEach(function(b) { try { b.click(); console.log('🖱️ cliccato: ' + b.className); } catch(e) {} });
-                                    })();
-                                """.trimIndent(), null)
-                            }, 2000)
+                            if (pageUrl?.contains("loadm.cam") == true || pageUrl?.contains("loadm.") == true) {
+                                Log.d(TAG, "⏳ Attendo 1.5s poi clicco #player-button...")
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    Log.d(TAG, "💉 Eseguo evaluateJavascript...")
+                                    webView.evaluateJavascript("""
+                                        (function() {
+                                            var btn = document.getElementById('player-button');
+                                            if (btn) { btn.click(); console.log('🖱️ clicked #player-button'); }
+                                            else { console.log('⚠️ #player-button non trovato'); }
+                                        })();
+                                    """.trimIndent(), null)
+                                }, 1500)
+                            }
                         }
 
                         override fun onLoadResource(view: WebView?, pageUrl: String?) {
