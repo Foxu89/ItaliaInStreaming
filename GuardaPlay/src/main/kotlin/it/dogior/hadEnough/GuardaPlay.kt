@@ -72,16 +72,26 @@ class GuardaPlay : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
+        Log.d("GuardaPlay", "📥 load() chiamata con URL: $url")
         val doc = app.get(url).document
         val title = doc.select("article.post.single .entry-title, h1.entry-title").text().trim()
+        Log.d("GuardaPlay", "📌 Titolo estratto: \"$title\"")
         val poster = doc.select(".post-thumbnail img").attr("src")
+        Log.d("GuardaPlay", "🖼️ Poster URL: $poster")
         val year = doc.select(".year").text().trim()
         val rating = doc.select(".vote .num").text().trim()
         val plot = doc.select(".description p").text().trim()
         val genres = doc.select(".genres a").eachText()
         val durationText = doc.select(".duration").text().trim()
 
-        val embedUrl = doc.select("#options-0 iframe").attr("src").replace("&#038;", "&")
+        Log.d("GuardaPlay", "🔍 Cerco iframe in #options-0...")
+        val embedIframe = doc.selectFirst("#options-0 iframe")
+        val embedUrl = embedIframe?.attr("src")?.replace("&#038;", "&") ?: run {
+            Log.e("GuardaPlay", "❌ Nessun iframe trovato in #options-0! Selettore #options-0 iframe = ${doc.select("#options-0 iframe").size}")
+            Log.d("GuardaPlay", "📄 HTML snippet #options-0: ${doc.select("#options-0").outerHtml().take(500)}")
+            ""
+        }
+        Log.d("GuardaPlay", "🔗 Embed URL dopo replace: $embedUrl")
         val streamUrl = if (embedUrl.isNotEmpty()) listOf(embedUrl) else emptyList()
 
         val durationMinutes = parseDuration(durationText)
@@ -115,14 +125,26 @@ class GuardaPlay : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        Log.d("GuardaPlay", "loadLinks: $data")
+        Log.d("GuardaPlay", "🧪 loadLinks() chiamata con data: $data")
+        Log.d("GuardaPlay", "🧪 isCasting: $isCasting")
+
         val embedDoc = app.get(data, referer = mainUrl).document
+        Log.d("GuardaPlay", "📄 Pagina embed caricata, title: ${embedDoc.title()}")
+
+        val allIframes = embedDoc.select("iframe")
+        Log.d("GuardaPlay", "🎯 Trovati ${allIframes.size} iframe nella pagina embed:")
+        allIframes.forEachIndexed { i, iframe ->
+            Log.d("GuardaPlay", "  iframe[$i]: src=\"${iframe.attr("src")}\"")
+        }
+
         val loadmUrl = embedDoc.selectFirst("iframe")?.attr("src") ?: run {
-            Log.e("GuardaPlay", "Nessun iframe loadm nell'embed")
+            Log.e("GuardaPlay", "❌ Nessun iframe trovato! HTML snippet: ${embedDoc.outerHtml().take(1000)}")
             return false
         }
-        Log.d("GuardaPlay", "LoadM URL: $loadmUrl")
+        Log.d("GuardaPlay", "✅ Primo iframe trovato: $loadmUrl")
+
         LoadMExtractor().getUrl(loadmUrl, data, subtitleCallback, callback)
+        Log.d("GuardaPlay", "✅ LoadMExtractor.getUrl() completato")
         return true
     }
 }
