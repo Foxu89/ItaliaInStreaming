@@ -128,23 +128,7 @@ class GuardaPlay : MainAPI() {
         Log.d("GuardaPlay", "🧪 loadLinks() chiamata con data: $data")
         Log.d("GuardaPlay", "🧪 isCasting: $isCasting")
 
-        val embedDoc = app.get(data, referer = mainUrl).document
-        Log.d("GuardaPlay", "📄 Pagina embed caricata, title: ${embedDoc.title()}")
-
-        val allIframes = embedDoc.select("iframe")
-        Log.d("GuardaPlay", "🎯 Trovati ${allIframes.size} iframe nella pagina embed:")
-        allIframes.forEachIndexed { i, iframe ->
-            Log.d("GuardaPlay", "  iframe[$i]: src=\"${iframe.attr("src")}\"")
-        }
-
-        val loadmUrl = embedDoc.selectFirst("iframe")?.attr("src") ?: run {
-            Log.e("GuardaPlay", "❌ Nessun iframe trovato! HTML snippet: ${embedDoc.outerHtml().take(1000)}")
-            return false
-        }
-        Log.d("GuardaPlay", "✅ Primo iframe trovato: $loadmUrl")
-
-        LoadMExtractor().getUrl(loadmUrl, data, subtitleCallback, callback)
-        Log.d("GuardaPlay", "✅ LoadMExtractor.getUrl() completato")
+        LoadMExtractor().getUrl(data, mainUrl, subtitleCallback, callback)
         return true
     }
 }

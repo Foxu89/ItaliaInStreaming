@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 cloudstream {
     description = "Film in Streaming da GuardaPlay"
