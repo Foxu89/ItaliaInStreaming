@@ -196,11 +196,11 @@ class LoadMExtractor : ExtractorApi() {
                         }
 
                         override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?) {
-                            Log.e(TAG, "❌ onReceivedError: ${error?.description} per ${request?.url?.take(200)}")
+                            Log.e(TAG, "❌ onReceivedError: ${error?.description} per ${request?.url?.toString()?.take(200)}")
                         }
 
                         override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
-                            Log.w(TAG, "⚠️ onReceivedHttpError: ${errorResponse?.statusCode} per ${request?.url?.take(200)}")
+                            Log.w(TAG, "⚠️ onReceivedHttpError: ${errorResponse?.statusCode} per ${request?.url?.toString()?.take(200)}")
                         }
                     }
 
