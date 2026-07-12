@@ -129,13 +129,21 @@ class GuardaPlay : MainAPI() {
     ): Boolean {
         Log.d("GuardaPlay", "🧪 loadLinks() chiamata con data: $data")
 
+        val embedUrl = try {
+            com.lagradost.cloudstream3.utils.AppUtils.parseJson<List<String>>(data).firstOrNull()
+        } catch (_: Exception) {
+            data
+        } ?: return false
+
+        Log.d("GuardaPlay", "🔗 Embed URL estratto: $embedUrl")
+
         try {
             val cfClient = app.baseClient.newBuilder()
                 .addInterceptor(CloudflareKiller())
                 .build()
 
             val request = okhttp3.Request.Builder()
-                .url(data)
+                .url(embedUrl)
                 .header("Referer", mainUrl)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
@@ -157,7 +165,7 @@ class GuardaPlay : MainAPI() {
             }
             Log.d("GuardaPlay", "✅ Iframe loadm trovato: $loadmUrl")
 
-            LoadMExtractor().getUrl(loadmUrl, data, subtitleCallback, callback)
+            LoadMExtractor().getUrl(loadmUrl, embedUrl, subtitleCallback, callback)
             Log.d("GuardaPlay", "✅ LoadMExtractor completato")
         } catch (e: Exception) {
             Log.e("GuardaPlay", "❌ Errore loadLinks: ${e.message}")
