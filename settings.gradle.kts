@@ -7,7 +7,7 @@ rootProject.name = "CloudstreamPlugins"
 include(
  //   "AltaDefinizione",
  //   "AnimeSaturn",
-//    "AnimeUnity",
+    "AnimeUnity",
 //    "AnimeWorld",
 //    "Arte",
 //    "CalcioStreaming",
