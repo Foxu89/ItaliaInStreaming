@@ -94,6 +94,8 @@ class StreamCenterVidxGoExtractor : ExtractorApi() {
         val m3u8Url = extractM3u8FromHtml(html)
 
         if (m3u8Url != null) {
+            runCatching { app.get(m3u8Url, interceptor = CloudflareKiller(), headers = M3U8_HEADERS) }
+
             callback.invoke(
                 newExtractorLink(
                     source = name,
