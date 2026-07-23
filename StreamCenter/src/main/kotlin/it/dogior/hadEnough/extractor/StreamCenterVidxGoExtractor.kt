@@ -3,7 +3,6 @@ package it.dogior.hadEnough.extractor
 import android.util.Base64
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorApi
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -88,13 +87,13 @@ class StreamCenterVidxGoExtractor : ExtractorApi() {
     ) {
         val targetUrl = buildTargetUrl(url)
 
-        val response = app.get(targetUrl, interceptor = CloudflareKiller(), headers = HTML_HEADERS)
+        val response = app.get(targetUrl, headers = HTML_HEADERS)
 
         val html = response.text
         val m3u8Url = extractM3u8FromHtml(html)
 
         if (m3u8Url != null) {
-            runCatching { app.get(m3u8Url, interceptor = CloudflareKiller(), headers = M3U8_HEADERS) }
+            runCatching { app.get(m3u8Url, headers = M3U8_HEADERS) }
 
             callback.invoke(
                 newExtractorLink(
