@@ -1,4 +1,4 @@
-package it.dogior.hadEnough
+package it.dogior.hadEnough.extractor
 
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.app
@@ -11,7 +11,7 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 
 class StreamCenterVixSrcExtractor : ExtractorApi() {
     override val mainUrl = "https://vixsrc.to"
-    override val name = "VixSrc"
+    override val name = "StreamCenterVixSrc"
     override val requiresReferer = true
 
     override suspend fun getUrl(
@@ -41,8 +41,8 @@ class StreamCenterVixSrcExtractor : ExtractorApi() {
             if (m3u8Url.contains("playlist") && m3u8Url.contains("token")) {
                 callback.invoke(
                     newExtractorLink(
-                        source = name,
-                        name = name,
+                        source = "VixSrc",
+                        name = "StreamingCommunity - VixSrc",
                         url = m3u8Url,
                         type = ExtractorLinkType.M3U8
                     ) {
