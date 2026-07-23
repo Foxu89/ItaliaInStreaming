@@ -17,10 +17,11 @@ include(
 //    "DaddyLive",
 //    "GuardaSerie",
     "GuardaPlay",
-    "Huhu",
+//    "Huhu",
 //    "IlGenioDelloStreaming",
     "OnlineSerieTV",
 //    "SectionOrganizer",
+    "StreamCenter"
 //    "StreamingCommunity",
     "StreamITA",
     "Stremio",
