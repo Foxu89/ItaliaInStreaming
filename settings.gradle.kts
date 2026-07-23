@@ -21,10 +21,10 @@ include(
 //    "IlGenioDelloStreaming",
     "OnlineSerieTV",
 //    "SectionOrganizer",
-    "StreamCenter"
+    "StreamCenter",
 //    "StreamingCommunity",
     "StreamITA",
-    "Stremio",
+//    "Stremio",
 //    "SyncStream",
 //    "TV",
  //   "ToonItalia",
