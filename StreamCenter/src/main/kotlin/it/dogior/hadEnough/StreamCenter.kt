@@ -4518,12 +4518,14 @@ class StreamCenter internal constructor(
             "$vidxGoUrl/$imdbNumber/$season/$episode"
         }
 
-        return StreamCenterVidxGoExtractor().getUrl(
-            url = targetUrl,
-            referer = "$vidxGoUrl/",
-            subtitleCallback = subtitleCallback,
-            callback = callback,
-        )
+        return runCatching {
+            StreamCenterVidxGoExtractor().getUrl(
+                url = targetUrl,
+                referer = "$vidxGoUrl/",
+                subtitleCallback = subtitleCallback,
+                callback = callback,
+            )
+        }.isSuccess
     }
 
     private fun buildStreamingCommunityVixSrcUrl(playbackData: StreamingCommunityPlaybackData): String? {
