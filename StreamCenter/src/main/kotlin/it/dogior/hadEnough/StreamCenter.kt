@@ -186,6 +186,9 @@ class StreamCenter internal constructor(
 
     private val streamingCommunityMainUrl: String
         get() = "${streamingCommunityRootUrl}it"
+    private val vidxGoUrl: String
+        get() = StreamCenterPlugin.getSourceBaseUrl(sharedPref, StreamCenterPlugin.PREF_SOURCE_VIDXGO)
+            .ifBlank { StreamCenterPlugin.DEFAULT_URL_VIDXGO }
     private val headers = mapOf(
         "Accept-Language" to "it-IT,it;q=0.9,en-US;q=0.5,en;q=0.3",
         "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
@@ -2076,6 +2079,18 @@ class StreamCenter internal constructor(
                 }
         }
 
+        playbackData?.streamingCommunity
+            ?.takeIf { isSourceEnabled(StreamCenterPlugin.PREF_SOURCE_VIDXGO) }
+            ?.let { scPlayback ->
+                addTask(StreamCenterPlugin.PREF_SOURCE_VIDXGO) {
+                    loadVidxGoLinks(
+                        playbackData = scPlayback,
+                        subtitleCallback = uniqueSubtitleCallback,
+                        callback = uniqueCallback,
+                    )
+                }
+            }
+
         playbackData?.stremio?.let { stremioContext ->
             activeStremioResolverAddons().forEach { addon ->
                 stremioTasks[addon.key] = suspend {
@@ -2296,6 +2311,11 @@ class StreamCenter internal constructor(
             ?.let { href -> IMDB_ID_REGEX.find(href)?.value }
         if (externalLink != null) return externalLink
         return TMDB_IMDB_JSON_REGEX.find(document.html())?.groupValues?.getOrNull(1)
+    }
+
+    private suspend fun tmdbToImdbId(tmdbId: Int, isTv: Boolean): String? {
+        val doc = getTmdbDocument("https://www.themoviedb.org/${if (isTv) "tv" else "movie"}/$tmdbId")
+        return extractTmdbImdbId(doc)
     }
 
     private fun extractTmdbLogo(document: Document): String? {
@@ -4477,20 +4497,33 @@ class StreamCenter internal constructor(
             }
         }
 
-        val vidxGoUrl = buildStreamingCommunityVidxGoUrl(playbackData)
-        if (!vidxGoUrl.isNullOrBlank()) {
-            tasks += {
-                StreamCenterVidxGoExtractor().getUrl(
-                    url = vidxGoUrl,
-                    referer = "https://v.vidxgo.co/",
-                    subtitleCallback = subtitleCallback,
-                    callback = callback,
-                )
-                true
-            }
+        return runParallelSourceTasks(tasks)
+    }
+
+    private suspend fun loadVidxGoLinks(
+        playbackData: StreamingCommunityPlaybackData,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit,
+    ): Boolean {
+        val rawImdbId = playbackData.imdbId
+            ?: playbackData.tmdbId?.let { tmdbToImdbId(it, playbackData.type == "tv") }
+            ?: return false
+        val imdbNumber = rawImdbId.removePrefix("tt")
+
+        val targetUrl = if (playbackData.type == "movie") {
+            "$vidxGoUrl/$imdbNumber"
+        } else {
+            val season = playbackData.seasonNumber ?: return false
+            val episode = playbackData.episodeNumber ?: return false
+            "$vidxGoUrl/$imdbNumber/$season/$episode"
         }
 
-        return runParallelSourceTasks(tasks)
+        return StreamCenterVidxGoExtractor().getUrl(
+            url = targetUrl,
+            referer = "$vidxGoUrl/",
+            subtitleCallback = subtitleCallback,
+            callback = callback,
+        )
     }
 
     private fun buildStreamingCommunityVixSrcUrl(playbackData: StreamingCommunityPlaybackData): String? {
@@ -4501,17 +4534,6 @@ class StreamCenter internal constructor(
             val seasonNumber = playbackData.seasonNumber ?: return null
             val episodeNumber = playbackData.episodeNumber ?: return null
             "https://vixsrc.to/tv/$tmdbId/$seasonNumber/$episodeNumber"
-        }
-    }
-
-    private fun buildStreamingCommunityVidxGoUrl(playbackData: StreamingCommunityPlaybackData): String? {
-        val tmdbId = playbackData.tmdbId ?: return null
-        return if (playbackData.type == "movie") {
-            "https://v.vidxgo.co/$tmdbId"
-        } else {
-            val seasonNumber = playbackData.seasonNumber ?: return null
-            val episodeNumber = playbackData.episodeNumber ?: return null
-            "https://v.vidxgo.co/$tmdbId/$seasonNumber/$episodeNumber"
         }
     }
 
