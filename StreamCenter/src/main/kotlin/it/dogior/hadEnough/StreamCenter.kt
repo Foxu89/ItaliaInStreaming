@@ -1850,6 +1850,7 @@ class StreamCenter internal constructor(
         } else {
             val moviePlaybackData = StreamCenterPlaybackData(
                 tmdbUrl = actualUrl,
+                imdbId = responseImdbId,
                 streamingCommunity = streamingCommunityTitle?.let(streamingCommunityClient::moviePlayback),
                 stremio = stremioContext,
             )
@@ -2079,12 +2080,18 @@ class StreamCenter internal constructor(
                 }
         }
 
-        playbackData?.streamingCommunity
+        val vidxGoImdbId = playbackData?.imdbId
+            ?: playbackData?.streamingCommunity?.imdbId
+        val scPlayback = playbackData?.streamingCommunity
+        vidxGoImdbId
             ?.takeIf { isSourceEnabled(StreamCenterPlugin.PREF_SOURCE_VIDXGO) }
-            ?.let { scPlayback ->
+            ?.let { imdbId ->
                 addTask(StreamCenterPlugin.PREF_SOURCE_VIDXGO) {
                     loadVidxGoLinks(
-                        playbackData = scPlayback,
+                        imdbId = imdbId,
+                        type = scPlayback?.type ?: "movie",
+                        seasonNumber = scPlayback?.seasonNumber,
+                        episodeNumber = scPlayback?.episodeNumber,
                         subtitleCallback = uniqueSubtitleCallback,
                         callback = uniqueCallback,
                     )
@@ -3304,6 +3311,7 @@ class StreamCenter internal constructor(
 
         if (isMovie) {
             val playbackData = StreamCenterPlaybackData(
+                imdbId = media.ids.imdb,
                 animeUnity = resolvedSources.animeUnitySources.firstNotNullOfOrNull { it.firstPlayback() },
                 animeWorld = resolvedSources.animeWorldSources.flatMap { it.firstPlaybacks() },
                 animeSaturn = resolvedSources.animeSaturnSources.flatMap { it.firstPlaybacks() },
@@ -3354,6 +3362,7 @@ class StreamCenter internal constructor(
             metadataEpisodes.map { episode ->
                 newEpisode(
                     StreamCenterPlaybackData(
+                        imdbId = media.ids.imdb,
                         streamingCommunity = streamingCommunityEpisodes[episode.season to episode.episode],
                         stremio = stremioContext.copy(
                             season = episode.season,
@@ -3749,6 +3758,7 @@ class StreamCenter internal constructor(
             .map { (seasonEpisode, playback) ->
                 newEpisode(
                     StreamCenterPlaybackData(
+                        imdbId = playback.imdbId,
                         streamingCommunity = playback,
                         stremio = stremioContext?.copy(
                             season = seasonEpisode.first,
@@ -3810,6 +3820,7 @@ class StreamCenter internal constructor(
                 sourceUrl,
                 TvType.Movie,
                 dataUrl = StreamCenterPlaybackData(
+                    imdbId = title.imdbId,
                     streamingCommunity = playback,
                     stremio = stremioContext,
                 ).toJson(),
@@ -4096,6 +4107,7 @@ class StreamCenter internal constructor(
         }
         return StreamCenterPlaybackData(
             tmdbUrl = tmdbUrl.takeIf(String::isNotBlank),
+            imdbId = streamingCommunity?.imdbId,
             streamingCommunity = streamingCommunity,
             stremio = stremioContext,
         ).toJson()
@@ -4501,20 +4513,20 @@ class StreamCenter internal constructor(
     }
 
     private suspend fun loadVidxGoLinks(
-        playbackData: StreamingCommunityPlaybackData,
+        imdbId: String,
+        type: String,
+        seasonNumber: Int?,
+        episodeNumber: Int?,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val rawImdbId = playbackData.imdbId
-            ?: playbackData.tmdbId?.let { tmdbToImdbId(it, playbackData.type == "tv") }
-            ?: return false
-        val imdbNumber = rawImdbId.removePrefix("tt")
+        val imdbNumber = imdbId.removePrefix("tt")
 
-        val targetUrl = if (playbackData.type == "movie") {
+        val targetUrl = if (type == "movie") {
             "$vidxGoUrl/$imdbNumber"
         } else {
-            val season = playbackData.seasonNumber ?: return false
-            val episode = playbackData.episodeNumber ?: return false
+            val season = seasonNumber ?: return false
+            val episode = episodeNumber ?: return false
             "$vidxGoUrl/$imdbNumber/$season/$episode"
         }
 

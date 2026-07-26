@@ -41,6 +41,7 @@ internal data class StreamCenterAnimeSelection(
 
 internal data class StreamCenterPlaybackData(
     val tmdbUrl: String? = null,
+    val imdbId: String? = null,
     val animeUnity: AnimeUnityPlaybackData? = null,
     val animeWorld: List<AnimeWorldPlaybackData> = emptyList(),
     val animeSaturn: List<AnimeSaturnPlaybackData> = emptyList(),
