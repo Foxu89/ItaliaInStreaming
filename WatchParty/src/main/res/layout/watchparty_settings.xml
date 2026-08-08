@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/wp_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Watch Party"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/wp_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Apri un video, poi crea una stanza o unisciti con un PIN."
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/wp_pin_display"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/wp_create"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Crea stanza" />
+
+    <EditText
+        android:id="@+id/wp_pin_input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:inputType="number"
+        android:maxLength="6"
+        android:hint="Inserisci il PIN dell'amico" />
+
+    <Button
+        android:id="@+id/wp_join"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Unisciti alla stanza" />
+
+    <Button
+        android:id="@+id/wp_leave"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Esci dalla stanza"
+        android:visibility="gone" />
+
+</LinearLayout>
