@@ -12,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -150,7 +151,7 @@ class WatchPartyManager {
         pollJob = scope.launch {
             while (isActive) {
                 delay(POLL_INTERVAL_MS)
-                pollLocalPlayer()
+                withContext(Dispatchers.Main) { pollLocalPlayer() }
             }
         }
     }
