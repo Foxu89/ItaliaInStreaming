@@ -46,7 +46,7 @@ class WatchPartyManager {
         private const val GATE_SAFETY_MS = 3500L
 
         /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento. */
-        const val DEFAULT_RELAY_URL = "wss://diegon7771.bonto.run/room"
+        const val DEFAULT_RELAY_URL = "wss://watchparty-relay.diegon7771.workers.dev/room"
     }
 
     var role: Role = Role.IDLE
