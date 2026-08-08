@@ -6,8 +6,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Switch
 import android.widget.TextView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.plugins.Plugin
 import it.dogior.hadEnough.BuildConfig // namespace del modulo, vedi build.gradle.kts root
@@ -28,6 +30,11 @@ class WatchPartySettingsFragment(
         return inflater.inflate(layout, container, false)
     }
 
+    private fun View.makeTvCompatible() {
+        val outlineId = plugin.resources!!.getIdentifier("outline", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        this.background = plugin.resources!!.getDrawable(outlineId, null)
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
@@ -40,6 +47,17 @@ class WatchPartySettingsFragment(
         val pinInput = root.findView<EditText>("wp_pin_input")
         val joinBtn = root.findView<Button>("wp_join")
         val leaveBtn = root.findView<Button>("wp_leave")
+        val invisibleSwitch = root.findView<Switch>("wp_invisible_button")
+
+        listOf(createBtn, joinBtn, leaveBtn).forEach { it.makeTvCompatible() }
+
+        invisibleSwitch.isChecked = CloudStreamApp.getKey("wp_button_invisible") == "true"
+        invisibleSwitch.setOnCheckedChangeListener { _, checked ->
+            CloudStreamApp.setKey(
+                "wp_button_invisible",
+                if (checked) "true" else "false"
+            )
+        }
 
         fun refreshUiForActiveRoom() {
             if (manager.role != WatchPartyManager.Role.IDLE) {

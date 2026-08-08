@@ -7,7 +7,10 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.CommonActivity
+import com.lagradost.cloudstream3.plugins.Plugin
+import it.dogior.hadEnough.BuildConfig
 
 /**
  * Aggiunge un piccolo FAB sopra il decorView dell'activity, visibile solo
@@ -19,12 +22,15 @@ import com.lagradost.cloudstream3.CommonActivity
  * (PlayerAccess.isPlayerScreenActive) perché non esiste un evento pubblico
  * per l'apertura/chiusura del player.
  */
-class WatchPartyOverlay(private val onClick: () -> Unit) {
+class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> Unit) {
 
     private val handler = Handler(Looper.getMainLooper())
     private var fab: FloatingActionButton? = null
     private var attachedActivity: Activity? = null
     private var running = false
+
+    private fun isButtonInvisible(): Boolean =
+        CloudStreamApp.getKey("wp_button_invisible") == "true"
 
     private val tick = object : Runnable {
         override fun run() {
@@ -58,13 +64,18 @@ class WatchPartyOverlay(private val onClick: () -> Unit) {
             addFab(activity)
         } else if (!shouldShow && fab != null) {
             removeFab()
+        } else if (fab != null) {
+            fab?.let { updateVisibility(it) }
         }
     }
 
     private fun addFab(activity: Activity) {
         val decor = activity.window?.decorView as? ViewGroup ?: return
         val button = FloatingActionButton(activity).apply {
-            setImageResource(android.R.drawable.ic_menu_share)
+            val iconId = plugin.resources?.getIdentifier(
+                "watchparty_icon", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME
+            )
+            setImageResource(if (iconId?.let { it != 0 } == true) iconId else android.R.drawable.ic_menu_share)
             setOnClickListener { onClick() }
         }
         val params = FrameLayout.LayoutParams(
@@ -78,7 +89,12 @@ class WatchPartyOverlay(private val onClick: () -> Unit) {
         runCatching { decor.addView(button, params) }.onSuccess {
             fab = button
             attachedActivity = activity
+            updateVisibility(button)
         }
+    }
+
+    private fun updateVisibility(button: FloatingActionButton) {
+        button.alpha = if (isButtonInvisible()) 0f else 1f
     }
 
     private fun removeFab() {

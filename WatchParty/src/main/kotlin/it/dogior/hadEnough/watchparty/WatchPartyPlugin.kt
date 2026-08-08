@@ -20,7 +20,7 @@ class WatchPartyPlugin : Plugin() {
     private lateinit var overlay: WatchPartyOverlay
 
     override fun load(context: Context) {
-        overlay = WatchPartyOverlay(onClick = { openSettingsSheet() })
+        overlay = WatchPartyOverlay(plugin = this, onClick = { openSettingsSheet() })
         overlay.start()
     }
 
