@@ -71,11 +71,14 @@ class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> U
 
     private fun addFab(activity: Activity) {
         val decor = activity.window?.decorView as? ViewGroup ?: return
+        val iconDrawable = runCatching {
+            val res = plugin.resources ?: return@runCatching null
+            val id = res.getIdentifier("watchparty_icon", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+            if (id != 0) res.getDrawable(id, null) else null
+        }.getOrNull()
         val button = FloatingActionButton(activity).apply {
-            val iconId = plugin.resources?.getIdentifier(
-                "watchparty_icon", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME
-            )
-            setImageResource(if (iconId?.let { it != 0 } == true) iconId else android.R.drawable.ic_menu_share)
+            if (iconDrawable != null) setImageDrawable(iconDrawable)
+            else setImageResource(android.R.drawable.ic_menu_share)
             setOnClickListener { onClick() }
         }
         val params = FrameLayout.LayoutParams(
