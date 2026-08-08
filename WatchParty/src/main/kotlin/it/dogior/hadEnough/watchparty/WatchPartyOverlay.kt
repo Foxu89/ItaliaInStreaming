@@ -30,7 +30,7 @@ class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> U
     private var running = false
 
     private fun isButtonInvisible(): Boolean =
-        CloudStreamApp.getKey("wp_button_invisible") == "true"
+        CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
 
     private val tick = object : Runnable {
         override fun run() {

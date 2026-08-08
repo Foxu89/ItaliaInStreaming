@@ -51,7 +51,7 @@ class WatchPartySettingsFragment(
 
         listOf(createBtn, joinBtn, leaveBtn).forEach { it.makeTvCompatible() }
 
-        invisibleSwitch.isChecked = CloudStreamApp.getKey("wp_button_invisible") == "true"
+        invisibleSwitch.isChecked = CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
         invisibleSwitch.setOnCheckedChangeListener { _, checked ->
             CloudStreamApp.setKey(
                 "wp_button_invisible",
