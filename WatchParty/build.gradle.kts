@@ -1,8 +1,15 @@
 @file:Suppress("UnstableApiUsage")
 
+plugins {
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.4.0"
+}
+
 dependencies {
     implementation("com.google.android.material:material:1.4.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0") // WebSocket puro Kotlin, nessuna libreria nativa
+    // compileOnly: solo per compilare contro le classi app; a runtime vengono dall'app
+    compileOnly("androidx.navigation:navigation-fragment-ktx:2.7.7")
+    compileOnly("com.jaredrummler:colorpicker:1.1.0")
 }
 
 // usa un intero per il numero di versione
