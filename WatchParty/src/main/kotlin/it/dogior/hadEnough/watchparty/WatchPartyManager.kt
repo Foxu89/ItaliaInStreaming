@@ -39,11 +39,14 @@ class WatchPartyManager {
     enum class Role { IDLE, HOST, GUEST }
 
     companion object {
-        private const val POLL_INTERVAL_MS = 400L
-        private const val ECHO_WINDOW_MS = 900L
+        private const val POLL_INTERVAL_MS = 200L
+        // Basta coprire il primo tick dopo aver applicato un comando remoto:
+        // da lì in poi lastKnownPosition riflette già il nuovo valore, quindi
+        // non serve una finestra lunga (era 900ms, bloccava click legittimi).
+        private const val ECHO_WINDOW_MS = 500L
         private const val SEEK_JUMP_THRESHOLD_MS = 1200L
         private const val RESYNC_THRESHOLD_MS = 1500L
-        private const val GATE_SAFETY_MS = 3500L
+        private const val HEARTBEAT_INTERVAL_MS = 6000L
 
         /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento. */
         const val DEFAULT_RELAY_URL = "wss://watchparty-relay.diegon7771.workers.dev/room"
@@ -56,7 +59,6 @@ class WatchPartyManager {
 
     var onStatusText: ((String) -> Unit)? = null
     var onPeerConnected: ((Boolean) -> Unit)? = null
-    var onSyncGateChanged: ((Boolean) -> Unit)? = null
     var onEpisodeHint: ((String) -> Unit)? = null
 
     val isConnected: Boolean get() = socket?.isOpen == true
@@ -67,16 +69,13 @@ class WatchPartyManager {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var pollJob: Job? = null
+    private var heartbeatJob: Job? = null
 
     @Volatile private var lastRemoteCommandMs = 0L
 
     // ultimo stato locale noto, per rilevare le transizioni via polling
     private var lastKnownPlaying: Boolean? = null
     private var lastKnownPosition: Long = 0L
-
-    // gate di risincronizzazione dopo un seek: entrambi in pausa finché non sono pronti
-    private var gateActive = false
-    private var pendingResumePlaying = false
 
     fun createRoom(relayUrl: String = DEFAULT_RELAY_URL): String {
         this.relayUrl = relayUrl
@@ -85,6 +84,7 @@ class WatchPartyManager {
         currentPin = pin
         connectSocket(pin)
         startPolling()
+        startHeartbeat()
         return pin
     }
 
@@ -94,6 +94,7 @@ class WatchPartyManager {
         currentPin = pin
         connectSocket(pin)
         startPolling()
+        startHeartbeat()
     }
 
     fun leaveRoom() {
@@ -104,11 +105,12 @@ class WatchPartyManager {
     fun release() {
         pollJob?.cancel()
         pollJob = null
+        heartbeatJob?.cancel()
+        heartbeatJob = null
         socket?.close()
         socket = null
         role = Role.IDLE
         currentPin = null
-        gateActive = false
         lastKnownPlaying = null
     }
 
@@ -156,6 +158,17 @@ class WatchPartyManager {
         }
     }
 
+    /** Correzione periodica leggera del drift, senza pausa forzata: solo se lo scarto è reale. */
+    private fun startHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            while (isActive) {
+                delay(HEARTBEAT_INTERVAL_MS)
+                if (role == Role.HOST) withContext(Dispatchers.Main) { sendSyncState() }
+            }
+        }
+    }
+
     private fun pollLocalPlayer() {
         if (role == Role.IDLE || !isConnected) return
         val player = PlayerAccess.currentPlayer() ?: return
@@ -163,7 +176,9 @@ class WatchPartyManager {
         val playing = player.getIsPlaying()
         val position = player.getPosition() ?: return
 
-        // ignora le variazioni che abbiamo causato noi applicando un comando remoto
+        // ignora SOLO il tick immediatamente successivo a un comando che abbiamo
+        // applicato noi da remoto (evita di rimandarlo indietro come se fosse
+        // un'azione dell'utente locale). Non blocca i tick successivi.
         val withinEchoWindow = System.currentTimeMillis() - lastRemoteCommandMs < ECHO_WINDOW_MS
 
         val prevPlaying = lastKnownPlaying
@@ -171,23 +186,21 @@ class WatchPartyManager {
         lastKnownPlaying = playing
         lastKnownPosition = position
 
-        if (withinEchoWindow || gateActive) return
+        if (withinEchoWindow) return
         if (prevPlaying == null) return // primo tick, solo inizializza
 
         // seek: salto di posizione più grande di quanto ci si aspetterebbe dal solo
-        // scorrere del tempo tra un tick e l'altro
-        val expectedDrift = POLL_INTERVAL_MS + 500L
+        // scorrere del tempo tra un tick e l'altro. Ogni tick è valutato in modo
+        // indipendente: click ravvicinati ma su tick diversi vengono inviati tutti.
+        val expectedDrift = POLL_INTERVAL_MS + 400L
         if (abs(position - prevPosition) > expectedDrift.coerceAtLeast(SEEK_JUMP_THRESHOLD_MS)) {
-            startGateLocal(playing)
-            mainHandler.post {
-                socket?.send(WatchPartyMessage(type = "SEEK", position = position, playing = playing))
-            }
+            socket?.send(WatchPartyMessage(type = "SEEK", position = position, playing = playing))
             return
         }
 
         // play/pausa
         if (playing != prevPlaying) {
-            mainHandler.post { socket?.send(if (playing) "PLAY" else "PAUSE") }
+            socket?.send(if (playing) "PLAY" else "PAUSE")
         }
     }
 
@@ -212,34 +225,40 @@ class WatchPartyManager {
 
             "SYNC_STATE" -> applyRemote {
                 val player = PlayerAccess.currentPlayer() ?: return@applyRemote
-                msg.position?.let { player.seekTo(it, PlayerEventSource.Sync) }
-                player.handleEvent(
-                    if (msg.playing == true) CSPlayerEvent.Play else CSPlayerEvent.Pause,
-                    PlayerEventSource.Sync
-                )
+                val current = player.getPosition() ?: 0L
+                // heartbeat periodico: correggi solo se lo scarto è reale, niente
+                // seek continui che darebbero fastidio durante la visione normale
+                msg.position?.let {
+                    if (abs(current - it) > RESYNC_THRESHOLD_MS) player.seekTo(it, PlayerEventSource.Sync)
+                }
+                if (msg.playing != null && msg.playing != player.getIsPlaying()) {
+                    player.handleEvent(
+                        if (msg.playing) CSPlayerEvent.Play else CSPlayerEvent.Pause,
+                        PlayerEventSource.Sync
+                    )
+                }
             }
 
             "PLAY" -> applyRemote {
-                if (gateActive) return@applyRemote
                 PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.Play, PlayerEventSource.Sync)
             }
 
             "PAUSE" -> applyRemote {
-                if (gateActive) return@applyRemote
                 PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync)
             }
 
-            "SEEK" -> {
-                val pos = msg.position ?: return
-                applyRemote {
-                    val player = PlayerAccess.currentPlayer() ?: return@applyRemote
-                    val current = player.getPosition() ?: 0L
-                    if (abs(current - pos) > RESYNC_THRESHOLD_MS) {
-                        player.seekTo(pos, PlayerEventSource.Sync)
-                    }
-                    player.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync)
+            "SEEK" -> applyRemote {
+                val player = PlayerAccess.currentPlayer() ?: return@applyRemote
+                val pos = msg.position ?: return@applyRemote
+                player.seekTo(pos, PlayerEventSource.Sync)
+                // rispetta lo stato play/pausa che aveva chi ha fatto il seek,
+                // niente più pausa forzata: era la causa principale della lentezza percepita
+                if (msg.playing != null && msg.playing != player.getIsPlaying()) {
+                    player.handleEvent(
+                        if (msg.playing) CSPlayerEvent.Play else CSPlayerEvent.Pause,
+                        PlayerEventSource.Sync
+                    )
                 }
-                startGateRemote(msg.playing == true)
             }
 
             "EPISODE_HINT" -> msg.title?.let { onEpisodeHint?.invoke(it) }
@@ -268,41 +287,8 @@ class WatchPartyManager {
         socket?.send(WatchPartyMessage(type = "EPISODE_HINT", title = title))
     }
 
-    // ---------------------------------------------------------------------
-    // Gate di risincronizzazione dopo un seek (pausa entrambi finché pronti)
-    // ---------------------------------------------------------------------
-
-    private fun startGateLocal(playing: Boolean) {
-        gateActive = true
-        pendingResumePlaying = playing
-        onSyncGateChanged?.invoke(true)
-        PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync)
-        scheduleGateSafety()
-    }
-
-    private fun startGateRemote(playing: Boolean) {
-        gateActive = true
-        pendingResumePlaying = playing
-        onSyncGateChanged?.invoke(true)
-        scheduleGateSafety()
-    }
-
-    private fun scheduleGateSafety() {
-        // rete lenta o messaggio perso: non restare mai bloccati in pausa per sempre
-        mainHandler.postDelayed({
-            if (!gateActive) return@postDelayed
-            gateActive = false
-            onSyncGateChanged?.invoke(false)
-            lastRemoteCommandMs = System.currentTimeMillis()
-            PlayerAccess.currentPlayer()?.handleEvent(
-                if (pendingResumePlaying) CSPlayerEvent.Play else CSPlayerEvent.Pause,
-                PlayerEventSource.Sync
-            )
-        }, GATE_SAFETY_MS)
-    }
-
     private fun applyRemote(block: () -> Unit) {
         lastRemoteCommandMs = System.currentTimeMillis()
-        block()
+        mainHandler.post(block)
     }
 }
