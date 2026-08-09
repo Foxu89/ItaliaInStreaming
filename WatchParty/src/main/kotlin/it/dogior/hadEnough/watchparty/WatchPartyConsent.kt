@@ -63,7 +63,7 @@ object WatchPartyConsent {
             setPadding(padding, padding, padding, padding)
         }
 
-        val text = TextView(context).apply {
+        val messageView = TextView(context).apply {
             text = "Watch Party invia i comandi di riproduzione (play, pausa, " +
                 "posizione, cambio episodio) a un server di relay esterno " +
                 "(Cloudflare Worker), che li inoltra all'altro utente della " +
@@ -79,7 +79,7 @@ object WatchPartyConsent {
             setPadding(0, padding, 0, 0)
         }
 
-        container.addView(text)
+        container.addView(messageView)
         container.addView(checkBox)
 
         val dialog = AlertDialog.Builder(context)
