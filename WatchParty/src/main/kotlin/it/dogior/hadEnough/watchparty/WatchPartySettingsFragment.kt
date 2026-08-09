@@ -39,7 +39,15 @@ class WatchPartySettingsFragment(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? = try {
+        android.util.Log.d("WatchParty", "📄 WatchPartySettingsFragment.onCreateView() inizio")
+        android.util.Log.d("WatchParty", "📦 plugin.resources = ${plugin.resources}")
+
         val root = getLayout("watchparty_settings", inflater, container)
+        android.util.Log.d("WatchParty", "✅ Layout 'watchparty_settings' inflazionato: $root")
+        // sfondo esplicito: se il tema del Material Components non passa
+        // correttamente attraverso le risorse del plugin, il foglio risulta
+        // trasparente pur essendo presente — non fidiamoci del tema qui.
+        root.setBackgroundColor(android.graphics.Color.parseColor("#1E1E1E"))
 
         val status = root.findView<TextView>("wp_status")
         val pinDisplay = root.findView<TextView>("wp_pin_display")
@@ -48,6 +56,11 @@ class WatchPartySettingsFragment(
         val joinBtn = root.findView<Button>("wp_join")
         val leaveBtn = root.findView<Button>("wp_leave")
         val invisibleSwitch = root.findView<Switch>("wp_invisible_button")
+        android.util.Log.d(
+            "WatchParty",
+            "🔗 View trovate: status=$status pinDisplay=$pinDisplay createBtn=$createBtn " +
+                "pinInput=$pinInput joinBtn=$joinBtn leaveBtn=$leaveBtn invisibleSwitch=$invisibleSwitch"
+        )
 
         listOf(createBtn, joinBtn, leaveBtn).forEach { it.makeTvCompatible() }
 
@@ -130,11 +143,12 @@ class WatchPartySettingsFragment(
         }
         (root as? android.view.ViewGroup)?.addView(consentLabel)
 
+        android.util.Log.d("WatchParty", "🏁 onCreateView() completato con successo, ritorno la view")
         root
     } catch (e: Exception) {
         // prima era silenzioso: se le impostazioni non si aprono più,
         // controlla Logcat per "WatchParty" e vedrai lo stack trace esatto qui
-        android.util.Log.e("WatchParty", "Errore aprendo le impostazioni", e)
+        android.util.Log.e("WatchParty", "💥 ECCEZIONE in onCreateView() — è QUESTA la causa della schermata trasparente/vuota", e)
         null
     }
 }

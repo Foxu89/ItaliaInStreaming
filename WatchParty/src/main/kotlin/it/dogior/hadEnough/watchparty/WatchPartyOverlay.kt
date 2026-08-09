@@ -60,9 +60,11 @@ class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> U
         }
         val shouldShow = PlayerAccess.isPlayerScreenActive()
         if (shouldShow && (fab == null || attachedActivity !== activity)) {
+            android.util.Log.d("WatchParty", "➕ WatchPartyOverlay: schermata player rilevata, aggiungo il FAB")
             removeFab()
             addFab(activity)
         } else if (!shouldShow && fab != null) {
+            android.util.Log.d("WatchParty", "➖ WatchPartyOverlay: schermata player chiusa, rimuovo il FAB")
             removeFab()
         } else if (fab != null) {
             fab?.let { updateVisibility(it) }
@@ -97,7 +99,11 @@ class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> U
     }
 
     private fun updateVisibility(button: FloatingActionButton) {
-        button.alpha = if (isButtonInvisible()) 0f else 1f
+        val invisible = isButtonInvisible()
+        if (invisible) {
+            android.util.Log.d("WatchParty", "🙈 WatchPartyOverlay: pulsante impostato INVISIBILE (wp_button_invisible=true) — resta cliccabile ma non si vede")
+        }
+        button.alpha = if (invisible) 0f else 1f
     }
 
     private fun removeFab() {

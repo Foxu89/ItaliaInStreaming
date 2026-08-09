@@ -1,9 +1,13 @@
 package it.dogior.hadEnough.watchparty
 
 import android.content.Context
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 import com.lagradost.cloudstream3.plugins.Plugin
+
+private const val TAG = "WatchParty"
 
 /**
  * Plugin sperimentale di riproduzione sincronizzata (Watch Party).
@@ -20,24 +24,39 @@ class WatchPartyPlugin : Plugin() {
     private lateinit var overlay: WatchPartyOverlay
 
     override fun load(context: Context) {
-        overlay = WatchPartyOverlay(plugin = this, onClick = { openSettingsSheet() })
+        Log.d(TAG, "🔌 WatchPartyPlugin.load() chiamato")
+        overlay = WatchPartyOverlay(plugin = this, onClick = {
+            Log.d(TAG, "👆 FAB del player cliccato")
+            openSettingsSheet()
+        })
         overlay.start()
         WatchPartyConsent.attach()
     }
 
     override fun beforeUnload() {
+        Log.d(TAG, "🔻 WatchPartyPlugin.beforeUnload()")
         overlay.stop()
         manager.release()
     }
 
     private fun openSettingsSheet() {
-        val activity = com.lagradost.cloudstream3.CommonActivity.activity as? AppCompatActivity ?: return
+        val rawActivity = CommonActivity.activity
+        Log.d(TAG, "🔧 openSettingsSheet(): CommonActivity.activity = ${rawActivity?.let { it::class.java.name } ?: "null"}")
+        val activity = rawActivity as? AppCompatActivity
+        if (activity == null) {
+            Log.e(TAG, "❌ openSettingsSheet(): il cast ad AppCompatActivity è fallito, esco senza fare nulla (era questo il bug del 'non succede niente'?)")
+            return
+        }
+        Log.d(TAG, "📄 openSettingsSheet(): apro la BottomSheetDialogFragment")
         WatchPartySettingsFragment(this, manager).show(activity.supportFragmentManager, "WatchParty")
     }
 
     init {
         // Chiamato quando l'utente apre le impostazioni del plugin dalla
         // schermata Estensioni: stesso ingresso usato dal FAB sopra il player.
-        this.openSettings = { openSettingsSheet() }
+        this.openSettings = {
+            Log.d(TAG, "👆 'Impostazioni' aperte dalla lista Estensioni")
+            openSettingsSheet()
+        }
     }
 }
