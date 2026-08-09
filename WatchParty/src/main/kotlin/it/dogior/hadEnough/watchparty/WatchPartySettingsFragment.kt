@@ -132,6 +132,9 @@ class WatchPartySettingsFragment(
 
         root
     } catch (e: Exception) {
+        // prima era silenzioso: se le impostazioni non si aprono più,
+        // controlla Logcat per "WatchParty" e vedrai lo stack trace esatto qui
+        android.util.Log.e("WatchParty", "Errore aprendo le impostazioni", e)
         null
     }
 }

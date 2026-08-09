@@ -45,7 +45,11 @@ object WatchPartyConsent {
 
     /** Registrata una volta sola in WatchPartyPlugin.load(). */
     fun attach() {
-        MainActivity.reloadHomeEvent += { showIfNeeded() }
+        // reloadHomeEvent scatta SOLO quando l'utente cambia account e la home
+        // page è diversa dalla precedente — praticamente mai. afterPluginsLoadedEvent
+        // invece è invocato in modo affidabile da PluginManager ad ogni avvio
+        // dell'app (e ad ogni reload manuale dei plugin dalle Impostazioni).
+        MainActivity.afterPluginsLoadedEvent += { showIfNeeded() }
     }
 
     private fun showIfNeeded() {
