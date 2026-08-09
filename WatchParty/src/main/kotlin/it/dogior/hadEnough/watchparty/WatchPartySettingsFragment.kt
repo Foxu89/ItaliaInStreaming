@@ -133,6 +133,11 @@ class WatchPartySettingsFragment(
 
         // Riga di stato sul consenso privacy, aggiunta a runtime per non dover
         // toccare il layout XML (bundlato nelle risorse del plugin).
+        // NOTA: root qui è un NestedScrollView (vedi watchparty_settings.xml),
+        // che accetta UN SOLO figlio diretto — aggiungerci una view causava
+        // un crash silenzioso (catturato dal try/catch sotto) che rendeva
+        // la bottom sheet vuota/trasparente. Aggiungo invece al contenitore
+        // interno (la LinearLayout dentro lo scroll), che di figli ne accetta quanti vuoi.
         val consentLabel = TextView(root.context).apply {
             textSize = 11f
             alpha = 0.6f
@@ -141,7 +146,13 @@ class WatchPartySettingsFragment(
             else "Termini sul relay non ancora accettati"
             setPadding(0, (16 * resources.displayMetrics.density).toInt(), 0, 0)
         }
-        (root as? android.view.ViewGroup)?.addView(consentLabel)
+        val innerContainer = (root as? android.view.ViewGroup)?.getChildAt(0) as? android.view.ViewGroup
+        if (innerContainer != null) {
+            innerContainer.addView(consentLabel)
+            android.util.Log.d("WatchParty", "✅ Label consenso aggiunta al contenitore interno (${innerContainer::class.java.simpleName})")
+        } else {
+            android.util.Log.e("WatchParty", "⚠️ Non ho trovato un contenitore interno valido, salto la label del consenso (non blocco l'apertura per questo)")
+        }
 
         android.util.Log.d("WatchParty", "🏁 onCreateView() completato con successo, ritorno la view")
         root
