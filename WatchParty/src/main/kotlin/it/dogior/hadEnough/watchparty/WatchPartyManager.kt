@@ -38,6 +38,9 @@ class WatchPartyManager {
 
     enum class Role { IDLE, HOST, GUEST }
 
+    /** Stato di connessione al relay, indipendente da "l'amico è nella stanza". */
+    enum class ConnectionState { DISCONNESSO, CONNESSIONE_IN_CORSO, CONNESSO, RICONNESSIONE_IN_CORSO }
+
     companion object {
         private const val POLL_INTERVAL_MS = 200L
         // Basta coprire il primo tick dopo aver applicato un comando remoto:
@@ -48,6 +51,8 @@ class WatchPartyManager {
         private const val RESYNC_THRESHOLD_MS = 1500L
         private const val HEARTBEAT_INTERVAL_MS = 6000L
         private const val SEEK_SEND_DEBOUNCE_MS = 220L
+        private const val RECONNECT_BASE_DELAY_MS = 1000L
+        private const val RECONNECT_MAX_DELAY_MS = 15000L
 
         /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento. */
         const val DEFAULT_RELAY_URL = "wss://watchparty-relay.diegon7771.workers.dev/room"
@@ -57,15 +62,27 @@ class WatchPartyManager {
         private set
     var currentPin: String? = null
         private set
+    var connectionState: ConnectionState = ConnectionState.DISCONNESSO
+        private set(value) {
+            field = value
+            mainHandler.post { onConnectionStateChanged?.invoke(value) }
+        }
 
     var onStatusText: ((String) -> Unit)? = null
     var onPeerConnected: ((Boolean) -> Unit)? = null
+    var onConnectionStateChanged: ((ConnectionState) -> Unit)? = null
     var onEpisodeHint: ((String) -> Unit)? = null
 
     val isConnected: Boolean get() = socket?.isOpen == true
 
     private var socket: WatchPartySocket? = null
     private var relayUrl: String = DEFAULT_RELAY_URL
+
+    // false quando l'utente esce volontariamente (leaveRoom/release): in quel
+    // caso NON dobbiamo riconnetterci. true finché la stanza è "voluta" attiva.
+    private var shouldStayConnected = false
+    private var reconnectAttempt = 0
+    private var reconnectJob: Job? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -83,6 +100,8 @@ class WatchPartyManager {
         val pin = (100000..999999).random(Random(System.nanoTime())).toString()
         role = Role.HOST
         currentPin = pin
+        shouldStayConnected = true
+        reconnectAttempt = 0
         connectSocket(pin)
         startPolling()
         startHeartbeat()
@@ -93,17 +112,23 @@ class WatchPartyManager {
         this.relayUrl = relayUrl
         role = Role.GUEST
         currentPin = pin
+        shouldStayConnected = true
+        reconnectAttempt = 0
         connectSocket(pin)
         startPolling()
         startHeartbeat()
     }
 
     fun leaveRoom() {
+        shouldStayConnected = false
         if (isConnected) socket?.send("LEAVE_ROOM")
         release()
     }
 
     fun release() {
+        shouldStayConnected = false
+        reconnectJob?.cancel()
+        reconnectJob = null
         pollJob?.cancel()
         pollJob = null
         heartbeatJob?.cancel()
@@ -113,17 +138,23 @@ class WatchPartyManager {
         role = Role.IDLE
         currentPin = null
         lastKnownPlaying = null
+        connectionState = ConnectionState.DISCONNESSO
     }
 
     // ---------------------------------------------------------------------
-    // Connessione
+    // Connessione + riconnessione automatica
     // ---------------------------------------------------------------------
 
     private fun connectSocket(pin: String) {
+        connectionState = if (reconnectAttempt > 0) ConnectionState.RICONNESSIONE_IN_CORSO
+        else ConnectionState.CONNESSIONE_IN_CORSO
+
         socket = WatchPartySocket(
             baseWsUrl = relayUrl,
             onOpen = {
                 mainHandler.post {
+                    reconnectAttempt = 0
+                    connectionState = ConnectionState.CONNESSO
                     onStatusText?.invoke("Connesso, in attesa dell'amico…")
                     onPeerConnected?.invoke(true)
                     if (role == Role.GUEST) socket?.send("SYNC_REQUEST")
@@ -134,15 +165,37 @@ class WatchPartyManager {
                 mainHandler.post {
                     onStatusText?.invoke("Connessione chiusa")
                     onPeerConnected?.invoke(false)
+                    scheduleReconnect()
                 }
             },
             onFailure = { t ->
                 mainHandler.post {
                     onStatusText?.invoke("Errore di connessione: ${t.message}")
                     onPeerConnected?.invoke(false)
+                    scheduleReconnect()
                 }
             },
         ).also { it.connect(pin) }
+    }
+
+    /** Riprova con backoff esponenziale (1s, 2s, 4s, 8s… fino a un tetto di 15s). */
+    private fun scheduleReconnect() {
+        if (!shouldStayConnected) return // uscita volontaria, non riconnettere
+        val pin = currentPin ?: return
+
+        connectionState = ConnectionState.RICONNESSIONE_IN_CORSO
+        reconnectAttempt++
+        val delayMs = (RECONNECT_BASE_DELAY_MS * (1 shl (reconnectAttempt - 1).coerceAtMost(4)))
+            .coerceAtMost(RECONNECT_MAX_DELAY_MS)
+
+        onStatusText?.invoke("Connessione persa, riprovo tra ${delayMs / 1000}s… (tentativo $reconnectAttempt)")
+
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            delay(delayMs)
+            if (!shouldStayConnected) return@launch
+            withContext(Dispatchers.Main) { connectSocket(pin) }
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -286,6 +339,11 @@ class WatchPartyManager {
                 onPeerConnected?.invoke(false)
             }
         }
+    }
+
+    /** Rete di sicurezza manuale: forza un resync immediato invece di aspettare l'heartbeat. */
+    fun requestResyncNow() {
+        if (role == Role.HOST) sendSyncState() else socket?.send("SYNC_REQUEST")
     }
 
     private fun sendSyncState() {

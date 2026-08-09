@@ -46,11 +46,13 @@ class WatchPartySettingsFragment(
         android.util.Log.d("WatchParty", "✅ Layout 'watchparty_settings' inflazionato: $root")
 
         val status = root.findView<TextView>("wp_status")
+        val statusDot = root.findView<View>("wp_status_dot")
         val pinDisplay = root.findView<TextView>("wp_pin_display")
         val createBtn = root.findView<Button>("wp_create")
         val pinInput = root.findView<EditText>("wp_pin_input")
         val joinBtn = root.findView<Button>("wp_join")
         val leaveBtn = root.findView<Button>("wp_leave")
+        val resyncBtn = root.findView<Button>("wp_resync")
         val invisibleSwitch = root.findView<Switch>("wp_invisible_button")
         android.util.Log.d(
             "WatchParty",
@@ -74,12 +76,24 @@ class WatchPartySettingsFragment(
                 pinInput.visibility = View.GONE
                 joinBtn.visibility = View.GONE
                 leaveBtn.visibility = View.VISIBLE
+                resyncBtn.visibility = View.VISIBLE
                 if (manager.role == WatchPartyManager.Role.HOST) {
                     pinDisplay.visibility = View.VISIBLE
                     pinDisplay.text = "PIN: ${manager.currentPin}"
                 }
             }
         }
+
+        fun updateStatusDot(state: WatchPartyManager.ConnectionState) {
+            val res = when (state) {
+                WatchPartyManager.ConnectionState.CONNESSO -> android.R.drawable.presence_online
+                WatchPartyManager.ConnectionState.CONNESSIONE_IN_CORSO,
+                WatchPartyManager.ConnectionState.RICONNESSIONE_IN_CORSO -> android.R.drawable.presence_away
+                WatchPartyManager.ConnectionState.DISCONNESSO -> android.R.drawable.presence_offline
+            }
+            statusDot.setBackgroundResource(res)
+        }
+        updateStatusDot(manager.connectionState)
 
         if (!PlayerAccess.isPlayerScreenActive()) {
             status.text = "Apri prima un video, poi torna qui per creare/unirti alla stanza."
@@ -91,6 +105,9 @@ class WatchPartySettingsFragment(
                 status.text = if (connected) "Amico connesso, riproduzione sincronizzata."
                 else "In attesa di connessione…"
             }
+        }
+        manager.onConnectionStateChanged = { state ->
+            activity?.runOnUiThread { updateStatusDot(state) }
         }
 
         createBtn.setOnClickListener {
@@ -123,6 +140,11 @@ class WatchPartySettingsFragment(
         leaveBtn.setOnClickListener {
             manager.leaveRoom()
             dismiss()
+        }
+
+        resyncBtn.setOnClickListener {
+            manager.requestResyncNow()
+            showToast("Risincronizzazione richiesta")
         }
 
         refreshUiForActiveRoom()
