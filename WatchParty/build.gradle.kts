@@ -13,7 +13,7 @@ dependencies {
 }
 
 // usa un intero per il numero di versione
-version = 5
+version = 6
 
 android {
     buildFeatures {

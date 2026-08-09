@@ -47,6 +47,7 @@ class WatchPartyManager {
         private const val SEEK_JUMP_THRESHOLD_MS = 1200L
         private const val RESYNC_THRESHOLD_MS = 1500L
         private const val HEARTBEAT_INTERVAL_MS = 6000L
+        private const val SEEK_SEND_DEBOUNCE_MS = 220L
 
         /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento. */
         const val DEFAULT_RELAY_URL = "wss://watchparty-relay.diegon7771.workers.dev/room"
@@ -194,7 +195,22 @@ class WatchPartyManager {
         // indipendente: click ravvicinati ma su tick diversi vengono inviati tutti.
         val expectedDrift = POLL_INTERVAL_MS + 400L
         if (abs(position - prevPosition) > expectedDrift.coerceAtLeast(SEEK_JUMP_THRESHOLD_MS)) {
-            socket?.send(WatchPartyMessage(type = "SEEK", position = position, playing = playing))
+            // Piccolo debounce: se l'utente ha appena fatto seek e sta per premere
+            // play (o l'ha già premuto un istante prima), aspettiamo un tick in più
+            // e rileggiamo lo stato al momento dell'invio, invece di fidarci dello
+            // stato letto nell'istante esatto del salto. Evita di spedire un SEEK
+            // con playing=false quando in realtà l'utente ha già premuto play.
+            scope.launch {
+                delay(SEEK_SEND_DEBOUNCE_MS)
+                withContext(Dispatchers.Main) {
+                    val p = PlayerAccess.currentPlayer() ?: return@withContext
+                    val finalPos = p.getPosition() ?: position
+                    val finalPlaying = p.getIsPlaying()
+                    lastKnownPosition = finalPos
+                    lastKnownPlaying = finalPlaying
+                    socket?.send(WatchPartyMessage(type = "SEEK", position = finalPos, playing = finalPlaying))
+                }
+            }
             return
         }
 
@@ -231,7 +247,7 @@ class WatchPartyManager {
                 msg.position?.let {
                     if (abs(current - it) > RESYNC_THRESHOLD_MS) player.seekTo(it, PlayerEventSource.Sync)
                 }
-                if (msg.playing != null && msg.playing != player.getIsPlaying()) {
+                if (msg.playing != null) {
                     player.handleEvent(
                         if (msg.playing) CSPlayerEvent.Play else CSPlayerEvent.Pause,
                         PlayerEventSource.Sync
@@ -251,9 +267,11 @@ class WatchPartyManager {
                 val player = PlayerAccess.currentPlayer() ?: return@applyRemote
                 val pos = msg.position ?: return@applyRemote
                 player.seekTo(pos, PlayerEventSource.Sync)
-                // rispetta lo stato play/pausa che aveva chi ha fatto il seek,
-                // niente più pausa forzata: era la causa principale della lentezza percepita
-                if (msg.playing != null && msg.playing != player.getIsPlaying()) {
+                // Applica lo stato SEMPRE, non solo se getIsPlaying() sembra diverso:
+                // subito dopo seekTo() il player è in transizione (buffering) e
+                // getIsPlaying() può restituire un valore non affidabile in quel
+                // preciso istante. Era la causa del "play che non parte mai".
+                if (msg.playing != null) {
                     player.handleEvent(
                         if (msg.playing) CSPlayerEvent.Play else CSPlayerEvent.Pause,
                         PlayerEventSource.Sync

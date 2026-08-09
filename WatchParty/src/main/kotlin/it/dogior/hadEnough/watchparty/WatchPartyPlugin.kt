@@ -22,6 +22,7 @@ class WatchPartyPlugin : Plugin() {
     override fun load(context: Context) {
         overlay = WatchPartyOverlay(plugin = this, onClick = { openSettingsSheet() })
         overlay.start()
+        WatchPartyConsent.attach()
     }
 
     override fun beforeUnload() {

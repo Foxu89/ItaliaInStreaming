@@ -117,6 +117,19 @@ class WatchPartySettingsFragment(
         }
 
         refreshUiForActiveRoom()
+
+        // Riga di stato sul consenso privacy, aggiunta a runtime per non dover
+        // toccare il layout XML (bundlato nelle risorse del plugin).
+        val consentLabel = TextView(root.context).apply {
+            textSize = 11f
+            alpha = 0.6f
+            val date = WatchPartyConsent.acceptedAtLabel()
+            text = if (date != null) "Termini sul relay accettati il $date"
+            else "Termini sul relay non ancora accettati"
+            setPadding(0, (16 * resources.displayMetrics.density).toInt(), 0, 0)
+        }
+        (root as? android.view.ViewGroup)?.addView(consentLabel)
+
         root
     } catch (e: Exception) {
         null
