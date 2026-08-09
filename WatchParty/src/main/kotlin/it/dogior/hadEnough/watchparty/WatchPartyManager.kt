@@ -5,6 +5,7 @@ import android.os.Looper
 import com.lagradost.cloudstream3.ui.player.CSPlayerEvent
 import com.lagradost.cloudstream3.ui.player.IPlayer
 import com.lagradost.cloudstream3.ui.player.PlayerEventSource
+import com.lagradost.cloudstream3.utils.DataStoreHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -68,12 +69,30 @@ class WatchPartyManager {
             mainHandler.post { onConnectionStateChanged?.invoke(value) }
         }
 
+    /** True SOLO quando l'amico è davvero nella stanza, non solo "io sono connesso al relay". */
+    var peerPresent: Boolean = false
+        private set(value) {
+            field = value
+            mainHandler.post { onPeerConnected?.invoke(value) }
+        }
+
+    /** Nome mostrato per l'amico, valorizzato al primo messaggio "HELLO" ricevuto. */
+    var remotePeerName: String? = null
+        private set
+
     var onStatusText: ((String) -> Unit)? = null
     var onPeerConnected: ((Boolean) -> Unit)? = null
     var onConnectionStateChanged: ((ConnectionState) -> Unit)? = null
     var onEpisodeHint: ((String) -> Unit)? = null
+    var onParticipantsChanged: (() -> Unit)? = null
 
     val isConnected: Boolean get() = socket?.isOpen == true
+
+    /** Nome del profilo CloudStream locale attivo, o "Ospite" se non trovato. */
+    fun localDisplayName(): String {
+        val account = DataStoreHelper.accounts.find { it.keyIndex == DataStoreHelper.selectedKeyIndex }
+        return account?.name?.takeIf { it.isNotBlank() } ?: "Ospite"
+    }
 
     private var socket: WatchPartySocket? = null
     private var relayUrl: String = DEFAULT_RELAY_URL
@@ -139,6 +158,8 @@ class WatchPartyManager {
         currentPin = null
         lastKnownPlaying = null
         connectionState = ConnectionState.DISCONNESSO
+        peerPresent = false
+        remotePeerName = null
     }
 
     // ---------------------------------------------------------------------
@@ -148,6 +169,7 @@ class WatchPartyManager {
     private fun connectSocket(pin: String) {
         connectionState = if (reconnectAttempt > 0) ConnectionState.RICONNESSIONE_IN_CORSO
         else ConnectionState.CONNESSIONE_IN_CORSO
+        peerPresent = false // non sappiamo ancora se l'amico c'è, lo scopriremo dai messaggi
 
         socket = WatchPartySocket(
             baseWsUrl = relayUrl,
@@ -155,8 +177,10 @@ class WatchPartyManager {
                 mainHandler.post {
                     reconnectAttempt = 0
                     connectionState = ConnectionState.CONNESSO
-                    onStatusText?.invoke("Connesso, in attesa dell'amico…")
-                    onPeerConnected?.invoke(true)
+                    onStatusText?.invoke("Connesso al server, in attesa dell'amico…")
+                    // annuncia il nostro nome; se l'altro è già in stanza risponderà
+                    // a sua volta (vedi handleRemoteMessage) e sapremo che è presente
+                    socket?.send(WatchPartyMessage(type = "HELLO", name = localDisplayName()))
                     if (role == Role.GUEST) socket?.send("SYNC_REQUEST")
                 }
             },
@@ -164,14 +188,14 @@ class WatchPartyManager {
             onClosed = {
                 mainHandler.post {
                     onStatusText?.invoke("Connessione chiusa")
-                    onPeerConnected?.invoke(false)
+                    peerPresent = false
                     scheduleReconnect()
                 }
             },
             onFailure = { t ->
                 mainHandler.post {
                     onStatusText?.invoke("Errore di connessione: ${t.message}")
-                    onPeerConnected?.invoke(false)
+                    peerPresent = false
                     scheduleReconnect()
                 }
             },
@@ -278,16 +302,30 @@ class WatchPartyManager {
     // ---------------------------------------------------------------------
 
     private fun handleRemoteMessage(msg: WatchPartyMessage) {
+        // qualsiasi messaggio in arrivo (a parte quelli di uscita) prova che
+        // l'amico è davvero nella stanza, non solo che noi siamo connessi al relay
+        if (msg.type != "PEER_LEFT" && msg.type != "LEAVE_ROOM") {
+            peerPresent = true
+        }
+
         when (msg.type) {
             "PEER_JOINED" -> {
-                onStatusText?.invoke("Amico connesso!")
-                onPeerConnected?.invoke(true)
+                onStatusText?.invoke("Amico connesso, invio il mio nome…")
+                socket?.send(WatchPartyMessage(type = "HELLO", name = localDisplayName()))
                 if (role == Role.HOST) sendSyncState()
             }
 
             "PEER_LEFT" -> {
+                peerPresent = false
+                remotePeerName = null
                 onStatusText?.invoke("L'amico ha lasciato la stanza")
-                onPeerConnected?.invoke(false)
+                onParticipantsChanged?.invoke()
+            }
+
+            "HELLO" -> {
+                remotePeerName = msg.name?.takeIf { it.isNotBlank() } ?: "Amico"
+                onStatusText?.invoke("Amico connesso: $remotePeerName")
+                onParticipantsChanged?.invoke()
             }
 
             "SYNC_REQUEST" -> if (role == Role.HOST) sendSyncState()
@@ -300,6 +338,20 @@ class WatchPartyManager {
                 msg.position?.let {
                     if (abs(current - it) > RESYNC_THRESHOLD_MS) player.seekTo(it, PlayerEventSource.Sync)
                 }
+                if (msg.playing != null) {
+                    player.handleEvent(
+                        if (msg.playing) CSPlayerEvent.Play else CSPlayerEvent.Pause,
+                        PlayerEventSource.Sync
+                    )
+                }
+            }
+
+            "FORCE_SYNC" -> applyRemote {
+                // richiesta ESPLICITA dell'utente (pulsante "Risincronizza ora"):
+                // applica sempre, a differenza di SYNC_STATE che corregge solo
+                // se lo scarto supera la soglia — qui deve avere sempre un effetto visibile
+                val player = PlayerAccess.currentPlayer() ?: return@applyRemote
+                msg.position?.let { player.seekTo(it, PlayerEventSource.Sync) }
                 if (msg.playing != null) {
                     player.handleEvent(
                         if (msg.playing) CSPlayerEvent.Play else CSPlayerEvent.Pause,
@@ -335,15 +387,30 @@ class WatchPartyManager {
             "EPISODE_HINT" -> msg.title?.let { onEpisodeHint?.invoke(it) }
 
             "LEAVE_ROOM" -> {
+                peerPresent = false
+                remotePeerName = null
                 onStatusText?.invoke("L'amico ha lasciato la stanza")
-                onPeerConnected?.invoke(false)
+                onParticipantsChanged?.invoke()
             }
         }
     }
 
-    /** Rete di sicurezza manuale: forza un resync immediato invece di aspettare l'heartbeat. */
+    /**
+     * Rete di sicurezza manuale: forza un resync immediato e SEMPRE applicato
+     * (a differenza dell'heartbeat automatico, che corregge solo se lo scarto
+     * è reale). Un pulsante che "a volte non fa nulla" confonde: questo ha
+     * sempre un effetto visibile dall'altra parte.
+     */
     fun requestResyncNow() {
-        if (role == Role.HOST) sendSyncState() else socket?.send("SYNC_REQUEST")
+        val player = PlayerAccess.currentPlayer() ?: return
+        socket?.send(
+            WatchPartyMessage(
+                type = "FORCE_SYNC",
+                position = player.getPosition() ?: 0L,
+                playing = player.getIsPlaying(),
+            )
+        )
+        onStatusText?.invoke("Risincronizzazione inviata all'amico")
     }
 
     private fun sendSyncState() {

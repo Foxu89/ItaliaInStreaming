@@ -24,9 +24,12 @@ data class MediaInfo(
  *
  * type possibili:
  *  - "PEER_JOINED" / "PEER_LEFT"  (generati dal server, non dal client)
+ *  - "HELLO"       (name) — scambio del nome visualizzato, inviato all'apertura
  *  - "SYNC_REQUEST" / "SYNC_STATE"
  *  - "PLAY" / "PAUSE"
  *  - "SEEK"        (position, playing)
+ *  - "FORCE_SYNC"  (position, playing) — come SYNC_STATE ma applicato SEMPRE,
+ *    usato dal pulsante "Risincronizza ora" (azione esplicita dell'utente)
  *  - "BUFFERING" / "READY"
  *  - "CHANGE_SOURCE" (url/title/referer/headers/quality/position/playing)
  *  - "LEAVE_ROOM"
@@ -41,4 +44,5 @@ data class WatchPartyMessage(
     val referer: String? = null,
     val headers: Map<String, String> = emptyMap(),
     val quality: Int = 0,
+    val name: String? = null,
 )

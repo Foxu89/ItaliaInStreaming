@@ -1,11 +1,16 @@
 package it.dogior.hadEnough.watchparty
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.Switch
 import android.widget.TextView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -13,6 +18,8 @@ import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.plugins.Plugin
 import it.dogior.hadEnough.BuildConfig // namespace del modulo, vedi build.gradle.kts root
+
+private const val TAG = "WatchParty"
 
 class WatchPartySettingsFragment(
     private val plugin: Plugin,
@@ -39,35 +46,58 @@ class WatchPartySettingsFragment(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? = try {
-        android.util.Log.d("WatchParty", "📄 WatchPartySettingsFragment.onCreateView() inizio")
-        android.util.Log.d("WatchParty", "📦 plugin.resources = ${plugin.resources}")
+        android.util.Log.d(TAG, "📄 WatchPartySettingsFragment.onCreateView() inizio")
 
         val root = getLayout("watchparty_settings", inflater, container)
-        android.util.Log.d("WatchParty", "✅ Layout 'watchparty_settings' inflazionato: $root")
+        android.util.Log.d(TAG, "✅ Layout 'watchparty_settings' inflazionato: $root")
 
         val status = root.findView<TextView>("wp_status")
         val statusDot = root.findView<View>("wp_status_dot")
         val pinDisplay = root.findView<TextView>("wp_pin_display")
+        val copyPinBtn = root.findView<ImageButton>("wp_copy_pin")
+        val participantsView = root.findView<TextView>("wp_participants")
         val createBtn = root.findView<Button>("wp_create")
         val pinInput = root.findView<EditText>("wp_pin_input")
         val joinBtn = root.findView<Button>("wp_join")
         val leaveBtn = root.findView<Button>("wp_leave")
         val resyncBtn = root.findView<Button>("wp_resync")
+        val settingsHeader = root.findView<View>("wp_settings_header")
+        val settingsArrow = root.findView<ImageView>("wp_settings_arrow")
+        val settingsBody = root.findView<View>("wp_settings_body")
         val invisibleSwitch = root.findView<Switch>("wp_invisible_button")
-        android.util.Log.d(
-            "WatchParty",
-            "🔗 View trovate: status=$status pinDisplay=$pinDisplay createBtn=$createBtn " +
-                "pinInput=$pinInput joinBtn=$joinBtn leaveBtn=$leaveBtn invisibleSwitch=$invisibleSwitch"
-        )
 
-        listOf(createBtn, joinBtn, leaveBtn).forEach { it.makeTvCompatible() }
+        listOf(createBtn, joinBtn, leaveBtn, resyncBtn).forEach { it.makeTvCompatible() }
+
+        // --- Sezione "Impostazioni" collassabile ---
+        settingsHeader.setOnClickListener {
+            val expanding = settingsBody.visibility != View.VISIBLE
+            settingsBody.visibility = if (expanding) View.VISIBLE else View.GONE
+            settingsArrow.rotation = if (expanding) 180f else 0f
+        }
 
         invisibleSwitch.isChecked = CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
         invisibleSwitch.setOnCheckedChangeListener { _, checked ->
-            CloudStreamApp.setKey(
-                "wp_button_invisible",
-                if (checked) "true" else "false"
-            )
+            CloudStreamApp.setKey("wp_button_invisible", if (checked) "true" else "false")
+        }
+
+        // --- Lista partecipanti: "Nome (Host, Tu)" / "Nome (Tu)" / "Nome (Host)" ecc. ---
+        fun refreshParticipants() {
+            if (manager.role == WatchPartyManager.Role.IDLE) {
+                participantsView.visibility = View.GONE
+                return
+            }
+            val me = manager.localDisplayName()
+            val meLabel = if (manager.role == WatchPartyManager.Role.HOST) "$me (Host, Tu)" else "$me (Tu)"
+            val peerName = manager.remotePeerName
+            val lines = mutableListOf(meLabel)
+            if (peerName != null) {
+                val peerLabel = if (manager.role == WatchPartyManager.Role.HOST) peerName else "$peerName (Host)"
+                lines.add(peerLabel)
+            } else {
+                lines.add("In attesa di un partecipante…")
+            }
+            participantsView.visibility = View.VISIBLE
+            participantsView.text = lines.joinToString("\n")
         }
 
         fun refreshUiForActiveRoom() {
@@ -79,14 +109,18 @@ class WatchPartySettingsFragment(
                 resyncBtn.visibility = View.VISIBLE
                 if (manager.role == WatchPartyManager.Role.HOST) {
                     pinDisplay.visibility = View.VISIBLE
+                    copyPinBtn.visibility = View.VISIBLE
                     pinDisplay.text = "PIN: ${manager.currentPin}"
                 }
             }
+            refreshParticipants()
         }
 
         fun updateStatusDot(state: WatchPartyManager.ConnectionState) {
             val res = when (state) {
-                WatchPartyManager.ConnectionState.CONNESSO -> android.R.drawable.presence_online
+                WatchPartyManager.ConnectionState.CONNESSO ->
+                    if (manager.peerPresent) android.R.drawable.presence_online
+                    else android.R.drawable.presence_away
                 WatchPartyManager.ConnectionState.CONNESSIONE_IN_CORSO,
                 WatchPartyManager.ConnectionState.RICONNESSIONE_IN_CORSO -> android.R.drawable.presence_away
                 WatchPartyManager.ConnectionState.DISCONNESSO -> android.R.drawable.presence_offline
@@ -100,14 +134,17 @@ class WatchPartySettingsFragment(
         }
 
         manager.onStatusText = { text -> activity?.runOnUiThread { status.text = text } }
-        manager.onPeerConnected = { connected ->
-            activity?.runOnUiThread {
-                status.text = if (connected) "Amico connesso, riproduzione sincronizzata."
-                else "In attesa di connessione…"
-            }
+        manager.onPeerConnected = { _ ->
+            activity?.runOnUiThread { updateStatusDot(manager.connectionState) }
         }
         manager.onConnectionStateChanged = { state ->
             activity?.runOnUiThread { updateStatusDot(state) }
+        }
+        manager.onParticipantsChanged = {
+            activity?.runOnUiThread {
+                refreshParticipants()
+                updateStatusDot(manager.connectionState)
+            }
         }
 
         createBtn.setOnClickListener {
@@ -117,9 +154,17 @@ class WatchPartySettingsFragment(
             }
             val pin = manager.createRoom()
             pinDisplay.visibility = View.VISIBLE
+            copyPinBtn.visibility = View.VISIBLE
             pinDisplay.text = "PIN: $pin"
             status.text = "Condividi questo PIN con il tuo amico. Deve aprire lo stesso video."
             refreshUiForActiveRoom()
+        }
+
+        copyPinBtn.setOnClickListener {
+            val pin = manager.currentPin ?: return@setOnClickListener
+            val clipboard = root.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Watch Party PIN", pin))
+            showToast("PIN copiato")
         }
 
         joinBtn.setOnClickListener {
@@ -144,7 +189,7 @@ class WatchPartySettingsFragment(
 
         resyncBtn.setOnClickListener {
             manager.requestResyncNow()
-            showToast("Risincronizzazione richiesta")
+            showToast("Risincronizzazione inviata")
         }
 
         refreshUiForActiveRoom()
@@ -164,20 +209,17 @@ class WatchPartySettingsFragment(
             else "Termini sul relay non ancora accettati"
             setPadding(0, (16 * resources.displayMetrics.density).toInt(), 0, 0)
         }
-        val innerContainer = (root as? android.view.ViewGroup)?.getChildAt(0) as? android.view.ViewGroup
+        val innerContainer = (root as? ViewGroup)?.getChildAt(0) as? ViewGroup
         if (innerContainer != null) {
             innerContainer.addView(consentLabel)
-            android.util.Log.d("WatchParty", "✅ Label consenso aggiunta al contenitore interno (${innerContainer::class.java.simpleName})")
         } else {
-            android.util.Log.e("WatchParty", "⚠️ Non ho trovato un contenitore interno valido, salto la label del consenso (non blocco l'apertura per questo)")
+            android.util.Log.e(TAG, "⚠️ Non ho trovato un contenitore interno valido, salto la label del consenso")
         }
 
-        android.util.Log.d("WatchParty", "🏁 onCreateView() completato con successo, ritorno la view")
+        android.util.Log.d(TAG, "🏁 onCreateView() completato con successo")
         root
     } catch (e: Exception) {
-        // prima era silenzioso: se le impostazioni non si aprono più,
-        // controlla Logcat per "WatchParty" e vedrai lo stack trace esatto qui
-        android.util.Log.e("WatchParty", "💥 ECCEZIONE in onCreateView() — è QUESTA la causa della schermata trasparente/vuota", e)
+        android.util.Log.e(TAG, "💥 ECCEZIONE in onCreateView()", e)
         null
     }
 }

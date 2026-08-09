@@ -64,15 +64,41 @@
 
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/wp_pin_display"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:layout_marginBottom="12dp"
-            android:gravity="center"
-            android:textSize="32sp"
-            android:textStyle="bold"
+            android:layout_marginBottom="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/wp_pin_display"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/wp_copy_pin"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Copia il PIN"
+                android:src="@android:drawable/ic_menu_save"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/wp_participants"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:textSize="13sp"
             android:visibility="gone" />
 
         <Button
@@ -125,32 +151,71 @@
             android:scaleType="fitXY" />
 
         <LinearLayout
+            android:id="@+id/wp_settings_header"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
 
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Pulsante invisibile nel player"
-                android:textSize="15sp" />
+                android:text="Impostazioni"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
-            <Switch
-                android:id="@+id/wp_invisible_button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:focusable="true" />
+            <ImageView
+                android:id="@+id/wp_settings_arrow"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@android:drawable/arrow_down_float" />
 
         </LinearLayout>
 
-        <TextView
+        <LinearLayout
+            android:id="@+id/wp_settings_body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Nasconde il pulsante sopra il player ma lo lascia cliccabile (stesso punto di tocco)."
-            android:textSize="12sp" />
+            android:orientation="vertical"
+            android:paddingTop="8dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Pulsante invisibile nel player"
+                    android:textSize="15sp" />
+
+                <Switch
+                    android:id="@+id/wp_invisible_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Nasconde il pulsante sopra il player ma lo lascia cliccabile (stesso punto di tocco)."
+                android:textSize="12sp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>
