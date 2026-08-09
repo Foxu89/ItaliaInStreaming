@@ -3,6 +3,7 @@ package it.dogior.hadEnough.watchparty
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -13,7 +14,10 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.Switch
 import android.widget.TextView
+import androidx.core.content.res.ResourcesCompat
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.plugins.Plugin
@@ -37,42 +41,87 @@ class WatchPartySettingsFragment(
         return inflater.inflate(layout, container, false)
     }
 
-    private fun View.makeTvCompatible() {
-        val outlineId = plugin.resources!!.getIdentifier("outline", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
-        this.background = plugin.resources!!.getDrawable(outlineId, null)
+    /** Stesso pattern di StreamITA: risoluzione a runtime dei drawable del plugin per nome. */
+    private fun getDrawable(name: String): Drawable? {
+        val res = plugin.resources ?: return null
+        val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
+        return if (id != 0) ResourcesCompat.getDrawable(res, id, null) else null
+    }
+
+    private fun View.applyOutlineBackground() {
+        background = getDrawable("outline")
+    }
+
+    private fun View.applyBlueBackground() {
+        background = getDrawable("outline_blue")
+    }
+
+    private fun View.applyGreenBackground() {
+        background = getDrawable("outline_green")
+    }
+
+    private fun View.applyDangerBackground() {
+        background = getDrawable("outline_danger")
+    }
+
+    override fun onStart() {
+        super.onStart()
+        (dialog as? BottomSheetDialog)?.behavior?.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
     }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? = try {
-        android.util.Log.d(TAG, "📄 WatchPartySettingsFragment.onCreateView() inizio")
+        android.util.Log.d(TAG, "📄 onCreateView() inizio")
 
         val root = getLayout("watchparty_settings", inflater, container)
-        android.util.Log.d(TAG, "✅ Layout 'watchparty_settings' inflazionato: $root")
 
+        val statusCard = root.findView<View>("wp_status_card")
         val status = root.findView<TextView>("wp_status")
         val statusDot = root.findView<View>("wp_status_dot")
+        val participantsView = root.findView<TextView>("wp_participants")
+
+        val pinCard = root.findView<View>("wp_pin_card")
         val pinDisplay = root.findView<TextView>("wp_pin_display")
         val copyPinBtn = root.findView<ImageButton>("wp_copy_pin")
-        val participantsView = root.findView<TextView>("wp_participants")
+
+        val joinCard = root.findView<View>("wp_join_card")
         val createBtn = root.findView<Button>("wp_create")
         val pinInput = root.findView<EditText>("wp_pin_input")
         val joinBtn = root.findView<Button>("wp_join")
+
+        val activeRoomCard = root.findView<View>("wp_active_room_card")
         val leaveBtn = root.findView<Button>("wp_leave")
         val resyncBtn = root.findView<Button>("wp_resync")
+
+        val settingsCard = root.findView<View>("wp_settings_card")
         val settingsHeader = root.findView<View>("wp_settings_header")
         val settingsArrow = root.findView<ImageView>("wp_settings_arrow")
         val settingsBody = root.findView<View>("wp_settings_body")
         val invisibleSwitch = root.findView<Switch>("wp_invisible_button")
 
-        listOf(createBtn, joinBtn, leaveBtn, resyncBtn).forEach { it.makeTvCompatible() }
+        // --- Stile "card" identico a StreamITA, pulsanti principali in blu CloudStream ---
+        statusCard.applyOutlineBackground()
+        pinCard.applyOutlineBackground()
+        joinCard.applyOutlineBackground()
+        activeRoomCard.applyOutlineBackground()
+        settingsCard.applyOutlineBackground()
+        createBtn.applyBlueBackground()
+        joinBtn.applyBlueBackground()
+        resyncBtn.applyBlueBackground()
+        leaveBtn.applyDangerBackground()   // azione distruttiva, resta rossa
+        copyPinBtn.applyOutlineBackground()
+        copyPinBtn.setImageDrawable(getDrawable("copy_icon"))
 
         // --- Sezione "Impostazioni" collassabile ---
         settingsHeader.setOnClickListener {
             val expanding = settingsBody.visibility != View.VISIBLE
             settingsBody.visibility = if (expanding) View.VISIBLE else View.GONE
-            settingsArrow.rotation = if (expanding) 180f else 0f
+            settingsArrow.animate().rotation(if (expanding) 180f else 0f).setDuration(150).start()
         }
 
         invisibleSwitch.isChecked = CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
@@ -90,28 +139,22 @@ class WatchPartySettingsFragment(
             val meLabel = if (manager.role == WatchPartyManager.Role.HOST) "$me (Host, Tu)" else "$me (Tu)"
             val peerName = manager.remotePeerName
             val lines = mutableListOf(meLabel)
-            if (peerName != null) {
-                val peerLabel = if (manager.role == WatchPartyManager.Role.HOST) peerName else "$peerName (Host)"
-                lines.add(peerLabel)
-            } else {
-                lines.add("In attesa di un partecipante…")
-            }
+            lines.add(
+                if (peerName != null) {
+                    if (manager.role == WatchPartyManager.Role.HOST) peerName else "$peerName (Host)"
+                } else "In attesa di un partecipante…"
+            )
             participantsView.visibility = View.VISIBLE
             participantsView.text = lines.joinToString("\n")
         }
 
         fun refreshUiForActiveRoom() {
-            if (manager.role != WatchPartyManager.Role.IDLE) {
-                createBtn.visibility = View.GONE
-                pinInput.visibility = View.GONE
-                joinBtn.visibility = View.GONE
-                leaveBtn.visibility = View.VISIBLE
-                resyncBtn.visibility = View.VISIBLE
-                if (manager.role == WatchPartyManager.Role.HOST) {
-                    pinDisplay.visibility = View.VISIBLE
-                    copyPinBtn.visibility = View.VISIBLE
-                    pinDisplay.text = "PIN: ${manager.currentPin}"
-                }
+            val inRoom = manager.role != WatchPartyManager.Role.IDLE
+            joinCard.visibility = if (inRoom) View.GONE else View.VISIBLE
+            activeRoomCard.visibility = if (inRoom) View.VISIBLE else View.GONE
+            pinCard.visibility = if (inRoom && manager.role == WatchPartyManager.Role.HOST) View.VISIBLE else View.GONE
+            if (inRoom && manager.role == WatchPartyManager.Role.HOST) {
+                pinDisplay.text = manager.currentPin
             }
             refreshParticipants()
         }
@@ -134,12 +177,8 @@ class WatchPartySettingsFragment(
         }
 
         manager.onStatusText = { text -> activity?.runOnUiThread { status.text = text } }
-        manager.onPeerConnected = { _ ->
-            activity?.runOnUiThread { updateStatusDot(manager.connectionState) }
-        }
-        manager.onConnectionStateChanged = { state ->
-            activity?.runOnUiThread { updateStatusDot(state) }
-        }
+        manager.onPeerConnected = { _ -> activity?.runOnUiThread { updateStatusDot(manager.connectionState) } }
+        manager.onConnectionStateChanged = { state -> activity?.runOnUiThread { updateStatusDot(state) } }
         manager.onParticipantsChanged = {
             activity?.runOnUiThread {
                 refreshParticipants()
@@ -153,9 +192,7 @@ class WatchPartySettingsFragment(
                 return@setOnClickListener
             }
             val pin = manager.createRoom()
-            pinDisplay.visibility = View.VISIBLE
-            copyPinBtn.visibility = View.VISIBLE
-            pinDisplay.text = "PIN: $pin"
+            pinDisplay.text = pin
             status.text = "Condividi questo PIN con il tuo amico. Deve aprire lo stesso video."
             refreshUiForActiveRoom()
         }
@@ -194,29 +231,22 @@ class WatchPartySettingsFragment(
 
         refreshUiForActiveRoom()
 
-        // Riga di stato sul consenso privacy, aggiunta a runtime per non dover
-        // toccare il layout XML (bundlato nelle risorse del plugin).
-        // NOTA: root qui è un NestedScrollView (vedi watchparty_settings.xml),
-        // che accetta UN SOLO figlio diretto — aggiungerci una view causava
-        // un crash silenzioso (catturato dal try/catch sotto) che rendeva
-        // la bottom sheet vuota/trasparente. Aggiungo invece al contenitore
-        // interno (la LinearLayout dentro lo scroll), che di figli ne accetta quanti vuoi.
+        // Riga di stato sul consenso privacy, aggiunta a runtime (root è un
+        // NestedScrollView con un solo figlio diretto: si aggiunge al
+        // contenitore interno, non alla radice, altrimenti crash).
         val consentLabel = TextView(root.context).apply {
             textSize = 11f
-            alpha = 0.6f
+            alpha = 0.5f
             val date = WatchPartyConsent.acceptedAtLabel()
             text = if (date != null) "Termini sul relay accettati il $date"
             else "Termini sul relay non ancora accettati"
-            setPadding(0, (16 * resources.displayMetrics.density).toInt(), 0, 0)
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, (12 * resources.displayMetrics.density).toInt(), 0, 0)
         }
         val innerContainer = (root as? ViewGroup)?.getChildAt(0) as? ViewGroup
-        if (innerContainer != null) {
-            innerContainer.addView(consentLabel)
-        } else {
-            android.util.Log.e(TAG, "⚠️ Non ho trovato un contenitore interno valido, salto la label del consenso")
-        }
+        innerContainer?.addView(consentLabel)
 
-        android.util.Log.d(TAG, "🏁 onCreateView() completato con successo")
+        android.util.Log.d(TAG, "🏁 onCreateView() completato")
         root
     } catch (e: Exception) {
         android.util.Log.e(TAG, "💥 ECCEZIONE in onCreateView()", e)
