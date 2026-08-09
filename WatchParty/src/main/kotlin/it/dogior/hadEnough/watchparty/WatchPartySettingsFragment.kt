@@ -44,10 +44,6 @@ class WatchPartySettingsFragment(
 
         val root = getLayout("watchparty_settings", inflater, container)
         android.util.Log.d("WatchParty", "✅ Layout 'watchparty_settings' inflazionato: $root")
-        // sfondo esplicito: se il tema del Material Components non passa
-        // correttamente attraverso le risorse del plugin, il foglio risulta
-        // trasparente pur essendo presente — non fidiamoci del tema qui.
-        root.setBackgroundColor(android.graphics.Color.parseColor("#1E1E1E"))
 
         val status = root.findView<TextView>("wp_status")
         val pinDisplay = root.findView<TextView>("wp_pin_display")

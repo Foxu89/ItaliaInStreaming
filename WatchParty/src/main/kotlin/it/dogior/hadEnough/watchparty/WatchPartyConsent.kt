@@ -1,13 +1,14 @@
 package it.dogior.hadEnough.watchparty
 
-import android.app.AlertDialog
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.Gravity
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CommonActivity
@@ -22,11 +23,9 @@ private const val TAG = "WatchParty"
  * riproduzione (play/pausa/posizione) passano attraverso un relay esterno
  * (il Cloudflare Worker) per essere inoltrati all'altro utente della stanza.
  *
- * NON usa più un Event dell'app (afterPluginsLoadedEvent) perché non è
- * garantito che scatti DOPO che il nostro Plugin.load() abbia già fatto
- * l'iscrizione — race condition possibile a freddo. Usa invece lo stesso
- * pattern di polling già collaudato in WatchPartyOverlay: molto più
- * deterministico e facile da diagnosticare via log.
+ * Usa MaterialAlertDialogBuilder (non il semplice AlertDialog) apposta:
+ * eredita automaticamente lo stile Material dell'app — angoli arrotondati,
+ * colori del tema — senza bisogno di forzare colori a mano.
  */
 object WatchPartyConsent {
 
@@ -99,38 +98,42 @@ object WatchPartyConsent {
         }
     }
 
+    private fun dp(context: Context, value: Int): Int =
+        (value * context.resources.displayMetrics.density).toInt()
+
     private fun show(context: Context) {
-        val padding = (20 * context.resources.displayMetrics.density).toInt()
+        val hPad = dp(context, 24)
+        val vPad = dp(context, 8)
 
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(padding, padding, padding, padding)
-            setBackgroundColor(android.graphics.Color.parseColor("#1E1E1E")) // sfondo esplicito, non fidarti del tema
+            setPadding(hPad, vPad, hPad, 0)
         }
 
         val messageView = TextView(context).apply {
-            text = "Watch Party invia i comandi di riproduzione (play, pausa, " +
-                "posizione, cambio episodio) a un server di relay esterno " +
-                "(Cloudflare Worker), che li inoltra all'altro utente della " +
-                "stanza. Non viene inviato l'audio/video, solo questi eventi " +
-                "e il PIN della stanza. I messaggi non vengono salvati in modo " +
-                "permanente sul server: servono solo a far arrivare i comandi " +
-                "all'altro dispositivo in tempo reale."
-            textSize = 14f
-            setTextColor(android.graphics.Color.WHITE)
+            text = "La funzionalità Watch Party utilizza un piccolo server di relay " +
+                "per inoltrare unicamente i comandi di riproduzione (play, pausa, " +
+                "punto della riproduzione) e il PIN della stanza tra i dispositivi " +
+                "connessi. Nessun flusso audio o video viene trasmesso dal server: " +
+                "il filmato viene caricato direttamente dal tuo dispositivo. I comandi " +
+                "transitano esclusivamente in memoria per la sincronizzazione in tempo " +
+                "reale e nessun log o dato personale viene registrato o salvato sul server."
+            textSize = 12f
+            setLineSpacing(dp(context, 2).toFloat(), 1f)
         }
 
         val checkBox = CheckBox(context).apply {
             text = "Ho letto e accetto"
-            setTextColor(android.graphics.Color.WHITE)
-            setPadding(0, padding, 0, 0)
+            textSize = 13f
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(context, 16), 0, dp(context, 4))
         }
 
         container.addView(messageView)
         container.addView(checkBox)
 
-        val dialog = AlertDialog.Builder(context)
-            .setTitle("Prima di iniziare")
+        val dialog = MaterialAlertDialogBuilder(context)
+            .setTitle("Note sulla Privacy e Sincronizzazione")
             .setView(container)
             .setCancelable(false)
             .setPositiveButton("Accetto", null) // listener sotto, per poterlo disabilitare all'inizio
@@ -138,7 +141,7 @@ object WatchPartyConsent {
 
         dialog.setOnShowListener {
             Log.d(TAG, "👀 WatchPartyConsent: popup effettivamente visibile a schermo (onShow)")
-            val acceptBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            val acceptBtn = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
             acceptBtn.isEnabled = false
             checkBox.setOnCheckedChangeListener { _, checked ->
                 Log.d(TAG, "☑️ WatchPartyConsent: checkbox = $checked")
