@@ -123,12 +123,6 @@
             android:textStyle="bold" />
 
         <LinearLayout
-            android:id="@+id/wpa_theme_container"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-<LinearLayout
             android:id="@+id/wpa_theme_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
