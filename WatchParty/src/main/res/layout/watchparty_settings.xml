@@ -51,12 +51,12 @@
 
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/wp_participants"
+            <LinearLayout
+                android:id="@+id/wp_participants_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:textSize="14sp"
+                android:orientation="vertical"
                 android:visibility="gone" />
 
         </LinearLayout>
@@ -158,94 +158,47 @@
 
         </LinearLayout>
 
-        <!-- Card: sezione Impostazioni collassabile -->
+        <!-- Sezione impostazioni: riga stile StreamITA, apre una pagina dedicata -->
         <LinearLayout
             android:id="@+id/wp_settings_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
-            android:orientation="vertical">
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="68dp"
+            android:orientation="horizontal"
+            android:padding="14dp">
 
             <LinearLayout
-                android:id="@+id/wp_settings_header"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:padding="14dp">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Impostazioni"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <ImageView
-                    android:id="@+id/wp_settings_arrow"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:alpha="0.7"
-                    android:src="@android:drawable/arrow_down_float" />
-
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/wp_settings_body"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingStart="14dp"
-                android:paddingTop="4dp"
-                android:paddingEnd="14dp"
-                android:paddingBottom="14dp"
-                android:visibility="gone">
-
-                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:minHeight="52dp"
-                    android:orientation="horizontal">
+                    android:text="Impostazioni"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="Pulsante invisibile nel player"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:alpha="0.6"
-                            android:text="Nasconde il pulsante sopra il player ma resta cliccabile nello stesso punto"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <Switch
-                        android:id="@+id/wp_invisible_button"
-                        android:layout_width="42dp"
-                        android:layout_height="wrap_content"
-                        android:minHeight="0dp"
-                        android:showText="false"
-                        android:switchMinWidth="28dp"
-                        android:text="" />
-
-                </LinearLayout>
-
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:alpha="0.8"
+                    android:text="Preferenze del plugin"
+                    android:textSize="13sp" />
             </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="Apri"
+                android:textStyle="bold" />
 
         </LinearLayout>
 

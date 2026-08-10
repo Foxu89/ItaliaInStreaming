@@ -30,6 +30,7 @@ data class MediaInfo(
  *  - "SEEK"        (position, playing)
  *  - "FORCE_SYNC"  (position, playing) — come SYNC_STATE ma applicato SEMPRE,
  *    usato dal pulsante "Risincronizza ora" (azione esplicita dell'utente)
+ *  - "PERMISSIONS" (canPlayPause, canSeek) — l'host imposta cosa può fare il guest
  *  - "BUFFERING" / "READY"
  *  - "CHANGE_SOURCE" (url/title/referer/headers/quality/position/playing)
  *  - "LEAVE_ROOM"
@@ -45,4 +46,6 @@ data class WatchPartyMessage(
     val headers: Map<String, String> = emptyMap(),
     val quality: Int = 0,
     val name: String? = null,
+    val canPlayPause: Boolean? = null,
+    val canSeek: Boolean? = null,
 )

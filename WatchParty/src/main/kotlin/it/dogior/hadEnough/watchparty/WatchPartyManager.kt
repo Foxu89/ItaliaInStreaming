@@ -17,6 +17,12 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.random.Random
 
+/** Permessi applicati a un ospite. L'host ha sempre controllo completo. */
+data class ParticipantPermissions(
+    val canPlayPause: Boolean = true,
+    val canSeek: Boolean = true,
+)
+
 /**
  * Gestisce una Watch Party a 2 utenti su un canale WebSocket di relay.
  *
@@ -78,6 +84,17 @@ class WatchPartyManager {
 
     /** Nome mostrato per l'amico, valorizzato al primo messaggio "HELLO" ricevuto. */
     var remotePeerName: String? = null
+        private set
+
+    /**
+     * Permessi APPLICATI A ME. Rilevanti solo se sono Guest — l'host ha
+     * sempre controllo completo, quindi qui resta sempre il default (tutto true).
+     */
+    var myPermissions: ParticipantPermissions = ParticipantPermissions()
+        private set
+
+    /** Copia locale di ciò che l'host ha impostato per il guest, per mostrarlo nell'editor. */
+    var guestPermissions: ParticipantPermissions = ParticipantPermissions()
         private set
 
     var onStatusText: ((String) -> Unit)? = null
@@ -160,6 +177,8 @@ class WatchPartyManager {
         connectionState = ConnectionState.DISCONNESSO
         peerPresent = false
         remotePeerName = null
+        myPermissions = ParticipantPermissions()
+        guestPermissions = ParticipantPermissions()
     }
 
     // ---------------------------------------------------------------------
@@ -272,6 +291,10 @@ class WatchPartyManager {
         // indipendente: click ravvicinati ma su tick diversi vengono inviati tutti.
         val expectedDrift = POLL_INTERVAL_MS + 400L
         if (abs(position - prevPosition) > expectedDrift.coerceAtLeast(SEEK_JUMP_THRESHOLD_MS)) {
+            if (role == Role.GUEST && !myPermissions.canSeek) {
+                revertUnauthorizedLocalChange(prevPosition, prevPlaying)
+                return
+            }
             // Piccolo debounce: se l'utente ha appena fatto seek e sta per premere
             // play (o l'ha già premuto un istante prima), aspettiamo un tick in più
             // e rileggiamo lo stato al momento dell'invio, invece di fidarci dello
@@ -293,8 +316,23 @@ class WatchPartyManager {
 
         // play/pausa
         if (playing != prevPlaying) {
+            if (role == Role.GUEST && !myPermissions.canPlayPause) {
+                revertUnauthorizedLocalChange(prevPosition, prevPlaying)
+                return
+            }
             socket?.send(if (playing) "PLAY" else "PAUSE")
         }
+    }
+
+    /** Annulla localmente un'azione per cui l'host non ha dato il permesso, senza inviarla. */
+    private fun revertUnauthorizedLocalChange(pos: Long, playing: Boolean?) {
+        val player = PlayerAccess.currentPlayer() ?: return
+        lastRemoteCommandMs = System.currentTimeMillis() // riusa la finestra anti-eco per non ri-rilevarlo
+        player.seekTo(pos, PlayerEventSource.Sync)
+        if (playing != null) {
+            player.handleEvent(if (playing) CSPlayerEvent.Play else CSPlayerEvent.Pause, PlayerEventSource.Sync)
+        }
+        onStatusText?.invoke("L'host non ti permette di fare questa azione")
     }
 
     // ---------------------------------------------------------------------
@@ -326,6 +364,22 @@ class WatchPartyManager {
                 remotePeerName = msg.name?.takeIf { it.isNotBlank() } ?: "Amico"
                 onStatusText?.invoke("Amico connesso: $remotePeerName")
                 onParticipantsChanged?.invoke()
+                // se sono host e avevo già impostato dei permessi, li rimando ora
+                // che l'ospite si è (ri)connesso, altrimenti li perderebbe al reconnect
+                if (role == Role.HOST && guestPermissions != ParticipantPermissions()) {
+                    sendPermissionsToGuest(guestPermissions)
+                }
+            }
+
+            "PERMISSIONS" -> {
+                if (role == Role.GUEST) {
+                    myPermissions = ParticipantPermissions(
+                        canPlayPause = msg.canPlayPause ?: true,
+                        canSeek = msg.canSeek ?: true,
+                    )
+                    onStatusText?.invoke("L'host ha aggiornato i tuoi permessi")
+                    onParticipantsChanged?.invoke()
+                }
             }
 
             "SYNC_REQUEST" -> if (role == Role.HOST) sendSyncState()
@@ -428,6 +482,19 @@ class WatchPartyManager {
     fun notifyEpisodeChanged(title: String) {
         if (role != Role.HOST || !isConnected) return
         socket?.send(WatchPartyMessage(type = "EPISODE_HINT", title = title))
+    }
+
+    /** Solo l'host può chiamarlo: imposta cosa può fare il guest. */
+    fun sendPermissionsToGuest(permissions: ParticipantPermissions) {
+        if (role != Role.HOST) return
+        guestPermissions = permissions
+        socket?.send(
+            WatchPartyMessage(
+                type = "PERMISSIONS",
+                canPlayPause = permissions.canPlayPause,
+                canSeek = permissions.canSeek,
+            )
+        )
     }
 
     private fun applyRemote(block: () -> Unit) {

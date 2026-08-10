@@ -11,8 +11,6 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.Switch
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -43,25 +41,45 @@ class WatchPartySettingsFragment(
 
     /** Stesso pattern di StreamITA: risoluzione a runtime dei drawable del plugin per nome. */
     private fun getDrawable(name: String): Drawable? {
-        val res = plugin.resources ?: return null
+        val res = plugin.resources ?: run {
+            android.util.Log.e(TAG, "❌ getDrawable('$name'): plugin.resources è null")
+            return null
+        }
         val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
-        return if (id != 0) ResourcesCompat.getDrawable(res, id, null) else null
+        if (id == 0) {
+            android.util.Log.e(TAG, "❌ getDrawable('$name'): risorsa non trovata (id=0) — controlla che il file esista in res/drawable/$name.xml")
+            return null
+        }
+        return ResourcesCompat.getDrawable(res, id, null)
     }
 
     private fun View.applyOutlineBackground() {
-        background = getDrawable("outline")
+        background = getDrawable("outline") ?: coloredFallback(0x12FFFFFF.toInt(), 0x99FFFFFF.toInt())
     }
 
     private fun View.applyBlueBackground() {
-        background = getDrawable("outline_blue")
+        background = getDrawable("outline_blue") ?: coloredFallback(0x143B65F5, 0x997C93FF.toInt())
     }
 
     private fun View.applyGreenBackground() {
-        background = getDrawable("outline_green")
+        background = getDrawable("outline_green") ?: coloredFallback(0x142AC96B, 0x997CFF9D.toInt())
     }
 
     private fun View.applyDangerBackground() {
-        background = getDrawable("outline_danger")
+        background = getDrawable("outline_danger") ?: coloredFallback(0x14FF6B6B, 0x99FF7F7F.toInt())
+    }
+
+    /** Rete di sicurezza: se il drawable del plugin non si carica per qualche motivo,
+     * costruiamo comunque il colore giusto via codice invece di lasciare il tema di
+     * default dell'app (che è blu — era la causa del pulsante "Esci" apparso blu). */
+    private fun coloredFallback(fill: Int, stroke: Int): Drawable {
+        android.util.Log.e(TAG, "⚠️ Uso il fallback colorato via codice (il drawable del plugin non si è caricato)")
+        return android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 8 * resources.displayMetrics.density
+            setColor(fill)
+            setStroke((2 * resources.displayMetrics.density).toInt(), stroke)
+        }
     }
 
     override fun onStart() {
@@ -83,7 +101,7 @@ class WatchPartySettingsFragment(
         val statusCard = root.findView<View>("wp_status_card")
         val status = root.findView<TextView>("wp_status")
         val statusDot = root.findView<View>("wp_status_dot")
-        val participantsView = root.findView<TextView>("wp_participants")
+        val participantsContainer = root.findView<ViewGroup>("wp_participants_container")
 
         val pinCard = root.findView<View>("wp_pin_card")
         val pinDisplay = root.findView<TextView>("wp_pin_display")
@@ -99,53 +117,127 @@ class WatchPartySettingsFragment(
         val resyncBtn = root.findView<Button>("wp_resync")
 
         val settingsCard = root.findView<View>("wp_settings_card")
-        val settingsHeader = root.findView<View>("wp_settings_header")
-        val settingsArrow = root.findView<ImageView>("wp_settings_arrow")
-        val settingsBody = root.findView<View>("wp_settings_body")
-        val invisibleSwitch = root.findView<Switch>("wp_invisible_button")
 
-        // --- Stile "card" identico a StreamITA, pulsanti principali in blu CloudStream ---
+        // --- Stile "card" identico a StreamITA ---
         statusCard.applyOutlineBackground()
         pinCard.applyOutlineBackground()
         joinCard.applyOutlineBackground()
         activeRoomCard.applyOutlineBackground()
-        settingsCard.applyOutlineBackground()
-        createBtn.applyBlueBackground()
+        createBtn.applyGreenBackground()   // creare una stanza = azione positiva
         joinBtn.applyBlueBackground()
         resyncBtn.applyBlueBackground()
-        leaveBtn.applyDangerBackground()   // azione distruttiva, resta rossa
+        leaveBtn.applyDangerBackground()   // azione distruttiva, rossa
         copyPinBtn.applyOutlineBackground()
         copyPinBtn.setImageDrawable(getDrawable("copy_icon"))
+        settingsCard.applyOutlineBackground()
 
-        // --- Sezione "Impostazioni" collassabile ---
-        settingsHeader.setOnClickListener {
-            val expanding = settingsBody.visibility != View.VISIBLE
-            settingsBody.visibility = if (expanding) View.VISIBLE else View.GONE
-            settingsArrow.animate().rotation(if (expanding) 180f else 0f).setDuration(150).start()
+        settingsCard.setOnClickListener {
+            WatchPartyAdvancedSettingsFragment(plugin).show(parentFragmentManager, "WatchPartyAdvancedSettings")
         }
 
-        invisibleSwitch.isChecked = CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
-        invisibleSwitch.setOnCheckedChangeListener { _, checked ->
-            CloudStreamApp.setKey("wp_button_invisible", if (checked) "true" else "false")
+        // --- Editor permessi ospite (solo host) ---
+        fun showPermissionsEditor() {
+            val ctx = root.context
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            val container = android.widget.LinearLayout(ctx).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(pad, pad / 2, pad, 0)
+            }
+
+            fun permissionRow(title: String, checked: Boolean): android.widget.Switch {
+                val row = android.widget.LinearLayout(ctx).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setPadding(0, (10 * resources.displayMetrics.density).toInt(), 0, (10 * resources.displayMetrics.density).toInt())
+                }
+                val label = TextView(ctx).apply {
+                    text = title
+                    textSize = 14f
+                    layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                val switch = android.widget.Switch(ctx).apply { isChecked = checked }
+                row.addView(label)
+                row.addView(switch)
+                container.addView(row)
+                return switch
+            }
+
+            val current = manager.guestPermissions
+            val playPauseSwitch = permissionRow("Può mettere play/pausa", current.canPlayPause)
+            val seekSwitch = permissionRow("Può avanzare/riavvolgere", current.canSeek)
+
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
+                .setTitle("Permessi di ${manager.remotePeerName ?: "questo partecipante"}")
+                .setView(container)
+                .setPositiveButton("Salva") { _, _ ->
+                    manager.sendPermissionsToGuest(
+                        ParticipantPermissions(
+                            canPlayPause = playPauseSwitch.isChecked,
+                            canSeek = seekSwitch.isChecked,
+                        )
+                    )
+                    showToast("Permessi aggiornati")
+                }
+                .setNegativeButton("Annulla", null)
+                .show()
         }
 
-        // --- Lista partecipanti: "Nome (Host, Tu)" / "Nome (Tu)" / "Nome (Host)" ecc. ---
+        // --- Card partecipanti: cliccabile SOLO dall'host, SOLO sulla card dell'ospite ---
+        fun buildParticipantCard(label: String, editable: Boolean): View {
+            val row = android.widget.LinearLayout(root.context).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                val pad = (12 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad, pad, pad)
+                val marginPx = (6 * resources.displayMetrics.density).toInt()
+                layoutParams = ViewGroup.MarginLayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = marginPx; bottomMargin = marginPx }
+                background = getDrawable("outline") ?: coloredFallback(0x12FFFFFF.toInt(), 0x88FFFFFF.toInt())
+            }
+            val nameView = TextView(root.context).apply {
+                text = label
+                textSize = 14f
+                layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            row.addView(nameView)
+            if (editable) {
+                val hint = TextView(root.context).apply {
+                    text = "Permessi"
+                    textSize = 12f
+                    alpha = 0.7f
+                    setTextColor(0xFF7C93FF.toInt())
+                }
+                row.addView(hint)
+                row.isClickable = true
+                row.isFocusable = true
+                row.setOnClickListener { showPermissionsEditor() }
+            }
+            return row
+        }
+
         fun refreshParticipants() {
+            participantsContainer.removeAllViews()
             if (manager.role == WatchPartyManager.Role.IDLE) {
-                participantsView.visibility = View.GONE
+                participantsContainer.visibility = View.GONE
                 return
             }
+            participantsContainer.visibility = View.VISIBLE
             val me = manager.localDisplayName()
             val meLabel = if (manager.role == WatchPartyManager.Role.HOST) "$me (Host, Tu)" else "$me (Tu)"
+            participantsContainer.addView(buildParticipantCard(meLabel, editable = false))
+
             val peerName = manager.remotePeerName
-            val lines = mutableListOf(meLabel)
-            lines.add(
-                if (peerName != null) {
-                    if (manager.role == WatchPartyManager.Role.HOST) peerName else "$peerName (Host)"
-                } else "In attesa di un partecipante…"
-            )
-            participantsView.visibility = View.VISIBLE
-            participantsView.text = lines.joinToString("\n")
+            if (peerName != null) {
+                val isHost = manager.role == WatchPartyManager.Role.HOST
+                val peerLabel = if (isHost) peerName else "$peerName (Host)"
+                // editabile solo se IO sono host (i permessi si impostano sull'ospite)
+                participantsContainer.addView(buildParticipantCard(peerLabel, editable = isHost))
+            } else {
+                participantsContainer.addView(
+                    buildParticipantCard("In attesa di un partecipante…", editable = false)
+                )
+            }
         }
 
         fun refreshUiForActiveRoom() {
