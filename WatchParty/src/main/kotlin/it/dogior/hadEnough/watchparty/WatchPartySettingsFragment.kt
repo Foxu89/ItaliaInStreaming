@@ -113,7 +113,6 @@ class WatchPartySettingsFragment(
 
         val activeRoomCard = root.findView<View>("wp_active_room_card")
         val episodeRow = root.findView<View>("wp_episode_row")
-        val prevEpisodeBtn = root.findView<TextView>("wp_prev_episode")
         val nextEpisodeBtn = root.findView<TextView>("wp_next_episode")
         val leaveBtn = root.findView<TextView>("wp_leave")
         val resyncBtn = root.findView<TextView>("wp_resync")
@@ -129,7 +128,6 @@ class WatchPartySettingsFragment(
         joinBtn.applyBlueBackground()
         resyncBtn.applyBlueBackground()
         leaveBtn.applyDangerBackground()   // azione distruttiva, rossa
-        prevEpisodeBtn.applyOutlineBackground()
         nextEpisodeBtn.applyOutlineBackground()
         copyPinBtn.applyOutlineBackground()
         copyPinBtn.setImageDrawable(getDrawable("copy_icon"))
@@ -169,6 +167,7 @@ class WatchPartySettingsFragment(
             val current = manager.guestPermissions
             val playPauseSwitch = permissionRow("Può mettere play/pausa", current.canPlayPause)
             val seekSwitch = permissionRow("Può avanzare/riavvolgere", current.canSeek)
+            val nextEpisodeSwitch = permissionRow("Può cambiare episodio", current.canNextEpisode)
 
             com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
                 .setTitle("Permessi di ${manager.remotePeerName ?: "questo partecipante"}")
@@ -178,6 +177,7 @@ class WatchPartySettingsFragment(
                         ParticipantPermissions(
                             canPlayPause = playPauseSwitch.isChecked,
                             canSeek = seekSwitch.isChecked,
+                            canNextEpisode = nextEpisodeSwitch.isChecked,
                         )
                     )
                     showToast("Permessi aggiornati")
@@ -249,7 +249,10 @@ class WatchPartySettingsFragment(
             val isHost = manager.role == WatchPartyManager.Role.HOST
             joinCard.visibility = if (inRoom) View.GONE else View.VISIBLE
             activeRoomCard.visibility = if (inRoom) View.VISIBLE else View.GONE
-            episodeRow.visibility = if (inRoom && isHost) View.VISIBLE else View.GONE
+            // episodi: visibili a tutti in stanza, ma il guest solo se l'host
+            // glielo consente (canNextEpisode)
+            val canEpisode = isHost || manager.myPermissions.canNextEpisode
+            episodeRow.visibility = if (inRoom && canEpisode) View.VISIBLE else View.GONE
             pinCard.visibility = if (inRoom && isHost) View.VISIBLE else View.GONE
             if (inRoom && isHost) {
                 pinDisplay.text = manager.currentPin
@@ -279,6 +282,7 @@ class WatchPartySettingsFragment(
         manager.onConnectionStateChanged = { state -> activity?.runOnUiThread { updateStatusDot(state) } }
         manager.onParticipantsChanged = {
             activity?.runOnUiThread {
+                refreshUiForActiveRoom()
                 refreshParticipants()
                 updateStatusDot(manager.connectionState)
             }
@@ -327,7 +331,6 @@ class WatchPartySettingsFragment(
             showToast("Risincronizzazione inviata")
         }
 
-        prevEpisodeBtn.setOnClickListener { manager.goToPrevEpisode() }
         nextEpisodeBtn.setOnClickListener { manager.goToNextEpisode() }
 
         refreshUiForActiveRoom()

@@ -154,31 +154,15 @@
                 android:visibility="gone">
 
                 <TextView
-                    android:id="@+id/wp_prev_episode"
-                    android:layout_width="0dp"
-                    android:layout_height="50dp"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center"
-                    android:text="◀ Episodio prec."
-                    android:textAllCaps="false"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <TextView
                     android:id="@+id/wp_next_episode"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="50dp"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
                     android:text="Episodio succ. ▶"
                     android:textAllCaps="false"
-                    android:textSize="13sp"
+                    android:textSize="14sp"
                     android:textStyle="bold" />
 
             </LinearLayout>

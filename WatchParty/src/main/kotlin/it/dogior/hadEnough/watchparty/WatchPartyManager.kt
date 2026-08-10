@@ -21,6 +21,7 @@ import kotlin.random.Random
 data class ParticipantPermissions(
     val canPlayPause: Boolean = true,
     val canSeek: Boolean = true,
+    val canNextEpisode: Boolean = true,
 )
 
 /**
@@ -61,7 +62,9 @@ class WatchPartyManager {
         private const val RECONNECT_BASE_DELAY_MS = 1000L
         private const val RECONNECT_MAX_DELAY_MS = 15000L
         private const val GATE_SAFETY_TIMEOUT_MS = 9000L
-        private const val GATE_POLL_MS = 150L
+        // tempo di buffering presunto dopo un seek: scaduto questo, il lato
+        // locale si dichiara pronto (READY) e il resolve aspetta l'altro peer
+        private const val LOCAL_SEEK_READY_MS = 900L
 
         /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento. */
         const val DEFAULT_RELAY_URL = "wss://watchparty-relay.diegon7771.workers.dev/room"
@@ -392,6 +395,7 @@ class WatchPartyManager {
                     myPermissions = ParticipantPermissions(
                         canPlayPause = msg.canPlayPause ?: true,
                         canSeek = msg.canSeek ?: true,
+                        canNextEpisode = msg.canNextEpisode ?: true,
                     )
                     onStatusText?.invoke("L'host ha aggiornato i tuoi permessi")
                     onParticipantsChanged?.invoke()
@@ -453,10 +457,6 @@ class WatchPartyManager {
                 PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.NextEpisode, PlayerEventSource.Sync)
             }
 
-            "PREV_EPISODE" -> applyRemote {
-                PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.PrevEpisode, PlayerEventSource.Sync)
-            }
-
             "LEAVE_ROOM" -> {
                 peerPresent = false
                 remotePeerName = null
@@ -487,9 +487,11 @@ class WatchPartyManager {
     // ---------------------------------------------------------------------
     // Gate di attesa sincronizzata dopo un seek: entrambi in pausa con
     // rotellina finché non sono davvero pronti, poi ripartono insieme.
-    // Event-driven (basato sul reale ripristino di getIsPlaying()), NON un
-    // timer fisso: un nuovo seek durante l'attesa invalida quella vecchia
-    // (gateGeneration) e ne parte una nuova pulita, senza perdere input.
+    // Una sola pausa pulita (niente più doppio play→pausa→play che
+    // "lampeggiava" ad ogni seek) + attesa a tempo sui due lati: il lato
+    // locale manda READY dopo LOCAL_SEEK_READY_MS, il resolve avviene quando
+    // entrambi sono pronti. Un nuovo seek durante l'attesa invalida quella
+    // vecchia (gateGeneration) e ne parte una nuova pulita.
     // ---------------------------------------------------------------------
 
     private fun beginSeekGate(targetPos: Long, expectedPlaying: Boolean) {
@@ -504,32 +506,24 @@ class WatchPartyManager {
 
         lastRemoteCommandMs = System.currentTimeMillis()
         player.seekTo(targetPos, PlayerEventSource.Sync)
-        // forza davvero il buffering, indipendentemente da cosa succederà dopo:
-        // ci ributtiamo in pausa non appena la riproduzione riparte per davvero
-        player.handleEvent(CSPlayerEvent.Play, PlayerEventSource.Sync)
+        // una sola pausa pulita: niente più doppia transizione play→pausa→play
+        // che faceva "lampeggiare" il player ad ogni seek
+        player.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync)
+
+        // il lato locale si considera "pronto" dopo un piccolo tempo di buffering,
+        // poi avvisa l'altro. Il resolve aspetta comunque l'READY del peer.
+        mainHandler.postDelayed({
+            if (gateActive && gateGeneration == myGen) {
+                localReady = true
+                socket?.send(WatchPartyMessage(type = "READY"))
+                maybeResolveGate(myGen)
+            }
+        }, LOCAL_SEEK_READY_MS)
 
         // rete di sicurezza: se un messaggio "READY" si perde, non restare bloccati
         mainHandler.postDelayed({
             if (gateActive && gateGeneration == myGen) resolveGate(myGen)
         }, GATE_SAFETY_TIMEOUT_MS)
-
-        scope.launch {
-            while (isActive && gateGeneration == myGen) {
-                delay(GATE_POLL_MS)
-                val p = PlayerAccess.currentPlayer() ?: continue
-                if (p.getIsPlaying()) {
-                    withContext(Dispatchers.Main) {
-                        if (gateGeneration != myGen) return@withContext
-                        lastRemoteCommandMs = System.currentTimeMillis()
-                        p.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync) // torna in attesa dell'altro
-                        localReady = true
-                        socket?.send(WatchPartyMessage(type = "READY"))
-                        maybeResolveGate(myGen)
-                    }
-                    return@launch
-                }
-            }
-        }
     }
 
     private fun onRemoteReady() {
@@ -570,17 +564,18 @@ class WatchPartyManager {
         socket?.send(WatchPartyMessage(type = "EPISODE_HINT", title = title))
     }
 
-    /** Solo l'host: cambia episodio sul proprio player E lo propaga al guest. */
+    /**
+     * Cambia episodio sul proprio player e lo propaga all'altro.
+     * Può essere chiamato da entrambi, MA il guest solo se l'host glielo
+     * consente (canNextEpisode); senza permesso non fa nulla.
+     */
     fun goToNextEpisode() {
-        if (role != Role.HOST) return
+        if (role == Role.GUEST && !myPermissions.canNextEpisode) {
+            onStatusText?.invoke("L'host non ti permette di cambiare episodio")
+            return
+        }
         PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.NextEpisode, PlayerEventSource.UI)
         socket?.send("NEXT_EPISODE")
-    }
-
-    fun goToPrevEpisode() {
-        if (role != Role.HOST) return
-        PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.PrevEpisode, PlayerEventSource.UI)
-        socket?.send("PREV_EPISODE")
     }
 
     /** Solo l'host può chiamarlo: imposta cosa può fare il guest. */
@@ -592,6 +587,7 @@ class WatchPartyManager {
                 type = "PERMISSIONS",
                 canPlayPause = permissions.canPlayPause,
                 canSeek = permissions.canSeek,
+                canNextEpisode = permissions.canNextEpisode,
             )
         )
     }

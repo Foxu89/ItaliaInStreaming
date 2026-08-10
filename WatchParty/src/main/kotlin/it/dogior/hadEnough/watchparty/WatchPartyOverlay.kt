@@ -138,9 +138,18 @@ class WatchPartyOverlay(
         if (show) {
             if (spinner != null) return
             val decor = activity.window?.decorView as? ViewGroup ?: return
-            val bar = ProgressBar(activity)
-            val size = dp(activity, 56)
-            val params = FrameLayout.LayoutParams(size, size).apply { gravity = Gravity.CENTER }
+            val bar = ProgressBar(activity).apply {
+                indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFF4FC3F7.toInt())
+            }
+            val size = dp(activity, 42)
+            // mini-rotellina leggermente SOPRA quella nativa del player (che
+            // è al centro): non si sovrappongono più, e il colore azzurro la
+            // distingue come "attesa del plugin".
+            val height = decor.height
+            val params = FrameLayout.LayoutParams(size, size).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = (height / 2) + dp(activity, 24)
+            }
             runCatching { decor.addView(bar, params) }.onSuccess { spinner = bar }
         } else {
             removeSpinner()
