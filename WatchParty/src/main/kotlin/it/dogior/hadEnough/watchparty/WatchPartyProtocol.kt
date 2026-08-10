@@ -30,6 +30,8 @@ data class MediaInfo(
  *  - "SEEK"        (position, playing) — avvia il gate di attesa sincronizzata
  *    su entrambi i lati (vedi beginSeekGate in WatchPartyManager)
  *  - "READY"       — inviato da un lato quando ha finito di caricare dopo un seek
+ *  - "CHAT"        (name, text) — un messaggio della chat; il relay lo inoltra
+ *    ciecamente all'altro peer della stanza
  *  - "NEXT_EPISODE" — cambia episodio sul player dell'altro; può partirlo sia
  *    l'host sia il guest, se l'host glielo consente (permesso canNextEpisode)
  *  - "FORCE_SYNC"  (position, playing) — come SYNC_STATE ma applicato SEMPRE,
@@ -51,6 +53,7 @@ data class WatchPartyMessage(
     val headers: Map<String, String> = emptyMap(),
     val quality: Int = 0,
     val name: String? = null,
+    val text: String? = null,
     val canPlayPause: Boolean? = null,
     val canSeek: Boolean? = null,
     val canNextEpisode: Boolean? = null,

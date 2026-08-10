@@ -109,6 +109,8 @@ class WatchPartyManager {
     var onParticipantsChanged: (() -> Unit)? = null
     /** true = mostra la rotellina di attesa sincronizzata, false = nascondila. */
     var onBufferingGateChanged: ((Boolean) -> Unit)? = null
+    /** Messaggio della chat ricevuto dall'altro peer: (nome mittente, testo). */
+    var onChatMessage: ((sender: String, text: String) -> Unit)? = null
 
     val isConnected: Boolean get() = socket?.isOpen == true
 
@@ -451,6 +453,11 @@ class WatchPartyManager {
 
             "READY" -> mainHandler.post { onRemoteReady() }
 
+            "CHAT" -> {
+                val text = msg.text?.trim()?.takeIf { it.isNotEmpty() } ?: return
+                onChatMessage?.invoke(msg.name?.takeIf { it.isNotBlank() } ?: "Amico", text)
+            }
+
             "EPISODE_HINT" -> msg.title?.let { onEpisodeHint?.invoke(it) }
 
             "NEXT_EPISODE" -> applyRemote {
@@ -576,6 +583,19 @@ class WatchPartyManager {
         }
         PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.NextEpisode, PlayerEventSource.UI)
         socket?.send("NEXT_EPISODE")
+    }
+
+    /** Invia un messaggio della chat all'altro peer. No-op se non siamo in stanza. */
+    fun sendChatMessage(text: String) {
+        val clean = text.trim()
+        if (clean.isEmpty() || role == Role.IDLE || !isConnected) return
+        socket?.send(
+            WatchPartyMessage(
+                type = "CHAT",
+                name = localDisplayName(),
+                text = clean,
+            )
+        )
     }
 
     /** Solo l'host può chiamarlo: imposta cosa può fare il guest. */
