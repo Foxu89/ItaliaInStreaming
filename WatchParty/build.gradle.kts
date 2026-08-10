@@ -1,5 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
+import org.jetbrains.kotlin.konan.properties.Properties
+
 plugins {
     id("org.jetbrains.kotlin.plugin.serialization") version "2.4.0"
 }
@@ -17,7 +19,7 @@ version = 23
 
 android {
     defaultConfig {
-        val properties = java.util.Properties()
+        val properties = Properties()
         properties.load(project.rootProject.file("secrets.properties").inputStream())
         buildConfigField("String", "WATCHPARTY_RELAY", "\"${properties.getProperty("WATCHPARTY_RELAY").orEmpty()}\"")
     }
