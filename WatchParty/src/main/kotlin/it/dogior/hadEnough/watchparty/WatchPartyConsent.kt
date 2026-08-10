@@ -49,7 +49,7 @@ object WatchPartyConsent {
     /** Data leggibile dell'accettazione, per mostrarla nelle impostazioni del plugin. */
     fun acceptedAtLabel(): String? {
         val millis = getKey<Long>(KEY_ACCEPTED_AT) ?: return null
-        val fmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.ITALIAN)
+        val fmt = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
         return fmt.format(Date(millis))
     }
 
@@ -111,19 +111,18 @@ object WatchPartyConsent {
         }
 
         val messageView = TextView(context).apply {
-            text = "La funzionalità Watch Party utilizza un piccolo server di relay " +
-                "per inoltrare unicamente i comandi di riproduzione (play, pausa, " +
-                "punto della riproduzione) e il PIN della stanza tra i dispositivi " +
-                "connessi. Nessun flusso audio o video viene trasmesso dal server: " +
-                "il filmato viene caricato direttamente dal tuo dispositivo. I comandi " +
-                "transitano esclusivamente in memoria per la sincronizzazione in tempo " +
-                "reale e nessun log o dato personale viene registrato o salvato sul server."
+            text = "Watch Party uses a small relay server to forward only the " +
+                "playback commands (play, pause, playback position) and the room " +
+                "PIN between connected devices. No audio or video stream passes " +
+                "through the server: the movie is loaded directly on your device. " +
+                "Commands travel exclusively in memory for real-time synchronization " +
+                "and no log or personal data is recorded or stored on the server."
             textSize = 12f
             setLineSpacing(dp(context, 2).toFloat(), 1f)
         }
 
         val checkBox = CheckBox(context).apply {
-            text = "Ho letto e accetto"
+            text = "I have read and accept"
             textSize = 13f
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(context, 16), 0, dp(context, 4))
@@ -133,10 +132,10 @@ object WatchPartyConsent {
         container.addView(checkBox)
 
         val dialog = MaterialAlertDialogBuilder(context)
-            .setTitle("Note sulla Privacy e Sincronizzazione")
+            .setTitle("Privacy & Sync Notes")
             .setView(container)
             .setCancelable(false)
-            .setPositiveButton("Accetto", null) // listener sotto, per poterlo disabilitare all'inizio
+            .setPositiveButton("Accept", null) // listener sotto, per poterlo disabilitare all'inizio
             .create()
 
         dialog.setOnShowListener {

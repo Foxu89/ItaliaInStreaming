@@ -1,4 +1,4 @@
-package it.dogior.hadEnough.watchparty
+﻿package it.dogior.hadEnough.watchparty
 
 import android.os.Handler
 import android.os.Looper
@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.ui.player.CSPlayerEvent
 import com.lagradost.cloudstream3.ui.player.IPlayer
 import com.lagradost.cloudstream3.ui.player.PlayerEventSource
 import com.lagradost.cloudstream3.utils.DataStoreHelper
+import it.dogior.hadEnough.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,8 +67,10 @@ class WatchPartyManager {
         // locale si dichiara pronto (READY) e il resolve aspetta l'altro peer
         private const val LOCAL_SEEK_READY_MS = 900L
 
-        /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento. */
-        const val DEFAULT_RELAY_URL = "wss://watchparty-relay.diegon7771.workers.dev/room"
+        /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento.
+         *  Il valore viene iniettato a build-time dal secret WATCHPARTY_RELAY (GitHub Actions), così
+         *  l'URL non compare nel sorgente. */
+        val DEFAULT_RELAY_URL: String = BuildConfig.WATCHPARTY_RELAY
     }
 
     var role: Role = Role.IDLE
@@ -114,10 +117,10 @@ class WatchPartyManager {
 
     val isConnected: Boolean get() = socket?.isOpen == true
 
-    /** Nome del profilo CloudStream locale attivo, o "Ospite" se non trovato. */
+    /** Nome del profilo CloudStream locale attivo, o "Guest" se non trovato. */
     fun localDisplayName(): String {
         val account = DataStoreHelper.accounts.find { it.keyIndex == DataStoreHelper.selectedKeyIndex }
-        return account?.name?.takeIf { it.isNotBlank() } ?: "Ospite"
+        return account?.name?.takeIf { it.isNotBlank() } ?: "Guest"
     }
 
     private var socket: WatchPartySocket? = null
@@ -215,7 +218,7 @@ class WatchPartyManager {
                 mainHandler.post {
                     reconnectAttempt = 0
                     connectionState = ConnectionState.CONNESSO
-                    onStatusText?.invoke("Connesso al server, in attesa dell'amico…")
+                    onStatusText?.invoke("Connected to the server, waiting for your friend…")
                     // annuncia il nostro nome; se l'altro è già in stanza risponderà
                     // a sua volta (vedi handleRemoteMessage) e sapremo che è presente
                     socket?.send(WatchPartyMessage(type = "HELLO", name = localDisplayName()))
@@ -225,14 +228,14 @@ class WatchPartyManager {
             onMessage = { msg -> mainHandler.post { handleRemoteMessage(msg) } },
             onClosed = {
                 mainHandler.post {
-                    onStatusText?.invoke("Connessione chiusa")
+                    onStatusText?.invoke("Connection closed")
                     peerPresent = false
                     scheduleReconnect()
                 }
             },
             onFailure = { t ->
                 mainHandler.post {
-                    onStatusText?.invoke("Errore di connessione: ${t.message}")
+                    onStatusText?.invoke("Connection error: ${t.message}")
                     peerPresent = false
                     scheduleReconnect()
                 }
@@ -250,7 +253,7 @@ class WatchPartyManager {
         val delayMs = (RECONNECT_BASE_DELAY_MS * (1 shl (reconnectAttempt - 1).coerceAtMost(4)))
             .coerceAtMost(RECONNECT_MAX_DELAY_MS)
 
-        onStatusText?.invoke("Connessione persa, riprovo tra ${delayMs / 1000}s… (tentativo $reconnectAttempt)")
+        onStatusText?.invoke("Connection lost, retrying in ${delayMs / 1000}s… (attempt $reconnectAttempt)")
 
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
@@ -353,7 +356,7 @@ class WatchPartyManager {
         if (playing != null) {
             player.handleEvent(if (playing) CSPlayerEvent.Play else CSPlayerEvent.Pause, PlayerEventSource.Sync)
         }
-        onStatusText?.invoke("L'host non ti permette di fare questa azione")
+        onStatusText?.invoke("The host doesn't allow this action")
     }
 
     // ---------------------------------------------------------------------
@@ -369,7 +372,7 @@ class WatchPartyManager {
 
         when (msg.type) {
             "PEER_JOINED" -> {
-                onStatusText?.invoke("Amico connesso, invio il mio nome…")
+                onStatusText?.invoke("Friend connected, sending my name…")
                 socket?.send(WatchPartyMessage(type = "HELLO", name = localDisplayName()))
                 if (role == Role.HOST) sendSyncState()
             }
@@ -377,13 +380,13 @@ class WatchPartyManager {
             "PEER_LEFT" -> {
                 peerPresent = false
                 remotePeerName = null
-                onStatusText?.invoke("L'amico ha lasciato la stanza")
+                onStatusText?.invoke("Your friend left the room")
                 onParticipantsChanged?.invoke()
             }
 
             "HELLO" -> {
-                remotePeerName = msg.name?.takeIf { it.isNotBlank() } ?: "Amico"
-                onStatusText?.invoke("Amico connesso: $remotePeerName")
+                remotePeerName = msg.name?.takeIf { it.isNotBlank() } ?: "Friend"
+                onStatusText?.invoke("Friend connected: $remotePeerName")
                 onParticipantsChanged?.invoke()
                 // se sono host e avevo già impostato dei permessi, li rimando ora
                 // che l'ospite si è (ri)connesso, altrimenti li perderebbe al reconnect
@@ -399,7 +402,7 @@ class WatchPartyManager {
                         canSeek = msg.canSeek ?: true,
                         canNextEpisode = msg.canNextEpisode ?: true,
                     )
-                    onStatusText?.invoke("L'host ha aggiornato i tuoi permessi")
+                    onStatusText?.invoke("The host updated your permissions")
                     onParticipantsChanged?.invoke()
                 }
             }
@@ -455,7 +458,7 @@ class WatchPartyManager {
 
             "CHAT" -> {
                 val text = msg.text?.trim()?.takeIf { it.isNotEmpty() } ?: return
-                onChatMessage?.invoke(msg.name?.takeIf { it.isNotBlank() } ?: "Amico", text)
+                onChatMessage?.invoke(msg.name?.takeIf { it.isNotBlank() } ?: "Friend", text)
             }
 
             "EPISODE_HINT" -> msg.title?.let { onEpisodeHint?.invoke(it) }
@@ -467,7 +470,7 @@ class WatchPartyManager {
             "LEAVE_ROOM" -> {
                 peerPresent = false
                 remotePeerName = null
-                onStatusText?.invoke("L'amico ha lasciato la stanza")
+                onStatusText?.invoke("Your friend left the room")
                 onParticipantsChanged?.invoke()
             }
         }
@@ -488,7 +491,7 @@ class WatchPartyManager {
                 playing = player.getIsPlaying(),
             )
         )
-        onStatusText?.invoke("Risincronizzazione inviata all'amico")
+        onStatusText?.invoke("Resync sent to your friend")
     }
 
     // ---------------------------------------------------------------------
@@ -578,7 +581,7 @@ class WatchPartyManager {
      */
     fun goToNextEpisode() {
         if (role == Role.GUEST && !myPermissions.canNextEpisode) {
-            onStatusText?.invoke("L'host non ti permette di cambiare episodio")
+            onStatusText?.invoke("The host doesn't allow you to change episodes")
             return
         }
         PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.NextEpisode, PlayerEventSource.UI)

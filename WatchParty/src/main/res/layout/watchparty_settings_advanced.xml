@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -14,7 +14,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="14dp"
-            android:text="Impostazioni Watch Party"
+            android:text="Watch Party settings"
             android:textSize="22sp"
             android:textStyle="bold" />
 
@@ -41,7 +41,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Pulsante invisibile nel player"
+                        android:text="Invisible button in the player"
                         android:textSize="13sp"
                         android:textStyle="bold" />
 
@@ -50,7 +50,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:alpha="0.6"
-                        android:text="Nasconde il pulsante sopra il player ma resta cliccabile nello stesso punto"
+                        android:text="Hides the button over the player but it stays clickable at the same position"
                         android:textSize="11sp" />
                 </LinearLayout>
 
@@ -87,7 +87,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Icona chat invisibile nel player"
+                        android:text="Invisible chat icon in the player"
                         android:textSize="13sp"
                         android:textStyle="bold" />
 
@@ -96,7 +96,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:alpha="0.6"
-                        android:text="Nasconde la freccetta della chat ma i messaggi nuovi fanno apparire il pallino rosso lo stesso"
+                        android:text="Hides the chat arrow but new messages still show the red dot"
                         android:textSize="11sp" />
                 </LinearLayout>
 
@@ -118,7 +118,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:layout_marginBottom="10dp"
-            android:text="Tema della chat"
+            android:text="Chat theme"
             android:textSize="16sp"
             android:textStyle="bold" />
 
@@ -134,7 +134,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:alpha="0.6"
-                android:text="Scegli i colori delle bolle nella chat"
+                android:text="Choose the bubble colors in the chat"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -157,7 +157,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Bolle in stile glow"
+                    android:text="Glow-style bubbles"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -166,7 +166,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:alpha="0.6"
-                    android:text="Bolle nere con il bordo del colore scelto, come neon"
+                    android:text="Black bubbles with a border in the chosen color, like a neon sign"
                     android:textSize="11sp" />
             </LinearLayout>
 

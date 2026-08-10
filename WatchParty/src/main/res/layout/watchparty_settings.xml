@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -46,7 +46,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Apri un video, poi crea una stanza o unisciti con un PIN."
+                    android:text="Open a video, then create a room or join with a PIN."
                     android:textSize="13sp" />
 
             </LinearLayout>
@@ -87,7 +87,7 @@
                 android:layout_width="38dp"
                 android:layout_height="38dp"
                 android:layout_marginStart="8dp"
-                android:contentDescription="Copia il PIN"
+                android:contentDescription="Copy the PIN"
                 android:padding="7dp" />
 
         </LinearLayout>
@@ -108,7 +108,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:text="Crea stanza"
+                android:text="Create room"
                 android:textAllCaps="false"
                 android:textStyle="bold" />
 
@@ -117,7 +117,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:hint="Inserisci il PIN dell'amico"
+                android:hint="Enter your friend's PIN"
                 android:inputType="number"
                 android:maxLength="6" />
 
@@ -129,7 +129,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:text="Unisciti alla stanza"
+                android:text="Join room"
                 android:textAllCaps="false"
                 android:textStyle="bold" />
 
@@ -160,7 +160,7 @@
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center"
-                    android:text="Episodio succ. ▶"
+                    android:text="Next ep. ▶"
                     android:textAllCaps="false"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -174,7 +174,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:text="Risincronizza ora"
+                android:text="Resync now"
                 android:textAllCaps="false"
                 android:textStyle="bold" />
 
@@ -186,7 +186,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
-                android:text="Esci dalla stanza"
+                android:text="Leave room"
                 android:textAllCaps="false"
                 android:textStyle="bold" />
 
@@ -214,7 +214,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Impostazioni"
+                    android:text="Settings"
                     android:textSize="17sp"
                     android:textStyle="bold" />
 
@@ -223,7 +223,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:alpha="0.8"
-                    android:text="Preferenze del plugin"
+                    android:text="Plugin preferences"
                     android:textSize="13sp" />
             </LinearLayout>
 
@@ -231,7 +231,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
-                android:text="Apri"
+                android:text="Open"
                 android:textStyle="bold" />
 
         </LinearLayout>

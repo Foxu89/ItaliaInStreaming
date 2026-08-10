@@ -429,7 +429,7 @@ class WatchPartyOverlay(
                 setPadding(dp(activity, 6), dp(activity, 4), dp(activity, 4), dp(activity, 4))
             }
             val input = EditText(activity).apply {
-                hint = "Scrivi un messaggio…"
+                hint = "Write a message…"
                 textSize = 14f
                 setTextColor(Color.WHITE)
                 setHintTextColor(0xB3FFFFFF.toInt())

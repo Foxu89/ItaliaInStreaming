@@ -1,4 +1,4 @@
-package it.dogior.hadEnough.watchparty
+﻿package it.dogior.hadEnough.watchparty
 
 import android.graphics.drawable.Drawable
 import android.os.Bundle
@@ -97,12 +97,12 @@ class WatchPartyAdvancedSettingsFragment(
     private class ThemeOption(val index: Int, val name: String, val mine: Int, val peer: Int)
 
     private fun themes(): List<ThemeOption> = listOf(
-        ThemeOption(0, "Classico", 0xFF2E7DFF.toInt(), 0xFF37474F.toInt()),
-        ThemeOption(1, "Smeraldo", 0xFF2AC96B.toInt(), 0xFF22403A.toInt()),
-        ThemeOption(2, "Crepuscolo", 0xFF8C6BFF.toInt(), 0xFF38314D.toInt()),
-        ThemeOption(3, "Ambra", 0xFFFFB74D.toInt(), 0xFF4A3B26.toInt()),
-        ThemeOption(4, "Fragola", 0xFFFF4FA3.toInt(), 0xFF4A2F3F.toInt()),
-        ThemeOption(5, "Turchese", 0xFF00BCD4.toInt(), 0xFF1B3B42.toInt()),
+        ThemeOption(0, "Classic", 0xFF2E7DFF.toInt(), 0xFF37474F.toInt()),
+        ThemeOption(1, "Emerald", 0xFF2AC96B.toInt(), 0xFF22403A.toInt()),
+        ThemeOption(2, "Twilight", 0xFF8C6BFF.toInt(), 0xFF38314D.toInt()),
+        ThemeOption(3, "Amber", 0xFFFFB74D.toInt(), 0xFF4A3B26.toInt()),
+        ThemeOption(4, "Strawberry", 0xFFFF4FA3.toInt(), 0xFF4A2F3F.toInt()),
+        ThemeOption(5, "Turquoise", 0xFF00BCD4.toInt(), 0xFF1B3B42.toInt()),
     )
 
     private var selectedIndex: Int = 0
@@ -150,8 +150,8 @@ class WatchPartyAdvancedSettingsFragment(
             background = bubbleBackground(color)
             setPadding(dp(8), dp(5), dp(8), dp(5))
         }
-        val mineBubble = bubble(option.mine, "Ciao")
-        val peerBubble = bubble(option.peer, "Ehilà!")
+        val mineBubble = bubble(option.mine, "Hi")
+        val peerBubble = bubble(option.peer, "Hey!")
         preview.addView(mineBubble)
         preview.addView(peerBubble, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT

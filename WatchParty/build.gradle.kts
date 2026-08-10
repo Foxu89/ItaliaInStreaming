@@ -13,9 +13,15 @@ dependencies {
 }
 
 // usa un intero per il numero di versione
-version = 22
+version = 23
 
 android {
+    defaultConfig {
+        val properties = java.util.Properties()
+        properties.load(project.rootProject.file("secrets.properties").inputStream())
+        buildConfigField("String", "WATCHPARTY_RELAY", "\"${properties.getProperty("WATCHPARTY_RELAY").orEmpty()}\"")
+    }
+
     buildFeatures {
         buildConfig = true
         viewBinding = true
@@ -39,6 +45,6 @@ cloudstream {
     )
 
     iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/WatchParty/WatchParty_icon.png"
-    description = "Guarda in sincrono con un amico: play/pausa/seek/episodio replicati in tempo reale."
+    description = "Watch in sync with a friend: play/pause/seek/episode replicated in real time."
     requiresResources = true
 }

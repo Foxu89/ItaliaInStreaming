@@ -1,4 +1,4 @@
-package it.dogior.hadEnough.watchparty
+﻿package it.dogior.hadEnough.watchparty
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -165,14 +165,14 @@ class WatchPartySettingsFragment(
             }
 
             val current = manager.guestPermissions
-            val playPauseSwitch = permissionRow("Può mettere play/pausa", current.canPlayPause)
-            val seekSwitch = permissionRow("Può avanzare/riavvolgere", current.canSeek)
-            val nextEpisodeSwitch = permissionRow("Può cambiare episodio", current.canNextEpisode)
+            val playPauseSwitch = permissionRow("Can play/pause", current.canPlayPause)
+            val seekSwitch = permissionRow("Can seek", current.canSeek)
+            val nextEpisodeSwitch = permissionRow("Can change episode", current.canNextEpisode)
 
             com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
-                .setTitle("Permessi di ${manager.remotePeerName ?: "questo partecipante"}")
+                .setTitle("Permissions for ${manager.remotePeerName ?: "this participant"}")
                 .setView(container)
-                .setPositiveButton("Salva") { _, _ ->
+                .setPositiveButton("Save") { _, _ ->
                     manager.sendPermissionsToGuest(
                         ParticipantPermissions(
                             canPlayPause = playPauseSwitch.isChecked,
@@ -180,9 +180,9 @@ class WatchPartySettingsFragment(
                             canNextEpisode = nextEpisodeSwitch.isChecked,
                         )
                     )
-                    showToast("Permessi aggiornati")
+                    showToast("Permissions updated")
                 }
-                .setNegativeButton("Annulla", null)
+                .setNegativeButton("Cancel", null)
                 .show()
         }
 
@@ -207,7 +207,7 @@ class WatchPartySettingsFragment(
             row.addView(nameView)
             if (editable) {
                 val hint = TextView(root.context).apply {
-                    text = "Permessi"
+                    text = "Permissions"
                     textSize = 12f
                     alpha = 0.7f
                     setTextColor(0xFF7C93FF.toInt())
@@ -228,7 +228,7 @@ class WatchPartySettingsFragment(
             }
             participantsContainer.visibility = View.VISIBLE
             val me = manager.localDisplayName()
-            val meLabel = if (manager.role == WatchPartyManager.Role.HOST) "$me (Host, Tu)" else "$me (Tu)"
+            val meLabel = if (manager.role == WatchPartyManager.Role.HOST) "$me (Host, You)" else "$me (You)"
             participantsContainer.addView(buildParticipantCard(meLabel, editable = false))
 
             val peerName = manager.remotePeerName
@@ -239,7 +239,7 @@ class WatchPartySettingsFragment(
                 participantsContainer.addView(buildParticipantCard(peerLabel, editable = isHost))
             } else {
                 participantsContainer.addView(
-                    buildParticipantCard("In attesa di un partecipante…", editable = false)
+                    buildParticipantCard("Waiting for a participant…", editable = false)
                 )
             }
         }
@@ -274,7 +274,7 @@ class WatchPartySettingsFragment(
         updateStatusDot(manager.connectionState)
 
         if (!PlayerAccess.isPlayerScreenActive()) {
-            status.text = "Apri prima un video, poi torna qui per creare/unirti alla stanza."
+            status.text = "Open a video first, then come back here to create or join a room."
         }
 
         manager.onStatusText = { text -> activity?.runOnUiThread { status.text = text } }
@@ -290,12 +290,12 @@ class WatchPartySettingsFragment(
 
         createBtn.setOnClickListener {
             if (!PlayerAccess.isPlayerScreenActive()) {
-                showToast("Apri prima un video")
+                showToast("Open a video first")
                 return@setOnClickListener
             }
             val pin = manager.createRoom()
             pinDisplay.text = pin
-            status.text = "Condividi questo PIN con il tuo amico. Deve aprire lo stesso video."
+            status.text = "Share this PIN with your friend. They need to open the same video."
             refreshUiForActiveRoom()
         }
 
@@ -303,21 +303,21 @@ class WatchPartySettingsFragment(
             val pin = manager.currentPin ?: return@setOnClickListener
             val clipboard = root.context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("Watch Party PIN", pin))
-            showToast("PIN copiato")
+            showToast("PIN copied")
         }
 
         joinBtn.setOnClickListener {
             val pin = pinInput.text?.toString()?.trim().orEmpty()
             if (pin.length < 4) {
-                showToast("Inserisci un PIN valido")
+                showToast("Enter a valid PIN")
                 return@setOnClickListener
             }
             if (!PlayerAccess.isPlayerScreenActive()) {
-                showToast("Apri prima lo stesso video del tuo amico")
+                showToast("Open the same video as your friend first")
                 return@setOnClickListener
             }
             manager.joinRoom(pin)
-            status.text = "Connessione alla stanza $pin…"
+            status.text = "Connecting to room $pin…"
             refreshUiForActiveRoom()
         }
 
@@ -328,7 +328,7 @@ class WatchPartySettingsFragment(
 
         resyncBtn.setOnClickListener {
             manager.requestResyncNow()
-            showToast("Risincronizzazione inviata")
+            showToast("Resync sent")
         }
 
         nextEpisodeBtn.setOnClickListener { manager.goToNextEpisode() }
@@ -342,8 +342,8 @@ class WatchPartySettingsFragment(
             textSize = 11f
             alpha = 0.5f
             val date = WatchPartyConsent.acceptedAtLabel()
-            text = if (date != null) "Termini sul relay accettati il $date"
-            else "Termini sul relay non ancora accettati"
+            text = if (date != null) "Relay terms accepted on $date"
+            else "Relay terms not accepted yet"
             gravity = android.view.Gravity.CENTER
             setPadding(0, (12 * resources.displayMetrics.density).toInt(), 0, 0)
         }
