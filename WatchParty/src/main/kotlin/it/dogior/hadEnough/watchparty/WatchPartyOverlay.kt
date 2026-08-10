@@ -6,6 +6,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ProgressBar
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.CommonActivity
@@ -20,14 +21,21 @@ import it.dogior.hadEnough.BuildConfig
  *
  * Il controllo "sono nella schermata player?" avviene via polling
  * (PlayerAccess.isPlayerScreenActive) perché non esiste un evento pubblico
- * per l'apertura/chiusura del player.
+ * per l'apertura/chiusura del player. Lo stesso polling rileva anche
+ * quando l'utente ESCE dal player con una stanza attiva, per chiuderla.
  */
-class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> Unit) {
+class WatchPartyOverlay(
+    private val plugin: Plugin,
+    private val manager: WatchPartyManager,
+    private val onClick: () -> Unit,
+) {
 
     private val handler = Handler(Looper.getMainLooper())
     private var fab: FloatingActionButton? = null
+    private var spinner: ProgressBar? = null
     private var attachedActivity: Activity? = null
     private var running = false
+    private var wasPlayerActive = false
 
     private fun isButtonInvisible(): Boolean =
         CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
@@ -44,12 +52,14 @@ class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> U
         if (running) return
         running = true
         handler.post(tick)
+        manager.onBufferingGateChanged = { show -> handler.post { setSpinnerVisible(show) } }
     }
 
     fun stop() {
         running = false
         handler.removeCallbacks(tick)
         removeFab()
+        removeSpinner()
     }
 
     private fun sync() {
@@ -59,6 +69,14 @@ class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> U
             return
         }
         val shouldShow = PlayerAccess.isPlayerScreenActive()
+
+        // l'utente ha appena chiuso il player mentre la stanza era attiva: la chiudiamo
+        if (wasPlayerActive && !shouldShow && manager.role != WatchPartyManager.Role.IDLE) {
+            android.util.Log.d("WatchParty", "🚪 Player chiuso con stanza attiva, esco dalla stanza")
+            manager.leaveRoom()
+        }
+        wasPlayerActive = shouldShow
+
         if (shouldShow && (fab == null || attachedActivity !== activity)) {
             android.util.Log.d("WatchParty", "➕ WatchPartyOverlay: schermata player rilevata, aggiungo il FAB")
             removeFab()
@@ -66,6 +84,7 @@ class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> U
         } else if (!shouldShow && fab != null) {
             android.util.Log.d("WatchParty", "➖ WatchPartyOverlay: schermata player chiusa, rimuovo il FAB")
             removeFab()
+            removeSpinner()
         } else if (fab != null) {
             fab?.let { updateVisibility(it) }
         }
@@ -112,6 +131,27 @@ class WatchPartyOverlay(private val plugin: Plugin, private val onClick: () -> U
         runCatching { parent?.removeView(button) }
         fab = null
         attachedActivity = null
+    }
+
+    private fun setSpinnerVisible(show: Boolean) {
+        val activity = CommonActivity.activity ?: return
+        if (show) {
+            if (spinner != null) return
+            val decor = activity.window?.decorView as? ViewGroup ?: return
+            val bar = ProgressBar(activity)
+            val size = dp(activity, 56)
+            val params = FrameLayout.LayoutParams(size, size).apply { gravity = Gravity.CENTER }
+            runCatching { decor.addView(bar, params) }.onSuccess { spinner = bar }
+        } else {
+            removeSpinner()
+        }
+    }
+
+    private fun removeSpinner() {
+        val bar = spinner ?: return
+        val parent = bar.parent as? ViewGroup
+        runCatching { parent?.removeView(bar) }
+        spinner = null
     }
 
     private fun dp(activity: Activity, value: Int): Int =

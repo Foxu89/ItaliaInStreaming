@@ -27,7 +27,10 @@ data class MediaInfo(
  *  - "HELLO"       (name) — scambio del nome visualizzato, inviato all'apertura
  *  - "SYNC_REQUEST" / "SYNC_STATE"
  *  - "PLAY" / "PAUSE"
- *  - "SEEK"        (position, playing)
+ *  - "SEEK"        (position, playing) — avvia il gate di attesa sincronizzata
+ *    su entrambi i lati (vedi beginSeekGate in WatchPartyManager)
+ *  - "READY"       — inviato da un lato quando ha finito di caricare dopo un seek
+ *  - "NEXT_EPISODE" / "PREV_EPISODE" — solo host, propaga il cambio episodio
  *  - "FORCE_SYNC"  (position, playing) — come SYNC_STATE ma applicato SEMPRE,
  *    usato dal pulsante "Risincronizza ora" (azione esplicita dell'utente)
  *  - "PERMISSIONS" (canPlayPause, canSeek) — l'host imposta cosa può fare il guest

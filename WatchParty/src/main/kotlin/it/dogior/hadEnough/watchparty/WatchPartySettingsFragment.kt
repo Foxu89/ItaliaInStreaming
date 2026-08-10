@@ -112,6 +112,9 @@ class WatchPartySettingsFragment(
         val joinBtn = root.findView<TextView>("wp_join")
 
         val activeRoomCard = root.findView<View>("wp_active_room_card")
+        val episodeRow = root.findView<View>("wp_episode_row")
+        val prevEpisodeBtn = root.findView<TextView>("wp_prev_episode")
+        val nextEpisodeBtn = root.findView<TextView>("wp_next_episode")
         val leaveBtn = root.findView<TextView>("wp_leave")
         val resyncBtn = root.findView<TextView>("wp_resync")
 
@@ -126,6 +129,8 @@ class WatchPartySettingsFragment(
         joinBtn.applyBlueBackground()
         resyncBtn.applyBlueBackground()
         leaveBtn.applyDangerBackground()   // azione distruttiva, rossa
+        prevEpisodeBtn.applyOutlineBackground()
+        nextEpisodeBtn.applyOutlineBackground()
         copyPinBtn.applyOutlineBackground()
         copyPinBtn.setImageDrawable(getDrawable("copy_icon"))
         settingsCard.applyOutlineBackground()
@@ -241,10 +246,12 @@ class WatchPartySettingsFragment(
 
         fun refreshUiForActiveRoom() {
             val inRoom = manager.role != WatchPartyManager.Role.IDLE
+            val isHost = manager.role == WatchPartyManager.Role.HOST
             joinCard.visibility = if (inRoom) View.GONE else View.VISIBLE
             activeRoomCard.visibility = if (inRoom) View.VISIBLE else View.GONE
-            pinCard.visibility = if (inRoom && manager.role == WatchPartyManager.Role.HOST) View.VISIBLE else View.GONE
-            if (inRoom && manager.role == WatchPartyManager.Role.HOST) {
+            episodeRow.visibility = if (inRoom && isHost) View.VISIBLE else View.GONE
+            pinCard.visibility = if (inRoom && isHost) View.VISIBLE else View.GONE
+            if (inRoom && isHost) {
                 pinDisplay.text = manager.currentPin
             }
             refreshParticipants()
@@ -319,6 +326,9 @@ class WatchPartySettingsFragment(
             manager.requestResyncNow()
             showToast("Risincronizzazione inviata")
         }
+
+        prevEpisodeBtn.setOnClickListener { manager.goToPrevEpisode() }
+        nextEpisodeBtn.setOnClickListener { manager.goToNextEpisode() }
 
         refreshUiForActiveRoom()
 

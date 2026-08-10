@@ -60,6 +60,8 @@ class WatchPartyManager {
         private const val SEEK_SEND_DEBOUNCE_MS = 220L
         private const val RECONNECT_BASE_DELAY_MS = 1000L
         private const val RECONNECT_MAX_DELAY_MS = 15000L
+        private const val GATE_SAFETY_TIMEOUT_MS = 9000L
+        private const val GATE_POLL_MS = 150L
 
         /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento. */
         const val DEFAULT_RELAY_URL = "wss://watchparty-relay.diegon7771.workers.dev/room"
@@ -102,6 +104,8 @@ class WatchPartyManager {
     var onConnectionStateChanged: ((ConnectionState) -> Unit)? = null
     var onEpisodeHint: ((String) -> Unit)? = null
     var onParticipantsChanged: (() -> Unit)? = null
+    /** true = mostra la rotellina di attesa sincronizzata, false = nascondila. */
+    var onBufferingGateChanged: ((Boolean) -> Unit)? = null
 
     val isConnected: Boolean get() = socket?.isOpen == true
 
@@ -130,6 +134,13 @@ class WatchPartyManager {
     // ultimo stato locale noto, per rilevare le transizioni via polling
     private var lastKnownPlaying: Boolean? = null
     private var lastKnownPosition: Long = 0L
+
+    // --- gate di attesa sincronizzata dopo un seek ---
+    private var gateActive = false
+    private var gateGeneration = 0
+    private var gateExpectedPlaying = true
+    private var localReady = false
+    private var remoteReady = false
 
     fun createRoom(relayUrl: String = DEFAULT_RELAY_URL): String {
         this.relayUrl = relayUrl
@@ -179,6 +190,9 @@ class WatchPartyManager {
         remotePeerName = null
         myPermissions = ParticipantPermissions()
         guestPermissions = ParticipantPermissions()
+        gateActive = false
+        gateGeneration++
+        onBufferingGateChanged?.invoke(false)
     }
 
     // ---------------------------------------------------------------------
@@ -309,6 +323,8 @@ class WatchPartyManager {
                     lastKnownPosition = finalPos
                     lastKnownPlaying = finalPlaying
                     socket?.send(WatchPartyMessage(type = "SEEK", position = finalPos, playing = finalPlaying))
+                    // anche IO aspetto il gate: niente più "chi carica prima riparte prima"
+                    beginSeekGate(finalPos, finalPlaying)
                 }
             }
             return
@@ -422,23 +438,24 @@ class WatchPartyManager {
                 PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync)
             }
 
-            "SEEK" -> applyRemote {
-                val player = PlayerAccess.currentPlayer() ?: return@applyRemote
-                val pos = msg.position ?: return@applyRemote
-                player.seekTo(pos, PlayerEventSource.Sync)
-                // Applica lo stato SEMPRE, non solo se getIsPlaying() sembra diverso:
-                // subito dopo seekTo() il player è in transizione (buffering) e
-                // getIsPlaying() può restituire un valore non affidabile in quel
-                // preciso istante. Era la causa del "play che non parte mai".
-                if (msg.playing != null) {
-                    player.handleEvent(
-                        if (msg.playing) CSPlayerEvent.Play else CSPlayerEvent.Pause,
-                        PlayerEventSource.Sync
-                    )
-                }
+            "SEEK" -> {
+                val pos = msg.position ?: return
+                val playing = msg.playing ?: true
+                lastRemoteCommandMs = System.currentTimeMillis()
+                mainHandler.post { beginSeekGate(pos, playing) }
             }
 
+            "READY" -> mainHandler.post { onRemoteReady() }
+
             "EPISODE_HINT" -> msg.title?.let { onEpisodeHint?.invoke(it) }
+
+            "NEXT_EPISODE" -> applyRemote {
+                PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.NextEpisode, PlayerEventSource.Sync)
+            }
+
+            "PREV_EPISODE" -> applyRemote {
+                PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.PrevEpisode, PlayerEventSource.Sync)
+            }
 
             "LEAVE_ROOM" -> {
                 peerPresent = false
@@ -467,6 +484,75 @@ class WatchPartyManager {
         onStatusText?.invoke("Risincronizzazione inviata all'amico")
     }
 
+    // ---------------------------------------------------------------------
+    // Gate di attesa sincronizzata dopo un seek: entrambi in pausa con
+    // rotellina finché non sono davvero pronti, poi ripartono insieme.
+    // Event-driven (basato sul reale ripristino di getIsPlaying()), NON un
+    // timer fisso: un nuovo seek durante l'attesa invalida quella vecchia
+    // (gateGeneration) e ne parte una nuova pulita, senza perdere input.
+    // ---------------------------------------------------------------------
+
+    private fun beginSeekGate(targetPos: Long, expectedPlaying: Boolean) {
+        val player = PlayerAccess.currentPlayer() ?: return
+        gateActive = true
+        gateGeneration++
+        val myGen = gateGeneration
+        gateExpectedPlaying = expectedPlaying
+        localReady = false
+        remoteReady = false
+        onBufferingGateChanged?.invoke(true)
+
+        lastRemoteCommandMs = System.currentTimeMillis()
+        player.seekTo(targetPos, PlayerEventSource.Sync)
+        // forza davvero il buffering, indipendentemente da cosa succederà dopo:
+        // ci ributtiamo in pausa non appena la riproduzione riparte per davvero
+        player.handleEvent(CSPlayerEvent.Play, PlayerEventSource.Sync)
+
+        // rete di sicurezza: se un messaggio "READY" si perde, non restare bloccati
+        mainHandler.postDelayed({
+            if (gateActive && gateGeneration == myGen) resolveGate(myGen)
+        }, GATE_SAFETY_TIMEOUT_MS)
+
+        scope.launch {
+            while (isActive && gateGeneration == myGen) {
+                delay(GATE_POLL_MS)
+                val p = PlayerAccess.currentPlayer() ?: continue
+                if (p.getIsPlaying()) {
+                    withContext(Dispatchers.Main) {
+                        if (gateGeneration != myGen) return@withContext
+                        lastRemoteCommandMs = System.currentTimeMillis()
+                        p.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync) // torna in attesa dell'altro
+                        localReady = true
+                        socket?.send(WatchPartyMessage(type = "READY"))
+                        maybeResolveGate(myGen)
+                    }
+                    return@launch
+                }
+            }
+        }
+    }
+
+    private fun onRemoteReady() {
+        remoteReady = true
+        maybeResolveGate(gateGeneration)
+    }
+
+    private fun maybeResolveGate(gen: Int) {
+        if (gen != gateGeneration || !gateActive) return
+        if (localReady && remoteReady) resolveGate(gen)
+    }
+
+    private fun resolveGate(gen: Int) {
+        if (gen != gateGeneration || !gateActive) return
+        gateActive = false
+        onBufferingGateChanged?.invoke(false)
+        lastRemoteCommandMs = System.currentTimeMillis()
+        PlayerAccess.currentPlayer()?.handleEvent(
+            if (gateExpectedPlaying) CSPlayerEvent.Play else CSPlayerEvent.Pause,
+            PlayerEventSource.Sync
+        )
+    }
+
     private fun sendSyncState() {
         val player = PlayerAccess.currentPlayer() ?: return
         socket?.send(
@@ -482,6 +568,19 @@ class WatchPartyManager {
     fun notifyEpisodeChanged(title: String) {
         if (role != Role.HOST || !isConnected) return
         socket?.send(WatchPartyMessage(type = "EPISODE_HINT", title = title))
+    }
+
+    /** Solo l'host: cambia episodio sul proprio player E lo propaga al guest. */
+    fun goToNextEpisode() {
+        if (role != Role.HOST) return
+        PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.NextEpisode, PlayerEventSource.UI)
+        socket?.send("NEXT_EPISODE")
+    }
+
+    fun goToPrevEpisode() {
+        if (role != Role.HOST) return
+        PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.PrevEpisode, PlayerEventSource.UI)
+        socket?.send("PREV_EPISODE")
     }
 
     /** Solo l'host può chiamarlo: imposta cosa può fare il guest. */

@@ -25,7 +25,7 @@ class WatchPartyPlugin : Plugin() {
 
     override fun load(context: Context) {
         Log.d(TAG, "🔌 WatchPartyPlugin.load() chiamato")
-        overlay = WatchPartyOverlay(plugin = this, onClick = {
+        overlay = WatchPartyOverlay(plugin = this, manager = manager, onClick = {
             Log.d(TAG, "👆 FAB del player cliccato")
             openSettingsSheet()
         })
