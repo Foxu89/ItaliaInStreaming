@@ -1,4 +1,4 @@
-﻿package it.dogior.hadEnough.watchparty
+package it.dogior.hadEnough.watchparty
 
 import android.content.ClipData
 import android.content.ClipboardManager

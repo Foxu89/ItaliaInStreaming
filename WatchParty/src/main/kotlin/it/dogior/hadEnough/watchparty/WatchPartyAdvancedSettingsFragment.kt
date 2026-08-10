@@ -1,4 +1,4 @@
-﻿package it.dogior.hadEnough.watchparty
+package it.dogior.hadEnough.watchparty
 
 import android.graphics.drawable.Drawable
 import android.os.Bundle
