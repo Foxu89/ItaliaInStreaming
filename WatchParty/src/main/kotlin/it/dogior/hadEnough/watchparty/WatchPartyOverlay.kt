@@ -236,7 +236,7 @@ class WatchPartyOverlay(
         // sfondo circolare semitrasparente
         host.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(0x99000000)
+            setColor(0x99000000.toInt())
         }
         host.setOnClickListener { openChat() }
         host.addView(arrowImage, FrameLayout.LayoutParams(size, size))
@@ -433,13 +433,13 @@ class WatchPartyOverlay(
             setPadding(0, dp(activity, 5), 0, dp(activity, 5))
         }
         val nameView = TextView(activity).apply {
-            text = sender
+            this.text = sender
             textSize = 11f
             setTextColor(0x99FFFFFF.toInt())
             setPadding(dp(activity, 6), 0, dp(activity, 6), dp(activity, 2))
         }
         val bubble = TextView(activity).apply {
-            text = text
+            this.text = text
             textSize = 14f
             setTextColor(Color.WHITE)
             maxWidth = (list.width * 0.78f).toInt().coerceAtLeast(dp(activity, 120))
