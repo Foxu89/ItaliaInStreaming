@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
@@ -108,13 +107,13 @@ class WatchPartySettingsFragment(
         val copyPinBtn = root.findView<ImageButton>("wp_copy_pin")
 
         val joinCard = root.findView<View>("wp_join_card")
-        val createBtn = root.findView<Button>("wp_create")
+        val createBtn = root.findView<TextView>("wp_create")
         val pinInput = root.findView<EditText>("wp_pin_input")
-        val joinBtn = root.findView<Button>("wp_join")
+        val joinBtn = root.findView<TextView>("wp_join")
 
         val activeRoomCard = root.findView<View>("wp_active_room_card")
-        val leaveBtn = root.findView<Button>("wp_leave")
-        val resyncBtn = root.findView<Button>("wp_resync")
+        val leaveBtn = root.findView<TextView>("wp_leave")
+        val resyncBtn = root.findView<TextView>("wp_resync")
 
         val settingsCard = root.findView<View>("wp_settings_card")
 
