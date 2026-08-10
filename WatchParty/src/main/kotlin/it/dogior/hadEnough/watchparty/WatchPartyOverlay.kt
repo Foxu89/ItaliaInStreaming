@@ -495,7 +495,6 @@ class WatchPartyOverlay(
         panel.translationX = -panel.width.toFloat()
         panel.animate().translationX(0f).setDuration(220).start()
         scrollToBottom()
-        requestShowKeyboard()
     }
 
     private fun closeChat() {
@@ -577,16 +576,6 @@ class WatchPartyOverlay(
         val root = chatRoot ?: return
         val scroll = (root.getChildAt(1) as? ViewGroup)?.getChildAt(1) as? ScrollView ?: return
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
-    }
-
-    private fun requestShowKeyboard() {
-        val input = chatInput ?: return
-        try {
-            val imm = CommonActivity.activity?.getSystemService(Activity.INPUT_METHOD_SERVICE)
-                    as? android.view.inputmethod.InputMethodManager
-            imm?.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
-        } catch (_: Exception) {
-        }
     }
 
     private fun removeChat() {
