@@ -53,12 +53,22 @@ class WatchPartyOverlay(
 
     // --- chat ---
     private var chatArrowHost: FrameLayout? = null
+    private var chatArrowImage: ImageView? = null
     private var chatUnreadDot: View? = null
     private var chatRoot: FrameLayout? = null
     private var chatPanel: LinearLayout? = null
     private var chatMessages: LinearLayout? = null
     private var chatInput: EditText? = null
+    private var chatSendIcon: ImageView? = null
     private var chatPanelOpen = false
+
+    // bolle create, per poter ricolorare TUTTI i messaggi quando cambia il tema
+    private val bubbleRefs = mutableListOf<Pair<TextView, Boolean>>()
+    // ultimo mittente della bolla precedente, per raggruppare i messaggi consecutivi
+    private var lastGroupSender: String? = null
+    // cache dei pref per applicare i cambiamenti anche a chat già costruita
+    private var lastThemeIndex = -1
+    private var lastChatInvisible: Boolean? = null
 
     private class ChatTheme(val mineBubble: Int, val peerBubble: Int, val accent: Int)
 
@@ -77,6 +87,45 @@ class WatchPartyOverlay(
 
     private fun isChatInvisible(): Boolean =
         CloudStreamApp.getKey<String>("wp_chat_invisible") == "true"
+
+    /** Applica tema + visibilità icona chat. Chiamato ad ogni tick: così i
+     *  cambi fatti dalle impostazioni valgono anche a chat già costruita. */
+    private fun applyChatPrefs() {
+        val themeIndex = CloudStreamApp.getKey<String>("wp_chat_theme")?.toIntOrNull() ?: 0
+        if (themeIndex != lastThemeIndex) {
+            lastThemeIndex = themeIndex
+            repaintTheme()
+        }
+        val invisible = isChatInvisible()
+        if (invisible != lastChatInvisible) {
+            lastChatInvisible = invisible
+            val image = chatArrowImage
+            val host = chatArrowHost
+            if (image != null && host != null) {
+                if (invisible) {
+                    image.alpha = 0f
+                    host.background = null
+                } else {
+                    image.alpha = 1f
+                    host.background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(0x99000000.toInt())
+                    }
+                }
+            }
+        }
+    }
+
+    /** Ricolora tutte le bolle già mostrate col tema correntemente selezionato. */
+    private fun repaintTheme() {
+        val theme = chatTheme()
+        for ((bubble, mine) in bubbleRefs) {
+            (bubble.background as? GradientDrawable)?.setColor(if (mine) theme.mineBubble else theme.peerBubble)
+        }
+        chatSendIcon?.colorFilter = android.graphics.PorterDuffColorFilter(
+            theme.accent, android.graphics.PorterDuff.Mode.SRC_IN
+        )
+    }
 
     private fun getDrawable(name: String): Drawable? {
         val res = plugin.resources ?: return null
@@ -145,6 +194,10 @@ class WatchPartyOverlay(
         } else if ((!shouldShow || !inRoom) && chatArrowHost != null) {
             removeChat()
         }
+
+        // applica i pref della chat anche se è già stata costruita (es. tema
+        // cambiato dalle impostazioni, o toggle "icona invisibile" attivato dopo)
+        applyChatPrefs()
     }
 
     // ---------------------------------------------------------------------
@@ -261,6 +314,7 @@ class WatchPartyOverlay(
         }
         host.setOnClickListener { openChat() }
         host.addView(arrowImage, FrameLayout.LayoutParams(size, size))
+        chatArrowImage = arrowImage
 
         val dot = View(activity).apply {
             background = GradientDrawable().apply {
@@ -285,11 +339,9 @@ class WatchPartyOverlay(
         ))
 
         val panel = run {
-            val panelWidth = (activity.window?.decorView?.width ?: 0 * 1) * 0.48f
-            val w = if (panelWidth > 0) panelWidth.toInt() else (activity.resources.displayMetrics.widthPixels * 0.48f).toInt()
-            // leggermente più corto del player: 88% dell'altezza, centrato verticalmente
-            val decorHeight = activity.window?.decorView?.height ?: 0
-            val h = if (decorHeight > 0) (decorHeight * 0.88f).toInt() else ViewGroup.LayoutParams.MATCH_PARENT
+            // larghezza 42% dello schermo (leggermente meno di prima)
+            val panelWidth = (activity.window?.decorView?.width ?: 0 * 1) * 0.42f
+            val w = if (panelWidth > 0) panelWidth.toInt() else (activity.resources.displayMetrics.widthPixels * 0.42f).toInt()
             val p = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 background = GradientDrawable().apply {
@@ -351,6 +403,7 @@ class WatchPartyOverlay(
             }
             val input = EditText(activity).apply {
                 hint = "Scrivi un messaggio…"
+                textSize = 14f
                 setTextColor(Color.WHITE)
                 setHintTextColor(0xB3FFFFFF.toInt())
                 setSingleLine(true)
@@ -369,6 +422,7 @@ class WatchPartyOverlay(
                 setPadding(dp(activity, 7), dp(activity, 7), dp(activity, 7), dp(activity, 7))
                 setOnClickListener { sendChat() }
             }
+            chatSendIcon = sendBtn
             inputRow.addView(input)
             inputRow.addView(sendBtn)
             val inputRowCardParams = LinearLayout.LayoutParams(
@@ -378,8 +432,8 @@ class WatchPartyOverlay(
 
             root.addView(p, FrameLayout.LayoutParams(
                 w,
-                h,
-                Gravity.START or Gravity.CENTER_VERTICAL,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.START or Gravity.FILL_VERTICAL,
             ))
             p
         }
@@ -456,16 +510,24 @@ class WatchPartyOverlay(
         val list = chatMessages ?: return
         val activity = CommonActivity.activity ?: return
         val theme = chatTheme()
+        // messaggi consecutivi dello stesso mittente: niente nome ripetuto e
+        // bolle più vicine (un solo "Tu"/"Amico", poi solo le bolle)
+        val grouped = sender == lastGroupSender
+        lastGroupSender = sender
+        val vPad = if (grouped) dp(activity, 2) else dp(activity, 5)
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = if (mine) Gravity.END else Gravity.START
-            setPadding(0, dp(activity, 5), 0, dp(activity, 5))
+            setPadding(0, vPad, 0, vPad)
         }
-        val nameView = TextView(activity).apply {
-            this.text = sender
-            textSize = 11f
-            setTextColor(0x99FFFFFF.toInt())
-            setPadding(dp(activity, 6), 0, dp(activity, 6), dp(activity, 2))
+        if (!grouped) {
+            val nameView = TextView(activity).apply {
+                this.text = sender
+                textSize = 11f
+                setTextColor(0x99FFFFFF.toInt())
+                setPadding(dp(activity, 6), 0, dp(activity, 6), dp(activity, 2))
+            }
+            row.addView(nameView)
         }
         val bubble = TextView(activity).apply {
             this.text = text
@@ -478,9 +540,9 @@ class WatchPartyOverlay(
             }
             setPadding(dp(activity, 10), dp(activity, 7), dp(activity, 10), dp(activity, 7))
         }
-        row.addView(nameView)
         row.addView(bubble)
         list.addView(row)
+        bubbleRefs += bubble to mine
         scrollToBottom()
     }
 
@@ -505,11 +567,17 @@ class WatchPartyOverlay(
         chatArrowHost?.let { (it.parent as? ViewGroup)?.removeView(it) }
         chatRoot?.let { (it.parent as? ViewGroup)?.removeView(it) }
         chatArrowHost = null
+        chatArrowImage = null
         chatUnreadDot = null
         chatRoot = null
         chatPanel = null
         chatMessages = null
         chatInput = null
+        chatSendIcon = null
+        bubbleRefs.clear()
+        lastGroupSender = null
+        lastThemeIndex = -1
+        lastChatInvisible = null
     }
 
     private fun dp(activity: Activity, value: Int): Int =
