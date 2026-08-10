@@ -60,8 +60,23 @@ class WatchPartyOverlay(
     private var chatInput: EditText? = null
     private var chatPanelOpen = false
 
+    private class ChatTheme(val mineBubble: Int, val peerBubble: Int, val accent: Int)
+
+    private fun chatTheme(): ChatTheme {
+        val index = CloudStreamApp.getKey<String>("wp_chat_theme")?.toIntOrNull() ?: 0
+        return when (index) {
+            1 -> ChatTheme(0xFF2AC96B.toInt(), 0xFF22403A.toInt(), 0xFF2AC96B.toInt())   // Smeraldo
+            2 -> ChatTheme(0xFF8C6BFF.toInt(), 0xFF38314D.toInt(), 0xFF8C6BFF.toInt())   // Crepuscolo
+            3 -> ChatTheme(0xFFFFB74D.toInt(), 0xFF4A3B26.toInt(), 0xFFFFB74D.toInt())   // Ambra
+            else -> ChatTheme(0xFF2E7DFF.toInt(), 0xFF37474F.toInt(), 0xFF2E7DFF.toInt()) // Classico
+        }
+    }
+
     private fun isButtonInvisible(): Boolean =
         CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
+
+    private fun isChatInvisible(): Boolean =
+        CloudStreamApp.getKey<String>("wp_chat_invisible") == "true"
 
     private fun getDrawable(name: String): Drawable? {
         val res = plugin.resources ?: return null
@@ -238,6 +253,12 @@ class WatchPartyOverlay(
             shape = GradientDrawable.OVAL
             setColor(0x99000000.toInt())
         }
+        if (isChatInvisible()) {
+            // freccetta invisibile ma resta cliccabile/attivabile; il pallino
+            // rosso dei nuovi messaggi resta comunque visibile
+            arrowImage.alpha = 0f
+            host.background = null
+        }
         host.setOnClickListener { openChat() }
         host.addView(arrowImage, FrameLayout.LayoutParams(size, size))
 
@@ -266,11 +287,14 @@ class WatchPartyOverlay(
         val panel = run {
             val panelWidth = (activity.window?.decorView?.width ?: 0 * 1) * 0.48f
             val w = if (panelWidth > 0) panelWidth.toInt() else (activity.resources.displayMetrics.widthPixels * 0.48f).toInt()
+            // leggermente più corto del player: 88% dell'altezza, centrato verticalmente
+            val decorHeight = activity.window?.decorView?.height ?: 0
+            val h = if (decorHeight > 0) (decorHeight * 0.88f).toInt() else ViewGroup.LayoutParams.MATCH_PARENT
             val p = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 background = GradientDrawable().apply {
-                    setColor(0xF2121212.toInt())
-                    cornerRadius = dp(activity, 12).toFloat()
+                    setColor(0xFF000000.toInt())
+                    cornerRadius = dp(activity, 16).toFloat()
                 }
                 setPadding(dp(activity, 12), dp(activity, 10), dp(activity, 12), dp(activity, 10))
             }
@@ -314,11 +338,16 @@ class WatchPartyOverlay(
             scroll.addView(messages)
             p.addView(scroll)
 
-            // riga input
+            // riga input racchiusa in una card come quelle delle impostazioni
+            val theme = chatTheme()
             val inputRow = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(activity, 8), 0, 0)
+                background = getDrawable("outline") ?: GradientDrawable().apply {
+                    setColor(0x12FFFFFF.toInt())
+                    cornerRadius = dp(activity, 16).toFloat()
+                }
+                setPadding(dp(activity, 6), dp(activity, 4), dp(activity, 4), dp(activity, 4))
             }
             val input = EditText(activity).apply {
                 hint = "Scrivi un messaggio…"
@@ -326,26 +355,31 @@ class WatchPartyOverlay(
                 setHintTextColor(0xB3FFFFFF.toInt())
                 setSingleLine(true)
                 maxLines = 1
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
             chatInput = input
             val sendBtn = ImageView(activity).apply {
-                setImageDrawable(getDrawable("send_chevron"))
+                setImageDrawable(getDrawable("send_icon"))
+                colorFilter = android.graphics.PorterDuffColorFilter(theme.accent, android.graphics.PorterDuff.Mode.SRC_IN)
                 isClickable = true
                 isFocusable = true
-                val s = dp(activity, 40)
+                val s = dp(activity, 36)
                 layoutParams = LinearLayout.LayoutParams(s, s)
-                setPadding(dp(activity, 8), dp(activity, 8), dp(activity, 8), dp(activity, 8))
+                setPadding(dp(activity, 7), dp(activity, 7), dp(activity, 7), dp(activity, 7))
                 setOnClickListener { sendChat() }
             }
             inputRow.addView(input)
             inputRow.addView(sendBtn)
-            p.addView(inputRow)
+            val inputRowCardParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(activity, 8) }
+            p.addView(inputRow, inputRowCardParams)
 
             root.addView(p, FrameLayout.LayoutParams(
                 w,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                Gravity.START or Gravity.FILL_VERTICAL,
+                h,
+                Gravity.START or Gravity.CENTER_VERTICAL,
             ))
             p
         }
@@ -421,6 +455,7 @@ class WatchPartyOverlay(
     private fun appendLocalBubble(sender: String, text: String, mine: Boolean) {
         val list = chatMessages ?: return
         val activity = CommonActivity.activity ?: return
+        val theme = chatTheme()
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = if (mine) Gravity.END else Gravity.START
@@ -439,11 +474,7 @@ class WatchPartyOverlay(
             maxWidth = (list.width * 0.78f).toInt().coerceAtLeast(dp(activity, 120))
             background = GradientDrawable().apply {
                 cornerRadius = dp(activity, 14).toFloat()
-                if (mine) {
-                    setColor(0xFF2E7DFF.toInt())
-                } else {
-                    setColor(0xFF37474F.toInt())
-                }
+                setColor(if (mine) theme.mineBubble else theme.peerBubble)
             }
             setPadding(dp(activity, 10), dp(activity, 7), dp(activity, 10), dp(activity, 7))
         }
