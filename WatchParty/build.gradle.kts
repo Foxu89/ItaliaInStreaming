@@ -13,7 +13,7 @@ dependencies {
 }
 
 // usa un intero per il numero di versione
-version = 18
+version = 19
 
 android {
     buildFeatures {
@@ -38,7 +38,7 @@ cloudstream {
         "Others",
     )
 
-    iconUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/WatchParty/WatchParty_icon.png"
+    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/WatchParty/WatchParty_icon.png"
     description = "Guarda in sincrono con un amico: play/pausa/seek/episodio replicati in tempo reale."
     requiresResources = true
 }

@@ -402,15 +402,9 @@ class WatchPartyOverlay(
     }
 
     private fun onChatReceived(sender: String, text: String) {
-        val root = chatRoot ?: return
-        if (chatPanelOpen && chatMessages != null) {
-            appendLocalBubble(sender, text, mine = false)
-        } else if (root.visibility == View.VISIBLE && chatMessages != null) {
-            appendLocalBubble(sender, text, mine = false)
-        } else {
-            // pannello chiuso: segnala con il pallino rosso
-            chatUnreadDot?.visibility = View.VISIBLE
-        }
+        if (chatRoot == null) return
+        appendLocalBubble(sender, text, mine = false)
+        if (!chatPanelOpen) chatUnreadDot?.visibility = View.VISIBLE
     }
 
     private fun sendChat() {
