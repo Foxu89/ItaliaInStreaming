@@ -61,9 +61,12 @@ class WatchPartyAdvancedSettingsFragment(
         val invisibleButtonSwitch = root.findView<Switch>("wpa_invisible_button")
         val invisibleChatSwitch = root.findView<Switch>("wpa_invisible_chat")
         val themeCard = root.findView<LinearLayout>("wpa_theme_card")
+        val glowCard = root.findView<View>("wpa_glow_card")
+        val glowSwitch = root.findView<Switch>("wpa_glow")
 
         optionsCard.background = getDrawable("outline")
         themeCard.background = getDrawable("outline")
+        glowCard.background = getDrawable("outline")
 
         invisibleButtonSwitch.isChecked = CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
         invisibleButtonSwitch.setOnCheckedChangeListener { _, checked ->
@@ -73,6 +76,14 @@ class WatchPartyAdvancedSettingsFragment(
         invisibleChatSwitch.isChecked = CloudStreamApp.getKey<String>("wp_chat_invisible") == "true"
         invisibleChatSwitch.setOnCheckedChangeListener { _, checked ->
             CloudStreamApp.setKey("wp_chat_invisible", if (checked) "true" else "false")
+        }
+
+        glow = CloudStreamApp.getKey<String>("wp_chat_glow") == "true"
+        glowSwitch.isChecked = glow
+        glowSwitch.setOnCheckedChangeListener { _, checked ->
+            CloudStreamApp.setKey("wp_chat_glow", if (checked) "true" else "false")
+            glow = checked
+            previewRefreshers.forEach { it() }
         }
 
         buildThemeSelector(themeCard)
@@ -90,11 +101,30 @@ class WatchPartyAdvancedSettingsFragment(
         ThemeOption(1, "Smeraldo", 0xFF2AC96B.toInt(), 0xFF22403A.toInt()),
         ThemeOption(2, "Crepuscolo", 0xFF8C6BFF.toInt(), 0xFF38314D.toInt()),
         ThemeOption(3, "Ambra", 0xFFFFB74D.toInt(), 0xFF4A3B26.toInt()),
+        ThemeOption(4, "Fragola", 0xFFFF4FA3.toInt(), 0xFF4A2F3F.toInt()),
+        ThemeOption(5, "Turchese", 0xFF00BCD4.toInt(), 0xFF1B3B42.toInt()),
     )
 
     private var selectedIndex: Int = 0
+    private var glow: Boolean = false
 
     private val rowRefreshers = mutableListOf<() -> Unit>()
+    private val previewRefreshers = mutableListOf<() -> Unit>()
+
+    /** Anteprima della bolla: piena col colore del tema oppure glow (nero + bordo). */
+    private fun bubbleBackground(color: Int): android.graphics.drawable.GradientDrawable =
+        if (glow) {
+            android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(0xFF000000.toInt())
+                setStroke(dp(2), color)
+            }
+        } else {
+            android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(color)
+            }
+        }
 
     /** Costruisce una riga con anteprima di due bolle + nome del tema. */
     private fun themeRow(option: ThemeOption, onSelected: (Int) -> Unit): LinearLayout {
@@ -117,10 +147,7 @@ class WatchPartyAdvancedSettingsFragment(
             this.text = text
             textSize = 11f
             setTextColor(0xFFFFFFFF.toInt())
-            background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(color)
-            }
+            background = bubbleBackground(color)
             setPadding(dp(8), dp(5), dp(8), dp(5))
         }
         val mineBubble = bubble(option.mine, "Ciao")
@@ -129,6 +156,12 @@ class WatchPartyAdvancedSettingsFragment(
         preview.addView(peerBubble, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { leftMargin = dp(6) })
+
+        // al cambio del glow ridisegna le anteprime
+        previewRefreshers += {
+            mineBubble.background = bubbleBackground(option.mine)
+            peerBubble.background = bubbleBackground(option.peer)
+        }
 
         val name = TextView(ctx).apply {
             this.text = option.name
@@ -166,6 +199,7 @@ class WatchPartyAdvancedSettingsFragment(
 
     private fun buildThemeSelector(card: LinearLayout) {
         rowRefreshers.clear()
+        previewRefreshers.clear()
         selectedIndex = CloudStreamApp.getKey<String>("wp_chat_theme")?.toIntOrNull() ?: 0
         themes().forEach { option ->
             card.addView(

@@ -68,6 +68,7 @@ class WatchPartyOverlay(
     private var lastGroupSender: String? = null
     // cache dei pref per applicare i cambiamenti anche a chat già costruita
     private var lastThemeIndex = -1
+    private var lastGlow: Boolean? = null
     private var lastChatInvisible: Boolean? = null
 
     private class ChatTheme(val mineBubble: Int, val peerBubble: Int, val accent: Int)
@@ -78,7 +79,30 @@ class WatchPartyOverlay(
             1 -> ChatTheme(0xFF2AC96B.toInt(), 0xFF22403A.toInt(), 0xFF2AC96B.toInt())   // Smeraldo
             2 -> ChatTheme(0xFF8C6BFF.toInt(), 0xFF38314D.toInt(), 0xFF8C6BFF.toInt())   // Crepuscolo
             3 -> ChatTheme(0xFFFFB74D.toInt(), 0xFF4A3B26.toInt(), 0xFFFFB74D.toInt())   // Ambra
+            4 -> ChatTheme(0xFFFF4FA3.toInt(), 0xFF4A2F3F.toInt(), 0xFFFF4FA3.toInt())   // Fragola
+            5 -> ChatTheme(0xFF00BCD4.toInt(), 0xFF1B3B42.toInt(), 0xFF00BCD4.toInt())   // Turchese
             else -> ChatTheme(0xFF2E7DFF.toInt(), 0xFF37474F.toInt(), 0xFF2E7DFF.toInt()) // Classico
+        }
+    }
+
+    private fun isGlow(): Boolean =
+        CloudStreamApp.getKey<String>("wp_chat_glow") == "true"
+
+    /** Sfondo della bolla: pieno con il colore del tema, oppure "glow" =
+     *  nero puro dentro con bordo del colore del tema. */
+    private fun bubbleBackground(activity: Activity, mine: Boolean, theme: ChatTheme): GradientDrawable {
+        val color = if (mine) theme.mineBubble else theme.peerBubble
+        return if (isGlow()) {
+            GradientDrawable().apply {
+                cornerRadius = dp(activity, 14).toFloat()
+                setColor(0xFF000000.toInt())
+                setStroke(dp(activity, 2), color)
+            }
+        } else {
+            GradientDrawable().apply {
+                cornerRadius = dp(activity, 14).toFloat()
+                setColor(color)
+            }
         }
     }
 
@@ -92,8 +116,10 @@ class WatchPartyOverlay(
      *  cambi fatti dalle impostazioni valgono anche a chat già costruita. */
     private fun applyChatPrefs() {
         val themeIndex = CloudStreamApp.getKey<String>("wp_chat_theme")?.toIntOrNull() ?: 0
-        if (themeIndex != lastThemeIndex) {
+        val glow = isGlow()
+        if (themeIndex != lastThemeIndex || glow != lastGlow) {
             lastThemeIndex = themeIndex
+            lastGlow = glow
             repaintTheme()
         }
         val invisible = isChatInvisible()
@@ -116,11 +142,12 @@ class WatchPartyOverlay(
         }
     }
 
-    /** Ricolora tutte le bolle già mostrate col tema correntemente selezionato. */
+    /** Ridisegna tutte le bolle già mostrate col tema (e stile glow) corrente. */
     private fun repaintTheme() {
         val theme = chatTheme()
+        val activity = CommonActivity.activity ?: return
         for ((bubble, mine) in bubbleRefs) {
-            (bubble.background as? GradientDrawable)?.setColor(if (mine) theme.mineBubble else theme.peerBubble)
+            bubble.background = bubbleBackground(activity, mine, theme)
         }
         chatSendIcon?.colorFilter = android.graphics.PorterDuffColorFilter(
             theme.accent, android.graphics.PorterDuff.Mode.SRC_IN
@@ -514,11 +541,14 @@ class WatchPartyOverlay(
         // bolle più vicine (un solo "Tu"/"Amico", poi solo le bolle)
         val grouped = sender == lastGroupSender
         lastGroupSender = sender
-        val vPad = if (grouped) dp(activity, 2) else dp(activity, 5)
+        // distanza uniforme tra messaggi di fila: bottom SEMPRE 2dp, top 5dp
+        // solo quando il nome sta sopra (nuovo gruppo). Così gap 1ª-2ª e
+        // 2ª-3ª sono identici (2+2=4dp).
+        val topPad = if (grouped) dp(activity, 2) else dp(activity, 5)
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = if (mine) Gravity.END else Gravity.START
-            setPadding(0, vPad, 0, vPad)
+            setPadding(0, topPad, 0, dp(activity, 2))
         }
         if (!grouped) {
             val nameView = TextView(activity).apply {
@@ -534,10 +564,7 @@ class WatchPartyOverlay(
             textSize = 14f
             setTextColor(Color.WHITE)
             maxWidth = (list.width * 0.78f).toInt().coerceAtLeast(dp(activity, 120))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(activity, 14).toFloat()
-                setColor(if (mine) theme.mineBubble else theme.peerBubble)
-            }
+            background = bubbleBackground(activity, mine, theme)
             setPadding(dp(activity, 10), dp(activity, 7), dp(activity, 10), dp(activity, 7))
         }
         row.addView(bubble)
@@ -577,6 +604,7 @@ class WatchPartyOverlay(
         bubbleRefs.clear()
         lastGroupSender = null
         lastThemeIndex = -1
+        lastGlow = null
         lastChatInvisible = null
     }
 
