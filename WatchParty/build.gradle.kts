@@ -15,7 +15,7 @@ dependencies {
 }
 
 // usa un intero per il numero di versione
-version = 24
+version = 25
 
 android {
     defaultConfig {
@@ -47,6 +47,6 @@ cloudstream {
     )
 
     iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/WatchParty/WatchParty_icon.png"
-    description = "Watch in sync with a friend: play/pause/seek/episode replicated in real time."
+    description = "⚠️ BETA ⚠️ Watch movies and TV series together in real-time with live chat (Max 2 users for now)."
     requiresResources = true
 }

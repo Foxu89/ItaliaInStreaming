@@ -111,12 +111,14 @@ object WatchPartyConsent {
         }
 
         val messageView = TextView(context).apply {
-            text = "Watch Party uses a small relay server to forward only the " +
-                "playback commands (play, pause, playback position) and the room " +
-                "PIN between connected devices. No audio or video stream passes " +
-                "through the server: the movie is loaded directly on your device. " +
-                "Commands travel exclusively in memory for real-time synchronization " +
-                "and no log or personal data is recorded or stored on the server."
+            text = "Watch Party uses a lightweight relay server solely to pass real-time " +
+                "playback commands (play, pause, seek), chat messages, and the room " +
+                "PIN between connected devices. No audio or video streams pass " +
+                "through the server: media is loaded directly on your device. All " +
+                "data, including chat messages, is processed strictly in memory for " +
+                "real-time routing. No chat history, logs, or personal data are " +
+                "recorded or stored on the server. Once delivered, messages leave " +
+                "no trace."
             textSize = 12f
             setLineSpacing(dp(context, 2).toFloat(), 1f)
         }
