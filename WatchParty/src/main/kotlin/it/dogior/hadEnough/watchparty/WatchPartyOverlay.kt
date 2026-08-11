@@ -9,7 +9,6 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -63,9 +62,6 @@ class WatchPartyOverlay(
     private var chatInput: EditText? = null
     private var chatSendIcon: ImageView? = null
     private var chatPanelOpen = false
-    // activity che ospita la chat: serve per togglare il softInputMode della
-    // finestra (evita il resize che mette in pausa il video col pannello nel decorView)
-    private var chatActivity: Activity? = null
 
     // bolle create, per poter ricolorare TUTTI i messaggi quando cambia il tema
     private val bubbleRefs = mutableListOf<Pair<TextView, Boolean>>()
@@ -319,7 +315,6 @@ class WatchPartyOverlay(
 
     private fun addChat(activity: Activity) {
         val decor = activity.window?.decorView as? ViewGroup ?: return
-        chatActivity = activity
         chatPanelOpen = false
 
         // ---- pomello/freccia a sinistra, centro verticale ----
@@ -442,6 +437,21 @@ class WatchPartyOverlay(
                 setSingleLine(true)
                 maxLines = 1
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                // "FINE"/invio della tastiera NON deve risalire all'activity come
+                // KEYCODE_ENTER (che in CloudStream toggla play/pausa): lo consumiamo
+                // qui e lo trasformiamo in invio del messaggio.
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+                setOnEditorActionListener { _, actionId, _ ->
+                    if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND ||
+                        actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE ||
+                        actionId == android.view.inputmethod.EditorInfo.IME_ACTION_UNSPECIFIED
+                    ) {
+                        sendChat()
+                        true
+                    } else {
+                        false
+                    }
+                }
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             }
             chatInput = input
@@ -449,7 +459,9 @@ class WatchPartyOverlay(
                 setImageDrawable(getDrawable("send_icon"))
                 colorFilter = android.graphics.PorterDuffColorFilter(theme.accent, android.graphics.PorterDuff.Mode.SRC_IN)
                 isClickable = true
-                isFocusable = true
+                // NON focusable: se rubasse il focus all'EditText, la tastiera si
+                // chiuderebbe con un ENTER fantasma che toggla play/pausa in CloudStream
+                isFocusable = false
                 val s = dp(activity, 36)
                 layoutParams = LinearLayout.LayoutParams(s, s)
                 setPadding(dp(activity, 7), dp(activity, 7), dp(activity, 7), dp(activity, 7))
@@ -493,9 +505,6 @@ class WatchPartyOverlay(
         val root = chatRoot ?: return
         val panel = chatPanel ?: return
         val host = chatArrowHost ?: return
-        // tastiera che "sposta su" invece di ridimensionare: il pannello vive nel
-        // decorView del player, e un resize della finestra metteva in pausa il video
-        chatActivity?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
         chatPanelOpen = true
         host.visibility = View.GONE // la freccia sparisce quando si apre
         root.visibility = View.VISIBLE
@@ -512,8 +521,6 @@ class WatchPartyOverlay(
         val host = chatArrowHost ?: return
         if (!chatPanelOpen) return
         chatPanelOpen = false
-        // ripristina la modalità originale di CloudStream quando si chiude la chat
-        chatActivity?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         panel.animate().translationX(-panel.width.toFloat()).setDuration(220)
             .withEndAction {
                 root.visibility = View.GONE
@@ -541,6 +548,13 @@ class WatchPartyOverlay(
         // The other person receives the text over the socket; we show it locally right away
         appendLocalBubble(me, text, mine = true)
         input.setText("")
+        // chiude la tastiera in sicurezza via InputMethodManager: nessun key event
+        // che risalirebbe al player (KEYCODE_ENTER toggla play/pausa in CloudStream)
+        runCatching {
+            val imm = input.context.getSystemService(Activity.INPUT_METHOD_SERVICE)
+                as? android.view.inputmethod.InputMethodManager
+            imm?.hideSoftInputFromWindow(input.windowToken, 0)
+        }
     }
 
     private fun appendLocalBubble(sender: String, text: String, mine: Boolean) {
@@ -589,9 +603,6 @@ class WatchPartyOverlay(
     }
 
     private fun removeChat() {
-        // sicurezza: se la chat viene rimossa mentre è aperta, ripristina il softInputMode
-        chatActivity?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
-        chatActivity = null
         chatPanelOpen = false
         chatArrowHost?.let { (it.parent as? ViewGroup)?.removeView(it) }
         chatRoot?.let { (it.parent as? ViewGroup)?.removeView(it) }
