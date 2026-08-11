@@ -9,6 +9,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -62,6 +63,9 @@ class WatchPartyOverlay(
     private var chatInput: EditText? = null
     private var chatSendIcon: ImageView? = null
     private var chatPanelOpen = false
+    // activity che ospita la chat: serve per togglare il softInputMode della
+    // finestra (evita il resize che mette in pausa il video col pannello nel decorView)
+    private var chatActivity: Activity? = null
 
     // bolle create, per poter ricolorare TUTTI i messaggi quando cambia il tema
     private val bubbleRefs = mutableListOf<Pair<TextView, Boolean>>()
@@ -315,6 +319,7 @@ class WatchPartyOverlay(
 
     private fun addChat(activity: Activity) {
         val decor = activity.window?.decorView as? ViewGroup ?: return
+        chatActivity = activity
         chatPanelOpen = false
 
         // ---- pomello/freccia a sinistra, centro verticale ----
@@ -488,6 +493,9 @@ class WatchPartyOverlay(
         val root = chatRoot ?: return
         val panel = chatPanel ?: return
         val host = chatArrowHost ?: return
+        // tastiera che "sposta su" invece di ridimensionare: il pannello vive nel
+        // decorView del player, e un resize della finestra metteva in pausa il video
+        chatActivity?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
         chatPanelOpen = true
         host.visibility = View.GONE // la freccia sparisce quando si apre
         root.visibility = View.VISIBLE
@@ -504,6 +512,8 @@ class WatchPartyOverlay(
         val host = chatArrowHost ?: return
         if (!chatPanelOpen) return
         chatPanelOpen = false
+        // ripristina la modalità originale di CloudStream quando si chiude la chat
+        chatActivity?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         panel.animate().translationX(-panel.width.toFloat()).setDuration(220)
             .withEndAction {
                 root.visibility = View.GONE
@@ -579,6 +589,9 @@ class WatchPartyOverlay(
     }
 
     private fun removeChat() {
+        // sicurezza: se la chat viene rimossa mentre è aperta, ripristina il softInputMode
+        chatActivity?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        chatActivity = null
         chatPanelOpen = false
         chatArrowHost?.let { (it.parent as? ViewGroup)?.removeView(it) }
         chatRoot?.let { (it.parent as? ViewGroup)?.removeView(it) }
