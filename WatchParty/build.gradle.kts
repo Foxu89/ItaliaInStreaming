@@ -15,7 +15,7 @@ dependencies {
 }
 
 // usa un intero per il numero di versione
-version = 26
+version = 27
 
 android {
     defaultConfig {
