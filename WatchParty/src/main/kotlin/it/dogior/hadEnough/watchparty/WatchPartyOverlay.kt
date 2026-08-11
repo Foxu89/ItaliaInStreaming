@@ -57,6 +57,7 @@ class WatchPartyOverlay(
     private var chatUnreadDot: View? = null
     private var chatRoot: FrameLayout? = null
     private var chatPanel: LinearLayout? = null
+    private var chatScrollView: ScrollView? = null
     private var chatMessages: LinearLayout? = null
     private var chatInput: EditText? = null
     private var chatSendIcon: ImageView? = null
@@ -478,8 +479,8 @@ class WatchPartyOverlay(
             chatRoot = root
             chatPanel = panel
             val scroll = panel.getChildAt(1) as ScrollView
-            val list = (panel.getChildAt(1) as ScrollView).getChildAt(0) as LinearLayout
-            chatMessages = list
+            chatScrollView = scroll
+            chatMessages = scroll.getChildAt(0) as LinearLayout
         }
     }
 
@@ -526,8 +527,8 @@ class WatchPartyOverlay(
         val text = input.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) return
         val me = manager.localDisplayName()
-        val sent = manager.sendChatMessage(text)
-        // l'host/gL'altro riceverà il testo; noi lo mostriamo in locale
+        manager.sendChatMessage(text)
+        // The other person receives the text over the socket; we show it locally right away
         appendLocalBubble(me, text, mine = true)
         input.setText("")
     }
@@ -573,8 +574,7 @@ class WatchPartyOverlay(
     }
 
     private fun scrollToBottom() {
-        val root = chatRoot ?: return
-        val scroll = (root.getChildAt(1) as? ViewGroup)?.getChildAt(1) as? ScrollView ?: return
+        val scroll = chatScrollView ?: return
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
 
@@ -587,6 +587,7 @@ class WatchPartyOverlay(
         chatUnreadDot = null
         chatRoot = null
         chatPanel = null
+        chatScrollView = null
         chatMessages = null
         chatInput = null
         chatSendIcon = null
