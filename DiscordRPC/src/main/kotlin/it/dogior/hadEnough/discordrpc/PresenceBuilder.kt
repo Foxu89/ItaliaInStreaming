@@ -27,6 +27,9 @@ object PresenceBuilder {
         val positionMs: Long,
         val isPlaying: Boolean,
         val durationMs: Long? = null,
+        val poster: String? = null,
+        /** Differenza tra l'orologio di Discord e quello del device (vedi TimeSync). */
+        val clockOffsetMs: Long = 0L,
     )
 
     /** true se il contenuto è una serie (anche quando tvType è null). */
@@ -111,10 +114,13 @@ object PresenceBuilder {
             if (RPCSettings.showTimeElapsed && state.isPlaying &&
                 isSanePosition(state.positionMs, state.durationMs)
             ) {
-                // timestamp UNIX in secondi dell'inizio (ora - posizione corrente)
+                // timestamp UNIX in secondi dell'inizio (ora - posizione corrente);
+                // l'offset dell'orologio corregge un eventuale orologio device errato
                 val position = state.positionMs
                 if (position > 0L) {
-                    val start = (System.currentTimeMillis() - position) / 1000L
+                    val nowMs = System.currentTimeMillis()
+                    val start = (nowMs + state.clockOffsetMs - position) / 1000L
+                    Log.i(TAG, "⏱️ now=${nowMs}ms offset=${state.clockOffsetMs}ms pos=${position}ms start=${start}s")
                     put("timestamps", buildJsonObject {
                         put("start", start)
                     })
@@ -122,7 +128,7 @@ object PresenceBuilder {
             }
 
             // LOGGING SEMPRE: serve a capire perché un poster non appare
-            val posterUrl = meta?.poster
+            val posterUrl = state.poster ?: meta?.poster
             Log.i(TAG, "🖼️ poster=${posterUrl ?: "<vuoto>"} meta=${meta?.headerName}")
             if (RPCSettings.showPoster && posterUrl?.isNotBlank() == true) {
                 // URL esterni NON sono accettati in large_image: li convertiamo in

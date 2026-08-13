@@ -12,7 +12,7 @@ dependencies {
     compileOnly("com.jaredrummler:colorpicker:1.1.0") // MainActivity implementa ColorPickerDialogListener
 }
 
-version = 5
+version = 6
 
 android {
     buildFeatures {

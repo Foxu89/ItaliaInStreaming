@@ -259,10 +259,18 @@ class RPCManager {
         val g = gateway ?: return
         if (!g.isOpen) return
 
+        val poster = PlayerMetaAccess.currentPoster()
         val activities = PresenceBuilder.buildActivity(
-            PresenceBuilder.PlayerState(meta = meta, positionMs = position, isPlaying = playing, durationMs = durationMs)
+            PresenceBuilder.PlayerState(
+                meta = meta,
+                positionMs = position,
+                isPlaying = playing,
+                durationMs = durationMs,
+                poster = poster,
+                clockOffsetMs = g.serverOffsetMs,
+            )
         )
-        Log.i(TAG, "📤 INVIO presenza playing=$playing pos=${position}ms dur=${durationMs} meta=${meta?.headerName}")
+        Log.i(TAG, "📤 INVIO presenza playing=$playing pos=${position}ms dur=${durationMs} meta=${meta?.headerName} poster=${poster ?: "<vuoto>"}")
         g.sendPresence(activities, status = "online")
         lastSentKey = meta?.let { "${it.parentId}:${it.id}" } ?: "unknown"
     }

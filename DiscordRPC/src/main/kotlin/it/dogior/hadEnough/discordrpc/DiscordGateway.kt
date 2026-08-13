@@ -22,6 +22,8 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -67,6 +69,15 @@ class DiscordGateway(
     private var sessionId: String? = null
     private var lastSequence: Int? = null
 
+    /**
+     * Differenza (ms) tra l'orologio di Discord (header HTTP "Date" dell'handshake)
+     * e quello del device. Se il device ha ora/data imprecise, sommarlo a
+     * System.currentTimeMillis() rende i timestamps della presenza corretti.
+     */
+    @Volatile
+    var serverOffsetMs: Long = 0L
+        private set
+
     val isOpen: Boolean
         get() = socket != null
 
@@ -82,6 +93,7 @@ class DiscordGateway(
             socket = client.newWebSocket(request, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     Log.i(TAG, "🔌 socket aperto")
+                    readServerOffset(response)
                     // il gateway manderà op 10 HELLO con l'intervallo di heartbeat
                 }
 
@@ -176,6 +188,24 @@ class DiscordGateway(
             put("d", lastSequence?.let { JsonPrimitive(it) } ?: JsonNull)
         }
         socket?.send(payload.toString())
+    }
+
+    /** Sincronizza l'orologio con quello di Discord usando l'header "Date" dell'handshake. */
+    private fun readServerOffset(response: Response) {
+        val header = response.header("Date") ?: run {
+            Log.w(TAG, "🕰️ nessun header Date, offset=0")
+            return
+        }
+        val serverMs = runCatching {
+            SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+                .parse(header)?.time
+        }.getOrNull()
+        if (serverMs != null) {
+            serverOffsetMs = serverMs - System.currentTimeMillis()
+            Log.i(TAG, "🕰️ server=$header offset=${serverOffsetMs}ms")
+        } else {
+            Log.w(TAG, "🕰️ header Date non parsabile: $header")
+        }
     }
 
     private fun sendIdentify() {
