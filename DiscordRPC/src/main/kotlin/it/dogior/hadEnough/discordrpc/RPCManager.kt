@@ -50,6 +50,11 @@ class RPCManager {
     private var lastMeta: ResultEpisode? = null
     private var lastPushMs = 0L
 
+    /** Fallback per posizioni insane: elapsed misurato con l'orologio del device. */
+    private var clockBaseMs = 0L
+    private var elapsedBaseMs = 0L
+    private var lastSanePositionMs = 0L
+
     /** Riavvio della connessione da zero (usato da Login/Logout e all'avvio). */
     fun start() {
         if (!RPCSettings.enabled) return
@@ -159,6 +164,8 @@ class RPCManager {
         val meta = PlayerMetaAccess.currentEpisode()
         val playing = runCatching { player.getIsPlaying() }.getOrDefault(false)
         val position = runCatching { player.getPosition() }.getOrNull() ?: 0L
+        val duration = runCatching { player.getDuration() }.getOrNull()
+        val now = System.currentTimeMillis()
 
         val metaChanged = meta != lastMeta
         if (metaChanged) lastMeta = meta
@@ -166,7 +173,7 @@ class RPCManager {
         val prevPlaying = lastPlaying
         lastPlaying = playing
 
-        val now = System.currentTimeMillis()
+        val effective = effectivePosition(metaChanged, position, duration, playing, now)
         val firstSend = lastSentKey == null
 
         if (playing) {
@@ -175,13 +182,13 @@ class RPCManager {
             val needsFresh = firstSend || playingChanged(prevPlaying, playing) ||
                 metaChanged || (now - lastPushMs > REFRESH_MS)
             if (needsFresh) {
-                push(meta, position, playing)
+                push(meta, effective, duration, playing)
                 lastPushMs = now
             }
         } else {
             // pausa: rimuoviamo i timestamps ma lasciamo vedere cosa guardiamo
             if (firstSend || playingChanged(prevPlaying, playing) || metaChanged) {
-                push(meta, position, playing)
+                push(meta, effective, duration, playing)
                 lastPushMs = now
             }
         }
@@ -203,18 +210,59 @@ class RPCManager {
         }
         val playing = runCatching { player.getIsPlaying() }.getOrDefault(false)
         val position = runCatching { player.getPosition() }.getOrNull() ?: 0L
+        val duration = runCatching { player.getDuration() }.getOrNull()
         val meta = PlayerMetaAccess.currentEpisode()
-        push(meta, position, playing)
+        val effective = effectivePosition(meta != lastMeta, position, duration, playing, System.currentTimeMillis())
+        push(meta, effective, duration, playing)
     }
 
-    private fun push(meta: ResultEpisode?, position: Long, playing: Boolean) {
+    /**
+     * Posizione "effettiva" da mostrare: se quella del player è plausibile (entro la
+     * durata) la usiamo e risincronizziamo il base; altrimenti (valore spazzatura
+     * tipo "ora corrente") contiamo l'elapsed con l'orologio del device così il
+     * tempo non esplode in numeri assurdi tipo 495791 ore.
+     */
+    private fun effectivePosition(metaChanged: Boolean, position: Long, durationMs: Long?, playing: Boolean, now: Long): Long {
+        if (metaChanged) {
+            clockBaseMs = 0L
+            elapsedBaseMs = 0L
+            lastSanePositionMs = 0L
+        }
+        if (!playing) {
+            clockBaseMs = 0L
+            return position.takeIf { isSanePosition(it, durationMs) } ?: 0L
+        }
+
+        if (isSanePosition(position, durationMs)) {
+            lastSanePositionMs = position
+            elapsedBaseMs = position
+            clockBaseMs = now
+            return position
+        }
+
+        // posizione insana ma stiamo riproducendo: fallback a clock del device
+        if (clockBaseMs == 0L) {
+            clockBaseMs = now
+            elapsedBaseMs = lastSanePositionMs
+        }
+        return elapsedBaseMs + (now - clockBaseMs)
+    }
+
+    /** true se la posizione è plausibile: entro la durata, o < 24h se durata assente. */
+    private fun isSanePosition(position: Long, durationMs: Long?): Boolean {
+        if (position < 0L) return false
+        return if (durationMs != null && durationMs > 0L) position <= durationMs
+        else position <= 86_400_000L
+    }
+
+    private fun push(meta: ResultEpisode?, position: Long, durationMs: Long?, playing: Boolean) {
         val g = gateway ?: return
         if (!g.isOpen) return
 
         val activities = PresenceBuilder.buildActivity(
-            PresenceBuilder.PlayerState(meta = meta, positionMs = position, isPlaying = playing)
+            PresenceBuilder.PlayerState(meta = meta, positionMs = position, isPlaying = playing, durationMs = durationMs)
         )
-        Log.i(TAG, "📤 INVIO presenza playing=$playing pos=${position}ms meta=${meta?.headerName}")
+        Log.i(TAG, "📤 INVIO presenza playing=$playing pos=${position}ms dur=${durationMs} meta=${meta?.headerName}")
         g.sendPresence(activities, status = "online")
         lastSentKey = meta?.let { "${it.parentId}:${it.id}" } ?: "unknown"
     }

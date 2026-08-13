@@ -271,8 +271,19 @@ object DiscordAssets {
     private val cache = ConcurrentHashMap<String, String>()
 
     fun externalPath(url: String): String? {
-        if (!url.startsWith("https://")) return null
-        cache[url]?.let { return it }
+        Log.i(TAG, "🖼️ richiesto poster: $url")
+        val httpsUrl = when {
+            url.startsWith("https://") -> url
+            url.startsWith("http://") -> {
+                Log.i(TAG, "🖼️ poster http:// normalizzato a https://")
+                "https://" + url.removePrefix("http://")
+            }
+            else -> {
+                Log.i(TAG, "🖼️ poster NON http(s), saltato")
+                return null
+            }
+        }
+        cache[httpsUrl]?.let { return it }
 
         val token = RPCSettings.token
         val appId = RPCSettings.applicationId
@@ -282,14 +293,14 @@ object DiscordAssets {
         }
 
         val result = runCatching {
-            attempt(url, token, appId) ?: attemptLegacy(url, token, appId)
+            attempt(httpsUrl, token, appId) ?: attemptLegacy(httpsUrl, token, appId)
         }.getOrNull()
 
         if (result != null) {
             Log.i(TAG, "🖼️ poster registrato -> $result")
-            cache[url] = result
+            cache[httpsUrl] = result
         } else {
-            Log.i(TAG, "🖼️ poster NON registrabile: $url")
+            Log.i(TAG, "🖼️ poster NON registrabile: $httpsUrl")
         }
         return result
     }

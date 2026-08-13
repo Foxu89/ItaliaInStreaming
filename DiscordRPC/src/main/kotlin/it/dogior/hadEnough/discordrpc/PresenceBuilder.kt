@@ -1,5 +1,6 @@
 package it.dogior.hadEnough.discordrpc
 
+import android.util.Log
 import com.lagradost.cloudstream3.isMovieType
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
 import kotlinx.serialization.json.JsonArray
@@ -7,6 +8,8 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+
+private const val TAG = "DiscordRPC"
 
 /**
  * Costruisce la lista "activities" dell'op 3 della presenza in base alle
@@ -23,6 +26,7 @@ object PresenceBuilder {
         val meta: ResultEpisode?,
         val positionMs: Long,
         val isPlaying: Boolean,
+        val durationMs: Long? = null,
     )
 
     /** true se il contenuto è una serie (anche quando tvType è null). */
@@ -58,11 +62,11 @@ object PresenceBuilder {
         }
     }
 
-    /** La posizione del player è in ms; se la unità è palesemente sbagliata
-     *  (valore > 24h) la trattiamo come se fosse già in secondi. */
-    private fun normalizedPosition(positionMs: Long): Long {
-        if (positionMs <= 0L) return 0L
-        return if (positionMs > 86_400_000L) positionMs / 1000L else positionMs
+    /** true se la posizione è plausibile: entro la durata, o < 24h se durata assente. */
+    private fun isSanePosition(position: Long, durationMs: Long?): Boolean {
+        if (position < 0L) return false
+        return if (durationMs != null && durationMs > 0L) position <= durationMs
+        else position <= 86_400_000L
     }
 
     /**
@@ -104,9 +108,11 @@ object PresenceBuilder {
             val appId = RPCSettings.applicationId
             if (appId.isNotBlank()) put("application_id", appId)
 
-            if (RPCSettings.showTimeElapsed && state.isPlaying) {
+            if (RPCSettings.showTimeElapsed && state.isPlaying &&
+                isSanePosition(state.positionMs, state.durationMs)
+            ) {
                 // timestamp UNIX in secondi dell'inizio (ora - posizione corrente)
-                val position = normalizedPosition(state.positionMs)
+                val position = state.positionMs
                 if (position > 0L) {
                     val start = (System.currentTimeMillis() - position) / 1000L
                     put("timestamps", buildJsonObject {
@@ -115,10 +121,13 @@ object PresenceBuilder {
                 }
             }
 
-            if (RPCSettings.showPoster && meta?.poster?.isNotBlank() == true) {
+            // LOGGING SEMPRE: serve a capire perché un poster non appare
+            val posterUrl = meta?.poster
+            Log.i(TAG, "🖼️ poster=${posterUrl ?: "<vuoto>"} meta=${meta?.headerName}")
+            if (RPCSettings.showPoster && posterUrl?.isNotBlank() == true) {
                 // URL esterni NON sono accettati in large_image: li convertiamo in
                 // asset path ("mp:external/..."). Se non registrabile, niente immagine.
-                val large = DiscordAssets.externalPath(meta.poster!!)
+                val large = DiscordAssets.externalPath(posterUrl)
                 if (large != null) {
                     put("assets", buildJsonObject {
                         put("large_image", large)
