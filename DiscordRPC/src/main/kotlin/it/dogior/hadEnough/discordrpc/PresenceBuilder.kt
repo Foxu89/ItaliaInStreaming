@@ -8,6 +8,10 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 private const val TAG = "DiscordRPC"
 
@@ -100,31 +104,43 @@ object PresenceBuilder {
         // state = provider
         val stateLine = meta?.apiName?.takeIf { it.isNotBlank() && RPCSettings.showProvider }
 
+        // timestamp UNIX (sec) dell'inizio, se da mostrare
+        val showTime = RPCSettings.showTimeElapsed && state.isPlaying &&
+            isSanePosition(state.positionMs, state.durationMs) && state.positionMs > 0L
+        val unixStart = if (showTime) {
+            (System.currentTimeMillis() + state.clockOffsetMs - state.positionMs) / 1000L
+        } else null
+
+        // MARCATORE DIAGNOSTICO TEMPORANEO: espone lo start usato nel campo state,
+        // così confrontando Discord vs log si capisce quale activity è davvero mostrata
+        val effectiveState = when {
+            stateLine != null && unixStart != null -> "$stateLine • start=$unixStart"
+            stateLine != null -> stateLine
+            unixStart != null -> "start=$unixStart"
+            else -> null
+        }
+
+        if (unixStart != null) {
+            val nowMs = System.currentTimeMillis()
+            val utc = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+                .apply { timeZone = TimeZone.getTimeZone("UTC") }
+                .format(Date(nowMs))
+            Log.i(TAG, "⏱️ now=${nowMs}ms (UTC $utc) offset=${state.clockOffsetMs}ms pos=${state.positionMs}ms start=${unixStart}s")
+        }
+
         val activity = buildJsonObject {
             put("name", activityName)
             put("type", 3)
             detailsLine?.let { put("details", it) }
-            stateLine?.let { put("state", it) }
+            effectiveState?.let { put("state", it) }
 
             // SENZA application_id il client scarta l'attività di un token utente:
             // è l'id di un'app Discord con Rich Presence che rende visibile la presenza.
             val appId = RPCSettings.applicationId
             if (appId.isNotBlank()) put("application_id", appId)
 
-            if (RPCSettings.showTimeElapsed && state.isPlaying &&
-                isSanePosition(state.positionMs, state.durationMs)
-            ) {
-                // timestamp UNIX in secondi dell'inizio (ora - posizione corrente);
-                // l'offset dell'orologio corregge un eventuale orologio device errato
-                val position = state.positionMs
-                if (position > 0L) {
-                    val nowMs = System.currentTimeMillis()
-                    val start = (nowMs + state.clockOffsetMs - position) / 1000L
-                    Log.i(TAG, "⏱️ now=${nowMs}ms offset=${state.clockOffsetMs}ms pos=${position}ms start=${start}s")
-                    put("timestamps", buildJsonObject {
-                        put("start", start)
-                    })
-                }
+            unixStart?.let {
+                put("timestamps", buildJsonObject { put("start", it) })
             }
 
             // LOGGING SEMPRE: serve a capire perché un poster non appare

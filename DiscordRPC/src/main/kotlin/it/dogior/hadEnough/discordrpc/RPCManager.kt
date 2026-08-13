@@ -87,7 +87,13 @@ class RPCManager {
             onReady = { username ->
                 Log.i(TAG, "✅ CONNESSO con $username")
                 state = ConnectionState.CONNESSO
-                mainHandler.post { pushCurrentPresence() }
+                mainHandler.post {
+                    // clear-then-set: prima azzeriamo ogni presenza residua (attività
+                    // "orrende" in avvio=~1970 da build/istanze precedenti), poi scriviamo
+                    // la presenza vera del player
+                    gateway?.sendPresence(PresenceBuilder.empty())
+                    pushCurrentPresence()
+                }
             },
             onDispatch = { /* gestione futura di eventi, per ora non servono */ },
             onClosed = {

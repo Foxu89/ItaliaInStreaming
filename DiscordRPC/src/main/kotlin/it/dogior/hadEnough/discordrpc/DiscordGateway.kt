@@ -299,14 +299,21 @@ object DiscordAssets {
         .readTimeout(5, TimeUnit.SECONDS)
         .build()
     private val cache = ConcurrentHashMap<String, String>()
+    // il chiamante (buildActivity) gira sul main thread: le chiamate di rete
+    // vanno spinte fuori dal main per non far lanciare NetworkOnMainThreadException
+    private val executor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "discord-rpc-assets").apply { isDaemon = true }
+    }
 
     fun externalPath(url: String): String? {
         Log.i(TAG, "🖼️ richiesto poster: $url")
+        // l'SDK può appendere un suffisso di risoluzione tipo " 2x": va tolto
+        val clean = url.replace(Regex("\\s+\\dx$"), "").trim()
         val httpsUrl = when {
-            url.startsWith("https://") -> url
-            url.startsWith("http://") -> {
+            clean.startsWith("https://") -> clean
+            clean.startsWith("http://") -> {
                 Log.i(TAG, "🖼️ poster http:// normalizzato a https://")
-                "https://" + url.removePrefix("http://")
+                "https://" + clean.removePrefix("http://")
             }
             else -> {
                 Log.i(TAG, "🖼️ poster NON http(s), saltato")
@@ -360,18 +367,25 @@ object DiscordAssets {
     }
 
     private fun execute(request: Request): String? {
-        client.newCall(request).execute().use { resp ->
-            val text = resp.body?.string().orEmpty()
-            Log.i(TAG, "🖼️ ${request.method} ${request.url} -> ${resp.code}: ${text.take(200)}")
-            if (!resp.isSuccessful) return null
+        val future = executor.submit<String?> {
+            client.newCall(request).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                Log.i(TAG, "🖼️ ${request.method} ${request.url} -> ${resp.code}: ${text.take(200)}")
+                if (!resp.isSuccessful) return@use null
 
-            val el = Json { ignoreUnknownKeys = true }.parseToJsonElement(text)
-            val raw = when (el) {
-                is JsonArray -> el.firstOrNull()?.jsonObject?.get("external_asset_path")
-                is JsonObject -> el["external_asset_path"]
-                else -> null
-            }?.let { safe -> runCatching { safe.jsonPrimitive.content }.getOrNull() }
-            return raw?.let { path -> if (path.startsWith("mp:")) path else "mp:$path" }
+                val el = Json { ignoreUnknownKeys = true }.parseToJsonElement(text)
+                val raw = when (el) {
+                    is JsonArray -> el.firstOrNull()?.jsonObject?.get("external_asset_path")
+                    is JsonObject -> el["external_asset_path"]
+                    else -> null
+                }?.let { safe -> runCatching { safe.jsonPrimitive.content }.getOrNull() }
+                raw?.let { path -> if (path.startsWith("mp:")) path else "mp:$path" }
+            }
+        }
+        return try {
+            future.get(6, TimeUnit.SECONDS)
+        } catch (t: Throwable) {
+            null
         }
     }
 }
