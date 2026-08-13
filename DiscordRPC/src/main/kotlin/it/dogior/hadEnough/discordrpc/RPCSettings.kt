@@ -17,6 +17,24 @@ object RPCSettings {
     private const val KEY_SHOW_TIME = "drpc_show_time"
     private const val KEY_SHOW_POSTER = "drpc_show_poster"
     private const val KEY_USERNAME = "drpc_username"
+    private const val KEY_APP_ID = "drpc_app_id"
+
+    /**
+     * Application ID Discord con Rich Presence abilitato. Senza questo campo
+     * il client scarta l'attività inviata da un token utente (nessuna presenza).
+     *
+     * Default: "osu!" (367827983903490050), un'app registrata usata dalla
+     * libreria selfbot di riferimento (discord.js-selfbot-v13): funziona fuori
+     * dalla scatola. Ma per un risultato affidabile (nome/titolo ed immagini
+     * personalizzate visibili anche su mobile, come hanno fatto gli altri) è
+     * meglio creare un'app propria: discord.com/developers -> New Application
+     * -> copia "Application ID" -> abilita Rich Presence nella pagina.
+     */
+    const val DEFAULT_APPLICATION_ID = "367827983903490050"
+
+    var applicationId: String
+        get() = CloudStreamApp.getKey<String>(KEY_APP_ID) ?: DEFAULT_APPLICATION_ID
+        set(value) = CloudStreamApp.setKey(KEY_APP_ID, value)
 
     var enabled: Boolean
         get() = CloudStreamApp.getKey<Boolean>(KEY_ENABLED) ?: true

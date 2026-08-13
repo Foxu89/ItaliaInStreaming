@@ -39,6 +39,11 @@ object PresenceBuilder {
     /**
      * Il JSON della singola activity (elemento di activities[]) oppure null se
      * non c'è nulla di significativo da mostrare (es. player vuoto).
+     *
+     * Modello = Navidrome/Navicord (l'unica ricetta verificata che renderizza su
+     * mobile): name libero (qui il titolo, così il profilo mostra "Watching <titolo>"),
+     * details/state, timestamps, assets, application_id. NIENTE buttons: con un
+     * token utente non vengono mai mostrati e possono far scartare la presenza.
      */
     fun buildActivity(state: PlayerState): JsonArray {
         val meta = state.meta
@@ -46,29 +51,29 @@ object PresenceBuilder {
         val title = meta?.headerName?.takeIf { it.isNotBlank() }
         val subName = meta?.name?.takeIf { it.isNotBlank() && it != meta.headerName }
 
-        val details = StringBuilder()
-        if (RPCSettings.showTitle && title != null) {
-            details.append(title)
-        }
-        if (RPCSettings.showEpisode && episodeLine != null) {
-            if (details.isNotEmpty()) details.append(" ")
-            details.append(episodeLine)
+        // "Watching <name>": il nome è il titolo del contenuto
+        val activityName = if (RPCSettings.showTitle && title != null) title else "CloudStream"
+
+        // details = episodio, altrimenti nome dell'episodio (niente duplicati col titolo)
+        val detailsLine = when {
+            RPCSettings.showEpisode && episodeLine != null -> episodeLine
+            RPCSettings.showEpisode && subName != null -> subName
+            else -> null
         }
 
-        // se niente è mostrato, mandiamo comunque qualcosa di minimo
-        val activityDetails = details.toString().ifBlank { title ?: "CloudStream" }
-
-        // riga "state": titolo episodio e/o provider, se attivati
-        val stateLine = buildList {
-            subName?.takeIf { RPCSettings.showEpisode }?.let { add(it) }
-            meta?.apiName?.takeIf { it.isNotBlank() && RPCSettings.showProvider }?.let { add(it) }
-        }.joinToString(" • ").ifBlank { null }
+        // state = provider
+        val stateLine = meta?.apiName?.takeIf { it.isNotBlank() && RPCSettings.showProvider }
 
         val activity = buildJsonObject {
-            put("name", "CloudStream")
+            put("name", activityName)
             put("type", 3)
-            put("details", activityDetails)
+            detailsLine?.let { put("details", it) }
             stateLine?.let { put("state", it) }
+
+            // SENZA application_id il client scarta l'attività di un token utente:
+            // è l'id di un'app Discord con Rich Presence che rende visibile la presenza.
+            val appId = RPCSettings.applicationId
+            if (appId.isNotBlank()) put("application_id", appId)
 
             if (RPCSettings.showTimeElapsed && state.isPlaying) {
                 // timestamp UNIX in secondi dell'inizio (ora - posizione corrente)
@@ -79,21 +84,15 @@ object PresenceBuilder {
             }
 
             if (RPCSettings.showPoster && meta?.poster?.isNotBlank() == true) {
-                put("assets", buildJsonObject {
-                    put("large_image", meta.poster)
-                    put("large_text", "CloudStream")
-                })
-            }
-
-            // button non garantiti con token utente, ma best-effort
-            if (meta?.parentId != null) {
-                put("buttons", buildJsonArray {
-                    val label = if (RPCSettings.showProvider && meta.apiName.isNotBlank()) "Watch on ${meta.apiName}" else "Watch on CloudStream"
-                    add(buildJsonObject {
-                        put("label", label)
-                        put("url", "https://cloudstream.app")
+                // URL esterni NON sono accettati in large_image: li convertiamo in
+                // asset path ("mp:external/..."). Se non registrabile, niente immagine.
+                val large = DiscordAssets.externalPath(meta.poster!!)
+                if (large != null) {
+                    put("assets", buildJsonObject {
+                        put("large_image", large)
+                        put("large_text", "CloudStream")
                     })
-                })
+                }
             }
         }
 

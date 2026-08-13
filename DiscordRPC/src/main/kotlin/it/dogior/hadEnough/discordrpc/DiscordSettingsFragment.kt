@@ -9,6 +9,7 @@ import android.widget.EditText
 import android.widget.Switch
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
+import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -73,6 +74,7 @@ class DiscordSettingsFragment(
         val showProvider = root.findView<Switch>("drp_show_provider")
         val showTime = root.findView<Switch>("drp_show_time")
         val showPoster = root.findView<Switch>("drp_show_poster")
+        val appIdInput = root.findView<EditText>("drp_app_id_input")
 
         // --- stile card ---
         root.findView<View>("drp_account_card").applyOutlineBackground()
@@ -90,6 +92,7 @@ class DiscordSettingsFragment(
         showProvider.isChecked = RPCSettings.showProvider
         showTime.isChecked = RPCSettings.showTimeElapsed
         showPoster.isChecked = RPCSettings.showPoster
+        appIdInput.setText(RPCSettings.applicationId)
 
         // --- stati in tempo reale dal manager ---
         fun updateStatus(dot: Int, text: String) {
@@ -133,6 +136,11 @@ class DiscordSettingsFragment(
         showProvider.setOnCheckedChangeListener { _, checked -> RPCSettings.showProvider = checked; manager.pushPreviewUpdate() }
         showTime.setOnCheckedChangeListener { _, checked -> RPCSettings.showTimeElapsed = checked; manager.pushPreviewUpdate() }
         showPoster.setOnCheckedChangeListener { _, checked -> RPCSettings.showPoster = checked; manager.pushPreviewUpdate() }
+
+        appIdInput.doAfterTextChanged {
+            RPCSettings.applicationId = it?.toString()?.trim().orEmpty()
+            manager.pushPreviewUpdate()
+        }
 
         // --- login / logout ---
         loginBtn.setOnClickListener {

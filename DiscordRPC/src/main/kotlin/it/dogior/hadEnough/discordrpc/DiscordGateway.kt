@@ -7,6 +7,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
@@ -15,9 +17,11 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -30,6 +34,7 @@ private const val OP_HEARTBEAT = 1
 private const val OP_IDENTIFY = 2
 private const val OP_PRESENCE = 3
 private const val OP_RESUME = 6
+private const val OP_INVALID_SESSION = 9
 private const val OP_HELLO = 10
 
 /**
@@ -106,7 +111,8 @@ class DiscordGateway(
 
         when (op) {
             OP_HELLO -> {
-                val interval = frame["d"]?.jsonObject?.get("heartbeat_interval")?.jsonPrimitive?.long ?: 41250
+                val d = frame["d"] as? JsonObject
+                val interval = d?.get("heartbeat_interval")?.let { runCatching { it.jsonPrimitive.long }.getOrNull() } ?: 41250
                 Log.i(TAG, "👋 HELLO ricevuto (heartbeat ${interval}ms) -> IDENTIFY")
                 sendIdentify()
                 startHeartbeat(interval)
@@ -116,14 +122,26 @@ class DiscordGateway(
                 sendHeartbeat()
             }
 
+            OP_INVALID_SESSION -> {
+                // sessione scaduta/rifiutata: riparte da zero con IDENTIFY
+                Log.i(TAG, "♻️ INVALID_SESSION, riautenticazione da zero")
+                stopHeartbeat()
+                sessionId = null
+                lastSequence = null
+                runCatching { socket?.cancel() }
+                socket = null
+                openSocket()
+            }
+
             OP_DISPATCH -> {
-                val data = frame["d"]?.jsonObject ?: JsonObject(emptyMap())
-                lastSequence = frame["s"]?.jsonPrimitive?.int ?: lastSequence
+                // d può essere oggetto, array o null a seconda dell'evento: niente crash
+                val data = frame["d"] as? JsonObject ?: JsonObject(emptyMap())
+                lastSequence = frame["s"]?.let { runCatching { it.jsonPrimitive.int }.getOrNull() } ?: lastSequence
 
                 when (frame["t"]?.jsonPrimitive?.content) {
                     "READY" -> {
-                        sessionId = data["session_id"]?.jsonPrimitive?.content
-                        val user = data["user"]?.jsonObject ?: JsonObject(emptyMap())
+                        sessionId = data["session_id"]?.let { runCatching { it.jsonPrimitive.content }.getOrNull() }
+                        val user = data["user"] as? JsonObject ?: JsonObject(emptyMap())
                         val username = user["username"]?.jsonPrimitive?.content ?: "User"
                         val discriminator = user["discriminator"]?.jsonPrimitive?.content
                         val uId = user["id"]?.jsonPrimitive?.content
@@ -231,5 +249,55 @@ class DiscordGateway(
         socket = null
         sessionId = null
         lastSequence = null
+    }
+}
+
+/**
+ * Risolve le immagini esterne in asset path di Discord ("mp:external/...").
+ *
+ * Rich Presence NON accetta URL HTTP diretti in large_image: un URL esterno
+ * va prima registrato con l'endpoint
+ * POST /applications/{app}/external-assets {"urls": [...]} (stesso metodo di
+ * Navidrome/Navicord, l'unica via che funziona in 2026). Se il poster non è
+ * registrabile restituisce null e l'attività viene inviata senza immagine
+ * (così un URL invalido non fa scartare tutta la presenza).
+ */
+object DiscordAssets {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .build()
+    private val cache = ConcurrentHashMap<String, String>()
+
+    fun externalPath(url: String): String? {
+        if (!url.startsWith("https://")) return null
+        cache[url]?.let { return it }
+
+        val token = RPCSettings.token
+        val appId = RPCSettings.applicationId
+        if (token.isBlank() || appId.isBlank()) return null
+
+        val result = runCatching {
+            val body = buildJsonObject {
+                put("urls", buildJsonArray { add(url) })
+            }.toString()
+            val request = Request.Builder()
+                .url("https://discord.com/api/v9/applications/$appId/external-assets")
+                .header("Authorization", token)
+                .header("Content-Type", "application/json")
+                .post(body.toRequestBody())
+                .build()
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val text = resp.body?.string() ?: return null
+                val arr = Json { ignoreUnknownKeys = true }.parseToJsonElement(text) as? JsonArray
+                val path = arr?.firstOrNull()?.jsonObject?.get("external_asset_path")
+                    ?.jsonPrimitive?.content
+                path?.let { raw -> if (raw.startsWith("mp:")) raw else "mp:$raw" }
+            }
+        }.getOrNull()
+
+        if (result != null) cache[url] = result
+        return result
     }
 }
