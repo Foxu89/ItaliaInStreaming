@@ -1,0 +1,53 @@
+package it.dogior.hadEnough.discordrpc
+
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
+import androidx.navigation.fragment.NavHostFragment
+import com.lagradost.cloudstream3.CommonActivity
+import com.lagradost.cloudstream3.MainActivity
+import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.ui.player.GeneratorPlayer
+import com.lagradost.cloudstream3.ui.player.IPlayer
+import com.lagradost.cloudstream3.ui.player.PlayerGeneratorViewModel
+import com.lagradost.cloudstream3.ui.result.ResultEpisode
+
+/**
+ * NON è API ufficiale dei plugin CloudStream: si aggancia agli stessi percorsi
+ * interni già usati da WatchParty/PlayerAccess (CommonActivity.activity,
+ * MainActivity.supportFragmentManager, GeneratorPlayer.player) e in più legge i
+ * metadati del contenuto corrente (titolo, episodio, stagione, poster, provider)
+ * dal ViewModel del player.
+ *
+ * Il ViewModel è creato dal fragment con ViewModelProvider(fragment)[...]
+ * (GeneratorPlayer.onCreateView): recuperarlo qui con la stessa chiamata
+ * restituisce la STESSA istanza, quindi getMeta() è il contenuto in riproduzione.
+ *
+ * Ogni accesso è avvolto in runCatching: se un aggiornamento dell'app cambia
+ * questi nomi, il plugin degrada in silenzio invece di crashare.
+ */
+object PlayerMetaAccess {
+
+    /** Il fragment del player attualmente in primo piano, se presente. */
+    fun currentPlayerFragment(): GeneratorPlayer? = runCatching {
+        val activity = CommonActivity.activity as? MainActivity ?: return null
+        val navHost = activity.supportFragmentManager
+            .findFragmentById(R.id.nav_host_fragment) as? NavHostFragment ?: return null
+        val top: Fragment? = navHost.childFragmentManager.fragments.lastOrNull()
+        top as? GeneratorPlayer
+    }.getOrNull()
+
+    /** True se l'utente ha in questo momento la schermata del player aperta. */
+    fun isPlayerScreenActive(): Boolean = currentPlayerFragment() != null
+
+    /** L'istanza IPlayer attiva, se il player è aperto. */
+    fun currentPlayer(): IPlayer? = runCatching {
+        currentPlayerFragment()?.player
+    }.getOrNull()
+
+    /** Metadati del contenuto in riproduzione (titolo, ep, stagione, poster, provider). */
+    fun currentEpisode(): ResultEpisode? = runCatching {
+        val fragment = currentPlayerFragment() ?: return null
+        val vm = ViewModelProvider(fragment)[PlayerGeneratorViewModel::class.java]
+        vm.getMeta() as? ResultEpisode
+    }.getOrNull()
+}

@@ -30,5 +30,6 @@ include(
  //   "ToonItalia",
 //    "Torrentio"
     "WatchParty",
+    "DiscordRPC",
 //    "YouTube"
 )
