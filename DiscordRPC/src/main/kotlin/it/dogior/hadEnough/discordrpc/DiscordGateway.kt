@@ -75,6 +75,7 @@ class DiscordGateway(
         try {
             socket = client.newWebSocket(request, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
+                    Log.i(TAG, "🔌 socket aperto")
                     // il gateway manderà op 10 HELLO con l'intervallo di heartbeat
                 }
 
@@ -106,6 +107,7 @@ class DiscordGateway(
         when (op) {
             OP_HELLO -> {
                 val interval = frame["d"]?.jsonObject?.get("heartbeat_interval")?.jsonPrimitive?.long ?: 41250
+                Log.i(TAG, "👋 HELLO ricevuto (heartbeat ${interval}ms) -> IDENTIFY")
                 sendIdentify()
                 startHeartbeat(interval)
             }
@@ -128,7 +130,7 @@ class DiscordGateway(
                         val label = if (discriminator == "0" || discriminator.isNullOrEmpty()) username else "$username#$discriminator"
                         onReady(label)
                         RPCSettings.username = label
-                        Log.i(TAG, "READY, logged in as $label (id=$uId)")
+                        Log.i(TAG, "✅ READY, loggato come $label (id=$uId)")
                     }
                 }
                 onDispatch(data)
@@ -186,6 +188,7 @@ class DiscordGateway(
                 put("afk", false)
             })
         }
+        Log.i(TAG, "📡 op3 payload: $payload")
         runCatching {
             socket?.send(payload.toString())
         }

@@ -63,6 +63,7 @@ class RPCManager {
     }
 
     fun stop() {
+        Log.i(TAG, "🛑 manager stop")
         shouldStayConnected = false
         stopPolling()
         gateway?.close()
@@ -79,17 +80,19 @@ class RPCManager {
 
         gateway = DiscordGateway(
             onReady = { username ->
+                Log.i(TAG, "✅ CONNESSO con $username")
                 state = ConnectionState.CONNESSO
                 mainHandler.post { pushCurrentPresence() }
             },
             onDispatch = { /* gestione futura di eventi, per ora non servono */ },
             onClosed = {
+                Log.i(TAG, "🔌 socket chiuso")
                 mainHandler.post {
                     if (shouldStayConnected) scheduleReconnect(accessToken)
                 }
             },
             onFailure = { t ->
-                Log.w(TAG, "gateway failure: ${t.message}")
+                Log.w(TAG, "⚠️ gateway failure: ${t.message}")
                 mainHandler.post {
                     if (shouldStayConnected) scheduleReconnect(accessToken)
                 }
@@ -103,6 +106,7 @@ class RPCManager {
         if (!shouldStayConnected) return
         state = ConnectionState.RICONNESSIONE_IN_CORSO
         val delayMs = listOf(1000L, 2000L, 4000L, 8000L, 15000L).random()
+        Log.i(TAG, "🔄 riconnessione tra ${delayMs}ms")
         mainHandler.postDelayed({
             if (shouldStayConnected) {
                 gateway?.resumeOrReopen(accessToken)
@@ -139,6 +143,7 @@ class RPCManager {
 
         if (!PlayerMetaAccess.isPlayerScreenActive()) {
             if (lastSentKey != null) {
+                Log.i(TAG, "🎬 player chiuso -> 🧹 presenza pulita")
                 gateway?.sendPresence(PresenceBuilder.empty())
                 lastSentKey = null
             }
@@ -146,7 +151,11 @@ class RPCManager {
             return
         }
 
-        val player = PlayerMetaAccess.currentPlayer() ?: return
+        val player = PlayerMetaAccess.currentPlayer()
+        if (player == null) {
+            Log.i(TAG, "🎬 schermata player attiva ma player non trovato (currentPlayer=null)")
+            return
+        }
         val meta = PlayerMetaAccess.currentEpisode()
         val playing = runCatching { player.getIsPlaying() }.getOrDefault(false)
         val position = runCatching { player.getPosition() }.getOrNull() ?: 0L
@@ -205,6 +214,7 @@ class RPCManager {
         val activities = PresenceBuilder.buildActivity(
             PresenceBuilder.PlayerState(meta = meta, positionMs = position, isPlaying = playing)
         )
+        Log.i(TAG, "📤 INVIO presenza playing=$playing pos=${position}ms meta=${meta?.headerName}")
         g.sendPresence(activities, status = "online")
         lastSentKey = meta?.let { "${it.parentId}:${it.id}" } ?: "unknown"
     }
