@@ -24,6 +24,7 @@ import okhttp3.WebSocketListener
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -31,6 +32,10 @@ import java.util.concurrent.TimeUnit
 
 private const val TAG = "DiscordRPC"
 private const val GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json"
+// una vera differenza di orologio device↔server Discord è sempre nell'ordine
+// di ms/secondi; oltre questa soglia è quasi certamente un bug di parsing,
+// non un vero disallineamento — vedi readServerOffset()
+private const val MAX_PLAUSIBLE_CLOCK_OFFSET_MS = 5 * 60_000L // 5 minuti
 
 private const val OP_DISPATCH = 0
 private const val OP_HEARTBEAT = 1
@@ -198,14 +203,40 @@ class DiscordGateway(
         }
         val serverMs = runCatching {
             SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+                // Gli header HTTP Date (RFC 7231) sono SEMPRE in GMT. Senza fissare
+                // esplicitamente il fuso qui, SimpleDateFormat usava quello di
+                // default del dispositivo per interpretare "HH:mm:ss" — su alcuni
+                // Android il parsing di "zzz" (l'abbreviazione del fuso nella
+                // stringa) risultava inconsistente, producendo un offset enorme e
+                // sbagliato invece dei pochi millisecondi di differenza reale.
+                // Era la causa esatta del "495799 ore" mostrato su Discord: quel
+                // valore sballato, sommato a now, azzerava quasi del tutto lo
+                // start della presenza (~epoca Unix), facendo apparire l'elapsed
+                // come "tempo trascorso dal 1970".
+                .apply { timeZone = TimeZone.getTimeZone("GMT") }
                 .parse(header)?.time
         }.getOrNull()
-        if (serverMs != null) {
-            serverOffsetMs = serverMs - System.currentTimeMillis()
-            Log.i(TAG, "🕰️ server=$header offset=${serverOffsetMs}ms")
-        } else {
+
+        if (serverMs == null) {
             Log.w(TAG, "🕰️ header Date non parsabile: $header")
+            return
         }
+
+        val candidateOffsetMs = serverMs - System.currentTimeMillis()
+
+        // Rete di sicurezza: una vera differenza di orologio device↔server è
+        // sempre nell'ordine di millisecondi/secondi, mai di minuti o anni. Se
+        // per qualsiasi motivo (futuro cambio di formato dell'header, bug non
+        // ancora scoperto, ecc.) il parsing produce un valore assurdo, meglio
+        // ignorarlo e restare a offset=0 (nessuna correzione) piuttosto che
+        // rovinare il timestamp mostrato su Discord.
+        if (kotlin.math.abs(candidateOffsetMs) > MAX_PLAUSIBLE_CLOCK_OFFSET_MS) {
+            Log.w(TAG, "🕰️ offset implausibile (${candidateOffsetMs}ms) da header '$header', ignorato")
+            return
+        }
+
+        serverOffsetMs = candidateOffsetMs
+        Log.i(TAG, "🕰️ server=$header offset=${serverOffsetMs}ms")
     }
 
     private fun sendIdentify() {
