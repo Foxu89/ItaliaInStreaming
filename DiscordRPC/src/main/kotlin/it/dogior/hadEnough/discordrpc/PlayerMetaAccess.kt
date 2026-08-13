@@ -20,7 +20,8 @@ import com.lagradost.cloudstream3.ui.result.ResultEpisode
  *
  * Il ViewModel è creato dal fragment con ViewModelProvider(fragment)[...]
  * (GeneratorPlayer.onCreateView): recuperarlo qui con la stessa chiamata
- * restituisce la STESSA istanza, quindi getMeta() è il contenuto in riproduzione.
+ * restituisce la STESSA istanza. I metadati del contenuto corrente stanno in
+ * vm.state.generatorState?.meta (l'SDK pre-release non espone più getMeta()).
  *
  * Ogni accesso è avvolto in runCatching: se un aggiornamento dell'app cambia
  * questi nomi, il plugin degrada in silenzio invece di crashare.
@@ -48,6 +49,9 @@ object PlayerMetaAccess {
     fun currentEpisode(): ResultEpisode? = runCatching {
         val fragment = currentPlayerFragment() ?: return null
         val vm = ViewModelProvider(fragment)[PlayerGeneratorViewModel::class.java]
-        vm.getMeta() as? ResultEpisode
+        // NOTE: l'API del PlayerGeneratorViewModel nell'artefatto pre-release del SDK
+        // non espone getMeta(): i metadati del contenuto corrente stanno in
+        // vm.state.generatorState?.meta (aggiornati da loadLinks).
+        vm.state.generatorState?.meta as? ResultEpisode
     }.getOrNull()
 }

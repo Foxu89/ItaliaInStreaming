@@ -1,4 +1,4 @@
-package it.dogior.hadEnough.discordrpc
+﻿package it.dogior.hadEnough.discordrpc
 
 import android.util.Log
 import kotlinx.serialization.json.Json
@@ -8,8 +8,10 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -152,7 +154,7 @@ class DiscordGateway(
             put("op", OP_HEARTBEAT)
             put("d", lastSequence?.let { JsonPrimitive(it) } ?: JsonNull)
         }
-        socket?.send(json.encodeToString(JsonElement.serializer(), payload))
+        socket?.send(payload.toString())
     }
 
     private fun sendIdentify() {
@@ -169,7 +171,7 @@ class DiscordGateway(
                 })
             })
         }
-        socket?.send(json.encodeToString(JsonElement.serializer(), payload))
+        socket?.send(payload.toString())
     }
 
     /** Aggiornamento presenza (op 3): attività [activities] o lista vuota per pulire. */
@@ -185,7 +187,7 @@ class DiscordGateway(
             })
         }
         runCatching {
-            socket?.send(json.encodeToString(JsonElement.serializer(), payload))
+            socket?.send(payload.toString())
         }
     }
 
@@ -206,7 +208,7 @@ class DiscordGateway(
                 })
             }
             try {
-                socket?.send(json.encodeToString(JsonElement.serializer(), payload))
+                socket?.send(payload.toString())
                 return
             } catch (t: Throwable) {
                 Log.w(TAG, "resume failed, reopening", t)

@@ -9,6 +9,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0") // WebSocket per il gateway Discord
 
     compileOnly("androidx.navigation:navigation-fragment-ktx:2.7.7") // per NavHostFragment/ViewModelProvider (a runtime vengono dall'app)
+    compileOnly("com.jaredrummler:colorpicker:1.1.0") // MainActivity implementa ColorPickerDialogListener
 }
 
 version = 1
