@@ -1,5 +1,6 @@
 package it.dogior.hadEnough.discordrpc
 
+import com.lagradost.cloudstream3.isMovieType
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.add
@@ -24,16 +25,44 @@ object PresenceBuilder {
         val isPlaying: Boolean,
     )
 
-    private fun formatEpisode(meta: ResultEpisode): String? {
+    /** true se il contenuto è una serie (anche quando tvType è null). */
+    private fun isSeries(meta: ResultEpisode): Boolean {
+        val tvType = meta.tvType
+        if (tvType != null) return !tvType.isMovieType()
+        return meta.season != null || meta.episode != null
+    }
+
+    /** Righe "S:<n> & EP:<n>" leggibili al posto di "S01E01". */
+    private fun seasonEpisodeLine(meta: ResultEpisode): String? {
         val season = meta.season
         val episode = meta.episode
-        return if (season != null && episode != null) {
-            "S${season.takeIf { it in 1..99 } ?: season}E${episode.takeIf { it in 1..999 } ?: episode}"
-        } else if (episode != null) {
-            "Episode $episode"
-        } else {
-            null
+        return when {
+            season != null && episode != null && episode > 0 -> "S:$season & EP:$episode"
+            episode != null && episode > 0 -> "EP:$episode"
+            else -> null
         }
+    }
+
+    /**
+     * Riga di dettaglio per le serie: "<nome episodio> - S:<n> & EP:<n>",
+     * mai "Episode 0". Se mancano nome e numeri, niente riga.
+     */
+    private fun formatEpisodeLine(meta: ResultEpisode): String? {
+        val name = meta.name?.takeIf { it.isNotBlank() && it != meta.headerName }
+        val seLine = seasonEpisodeLine(meta)
+        return when {
+            name != null && seLine != null -> "$name - $seLine"
+            name != null -> name
+            seLine != null -> seLine
+            else -> null
+        }
+    }
+
+    /** La posizione del player è in ms; se la unità è palesemente sbagliata
+     *  (valore > 24h) la trattiamo come se fosse già in secondi. */
+    private fun normalizedPosition(positionMs: Long): Long {
+        if (positionMs <= 0L) return 0L
+        return if (positionMs > 86_400_000L) positionMs / 1000L else positionMs
     }
 
     /**
@@ -47,17 +76,17 @@ object PresenceBuilder {
      */
     fun buildActivity(state: PlayerState): JsonArray {
         val meta = state.meta
-        val episodeLine = meta?.let { formatEpisode(it) }
         val title = meta?.headerName?.takeIf { it.isNotBlank() }
-        val subName = meta?.name?.takeIf { it.isNotBlank() && it != meta.headerName }
 
         // "Watching <name>": il nome è il titolo del contenuto
         val activityName = if (RPCSettings.showTitle && title != null) title else "CloudStream"
 
-        // details = episodio, altrimenti nome dell'episodio (niente duplicati col titolo)
-        val detailsLine = when {
-            RPCSettings.showEpisode && episodeLine != null -> episodeLine
-            RPCSettings.showEpisode && subName != null -> subName
+        val isSeries = meta?.let { isSeries(it) } == true
+
+        // details: serie -> "<episodio> - S:<n> & EP:<n>"; film -> il titolo (mai "Episode 0")
+        val detailsLine = if (meta == null) null else when {
+            RPCSettings.showEpisode && isSeries -> formatEpisodeLine(meta)
+            RPCSettings.showEpisode && !isSeries && RPCSettings.showTitle -> title
             else -> null
         }
 
@@ -77,10 +106,13 @@ object PresenceBuilder {
 
             if (RPCSettings.showTimeElapsed && state.isPlaying) {
                 // timestamp UNIX in secondi dell'inizio (ora - posizione corrente)
-                val start = (System.currentTimeMillis() - state.positionMs) / 1000L
-                put("timestamps", buildJsonObject {
-                    put("start", start)
-                })
+                val position = normalizedPosition(state.positionMs)
+                if (position > 0L) {
+                    val start = (System.currentTimeMillis() - position) / 1000L
+                    put("timestamps", buildJsonObject {
+                        put("start", start)
+                    })
+                }
             }
 
             if (RPCSettings.showPoster && meta?.poster?.isNotBlank() == true) {

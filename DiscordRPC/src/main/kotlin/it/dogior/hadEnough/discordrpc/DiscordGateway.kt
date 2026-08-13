@@ -21,6 +21,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -275,29 +276,61 @@ object DiscordAssets {
 
         val token = RPCSettings.token
         val appId = RPCSettings.applicationId
-        if (token.isBlank() || appId.isBlank()) return null
+        if (token.isBlank() || appId.isBlank()) {
+            Log.i(TAG, "🖼️ poster saltato: niente token o app id")
+            return null
+        }
 
         val result = runCatching {
-            val body = buildJsonObject {
-                put("urls", buildJsonArray { add(url) })
-            }.toString()
-            val request = Request.Builder()
-                .url("https://discord.com/api/v9/applications/$appId/external-assets")
-                .header("Authorization", token)
-                .header("Content-Type", "application/json")
-                .post(body.toRequestBody())
-                .build()
-            client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return null
-                val text = resp.body?.string() ?: return null
-                val arr = Json { ignoreUnknownKeys = true }.parseToJsonElement(text) as? JsonArray
-                val path = arr?.firstOrNull()?.jsonObject?.get("external_asset_path")
-                    ?.jsonPrimitive?.content
-                path?.let { raw -> if (raw.startsWith("mp:")) raw else "mp:$raw" }
-            }
+            attempt(url, token, appId) ?: attemptLegacy(url, token, appId)
         }.getOrNull()
 
-        if (result != null) cache[url] = result
+        if (result != null) {
+            Log.i(TAG, "🖼️ poster registrato -> $result")
+            cache[url] = result
+        } else {
+            Log.i(TAG, "🖼️ poster NON registrabile: $url")
+        }
         return result
+    }
+
+    /** Endpoint di Navidrome/Navicord: POST /applications/{app}/external-assets. */
+    private fun attempt(url: String, token: String, appId: String): String? {
+        val body = buildJsonObject {
+            put("urls", buildJsonArray { add(url) })
+        }.toString()
+        val request = Request.Builder()
+            .url("https://discord.com/api/v9/applications/$appId/external-assets")
+            .header("Authorization", token)
+            .header("Content-Type", "application/json")
+            .post(body.toRequestBody())
+            .build()
+        return execute(request)
+    }
+
+    /** Endpoint documentato (discord.js-selfbot-v13): GET oauth2 .../assets/external. */
+    private fun attemptLegacy(url: String, token: String, appId: String): String? {
+        val encoded = URLEncoder.encode(url, "UTF-8")
+        val request = Request.Builder()
+            .url("https://discord.com/api/v9/oauth2/applications/$appId/assets/external?url=$encoded")
+            .header("Authorization", token)
+            .build()
+        return execute(request)
+    }
+
+    private fun execute(request: Request): String? {
+        client.newCall(request).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            Log.i(TAG, "🖼️ ${request.method} ${request.url} -> ${resp.code}: ${text.take(200)}")
+            if (!resp.isSuccessful) return null
+
+            val el = Json { ignoreUnknownKeys = true }.parseToJsonElement(text)
+            val raw = when (el) {
+                is JsonArray -> el.firstOrNull()?.jsonObject?.get("external_asset_path")
+                is JsonObject -> el["external_asset_path"]
+                else -> null
+            }?.let { safe -> runCatching { safe.jsonPrimitive.content }.getOrNull() }
+            return raw?.let { path -> if (path.startsWith("mp:")) path else "mp:$path" }
+        }
     }
 }
