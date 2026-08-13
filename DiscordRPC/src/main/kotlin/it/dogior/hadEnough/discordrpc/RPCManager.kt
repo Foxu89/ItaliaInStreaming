@@ -87,13 +87,7 @@ class RPCManager {
             onReady = { username ->
                 Log.i(TAG, "✅ CONNESSO con $username")
                 state = ConnectionState.CONNESSO
-                mainHandler.post {
-                    // clear-then-set: prima azzeriamo ogni presenza residua (attività
-                    // "orrende" in avvio=~1970 da build/istanze precedenti), poi scriviamo
-                    // la presenza vera del player
-                    gateway?.sendPresence(PresenceBuilder.empty())
-                    pushCurrentPresence()
-                }
+                mainHandler.post { resetPresence() }
             },
             onDispatch = { /* gestione futura di eventi, per ora non servono */ },
             onClosed = {
@@ -188,7 +182,15 @@ class RPCManager {
             val needsFresh = firstSend || playingChanged(prevPlaying, playing) ||
                 metaChanged || (now - lastPushMs > REFRESH_MS)
             if (needsFresh) {
-                push(meta, effective, duration, playing)
+                // alla transizione pausa→play rimuoviamo e ricreiamo l'attività:
+                // Discord "ancora" il timer elapsed alla prima activity con lo
+                // stesso nome/application_id, quindi un semplice update non lo
+                // azzera (timer che resta a 495791h). Serve clear + ricreazione.
+                if (playingChanged(prevPlaying, playing)) {
+                    resetPresence()
+                } else {
+                    push(meta, effective, duration, playing)
+                }
                 lastPushMs = now
             }
         } else {
@@ -203,6 +205,20 @@ class RPCManager {
     /** Ritornare true quando la transizione play/pausa è reale (es. primo tick). */
     private fun playingChanged(prev: Boolean?, now: Boolean): Boolean =
         prev != null && prev != now
+
+    /**
+     * Rimuove davvero l'attività (activities vuote) e la ricrea subito dopo:
+     * serve a far ripartire il timer elapsed da zero quando Discord lo ha
+     * "ancorato" alla prima activity con lo stesso nome/application_id.
+     */
+    private fun resetPresence() {
+        if (!shouldStayConnected || !RPCSettings.enabled) return
+        val g = gateway ?: return
+        if (!g.isOpen) return
+        Log.i(TAG, "🔄 reset presenza: clear + ricreazione")
+        g.sendPresence(PresenceBuilder.empty())
+        mainHandler.postDelayed({ pushCurrentPresence() }, RESET_DELAY_MS)
+    }
 
     private fun pushCurrentPresence() {
         if (!shouldStayConnected || !RPCSettings.enabled) return
@@ -291,5 +307,6 @@ class RPCManager {
     private companion object {
         const val POLL_INTERVAL_MS = 1000L
         const val REFRESH_MS = 30_000L
+        const val RESET_DELAY_MS = 500L
     }
 }
