@@ -57,6 +57,10 @@ private const val OP_HELLO = 10
  */
 class DiscordGateway(
     private val onReady: (username: String) -> Unit,
+    /** Riconnessione via RESUME (non IDENTIFY): Discord non manda un nuovo READY,
+     *  quindi qui non sappiamo il nome utente — serve solo a far ripulire una
+     *  presenza rimasta "ancorata" da prima della riconnessione. */
+    private val onResumed: () -> Unit,
     private val onDispatch: (JsonObject) -> Unit,
     private val onClosed: () -> Unit,
     private val onFailure: (Throwable) -> Unit,
@@ -167,6 +171,18 @@ class DiscordGateway(
                         onReady(label)
                         RPCSettings.username = label
                         Log.i(TAG, "✅ READY, loggato come $label (id=$uId)")
+                    }
+
+                    "RESUMED" -> {
+                        // BUG TROVATO: senza questo caso, una riconnessione via RESUME
+                        // (op 6) non passava mai da qui — niente onReady(), niente
+                        // resetPresence(). Se Discord aveva già ancorato un timer
+                        // (magari da PRIMA di installare il fix del calcolo), restava
+                        // visibile all'infinito perché non veniva mai più ricreato.
+                        // Era questo, non il calcolo, a far persistere il numero
+                        // sbagliato anche dopo aver corretto l'offset.
+                        Log.i(TAG, "🔁 RESUMED: forzo comunque un reset della presenza")
+                        onResumed()
                     }
                 }
                 onDispatch(data)
