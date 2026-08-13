@@ -62,14 +62,17 @@ object PlayerMetaAccess {
      * RepoLinkGenerator usa come "page". Ultima spiaggia: il primo episodio di
      * allMeta che abbia un poster.
      */
-    fun currentPoster(): String? = runCatching {
-        val fragment = currentPlayerFragment() ?: return null
-        val vm = ViewModelProvider(fragment)[PlayerGeneratorViewModel::class.java]
-        val gen = vm.state.generatorState ?: return null
-        (gen.meta as? ResultEpisode)?.poster?.takeIf { it.isNotBlank() }
-            ?: gen.response?.posterUrl?.takeIf { it.isNotBlank() }
-            ?: gen.response?.backdropUrl?.takeIf { it.isNotBlank() }
-            ?: gen.allMeta?.filterIsInstance<ResultEpisode>()
-                ?.firstNotNullOfOrNull { ep -> ep.poster?.takeIf { it.isNotBlank() } }
-    }.getOrNull()
+    fun currentPoster(): String? {
+        return try {
+            val fragment = currentPlayerFragment() ?: return null
+            val vm = ViewModelProvider(fragment)[PlayerGeneratorViewModel::class.java]
+            val gen = vm.state.generatorState ?: return null
+            (gen.meta as? ResultEpisode)?.poster?.takeIf { it.isNotBlank() }
+                ?: gen.response?.posterUrl?.takeIf { it.isNotBlank() }
+                ?: gen.allMeta?.filterIsInstance<ResultEpisode>()
+                    ?.firstNotNullOfOrNull { ep -> ep.poster?.takeIf { it.isNotBlank() } }
+        } catch (t: Throwable) {
+            null
+        }
+    }
 }
