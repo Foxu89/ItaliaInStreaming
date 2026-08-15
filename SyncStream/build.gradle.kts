@@ -21,7 +21,7 @@ android {
 cloudstream {
     // All of these properties are optional, you can safely remove them
 
-    authors = listOf("anhdaden","DieGon")
+    authors = listOf("DieGon")
 
     /**
      * Status int as the following:

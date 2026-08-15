@@ -94,6 +94,7 @@ object BackupUtils {
         "sync_device_id",
         "restore_device",
         "backup_device",
+        "sync_last_restore_at",
         "download_info",
         "download_resume",
         "download_q_resume",
