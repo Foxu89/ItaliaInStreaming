@@ -25,7 +25,7 @@ include(
 //    "StreamingCommunity",
     "StreamITA",
 //    "Stremio",
-//    "SyncStream",
+    "SyncStream",
 //    "TV",
  //   "ToonItalia",
 //    "Torrentio"
