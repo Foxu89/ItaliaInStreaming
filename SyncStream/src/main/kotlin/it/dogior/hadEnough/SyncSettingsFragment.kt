@@ -105,11 +105,22 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }
 
-        setupPreferences(view)
+        view.findView<View>("prefs_card").setOnClickListener {
+            SyncPrefsFragment().show(requireActivity().supportFragmentManager, "Prefs")
+        }
     }
+}
 
-    private fun setupPreferences(view: View) {
-        val intervals = listOf(15_000L, 30_000L, 60_000L)
+class SyncPrefsFragment : SyncBaseSettingsFragment() {
+
+    override val layoutName: String = "prefs"
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        view.findView<View>("prefs_body_card").applyOutlineBackground()
+
+        val intervals = listOf(10_000L, 15_000L, 30_000L, 60_000L)
         val autoPullSwitch = view.findView<Switch>("auto_pull_switch")
         val prefsOptions = view.findView<View>("auto_pull_options")
 
@@ -137,6 +148,10 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
                 refreshPrefsUI()
             }
         }
+
+        val closeBtn = view.findView<TextView>("close_btn")
+        closeBtn.background = getDrawable("outline")
+        closeBtn.setOnClickListener { dismiss() }
     }
 }
 
