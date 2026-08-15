@@ -96,7 +96,7 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
         view.findView<View>("guide_card").applyOutlineBackground()
 
         view.findView<View>("login_card").setOnClickListener {
-            SyncLoginFragment().show(parentFragmentManager, "Login")
+            SyncLoginFragment().show(requireActivity().supportFragmentManager, "Login")
         }
 
         view.findView<View>("guide_card").setOnClickListener {
