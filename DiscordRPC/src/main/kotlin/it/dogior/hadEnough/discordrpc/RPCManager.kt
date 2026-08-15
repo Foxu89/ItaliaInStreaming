@@ -89,6 +89,11 @@ class RPCManager {
                 state = ConnectionState.CONNESSO
                 mainHandler.post { resetPresence() }
             },
+            onResumed = {
+                Log.i(TAG, "🔁 sessione RESUMED, reset presenza per sicurezza")
+                state = ConnectionState.CONNESSO
+                mainHandler.post { resetPresence() }
+            },
             onDispatch = { /* gestione futura di eventi, per ora non servono */ },
             onClosed = {
                 Log.i(TAG, "🔌 socket chiuso")
