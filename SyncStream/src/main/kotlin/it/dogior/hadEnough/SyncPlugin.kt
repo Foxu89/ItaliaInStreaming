@@ -27,9 +27,13 @@ class SyncPlugin : Plugin() {
 
     private val handler = Handler(Looper.getMainLooper())
 
+    private val pollDelay = 5_000L
+
     private var lastResumeWatching: List<DataStoreHelper.ResumeWatchingResult>? = null
 
     private var counter = 0
+
+    private var pullCounter = 0
 
     /**
      * Il primo restore deve completare prima di iniziare a fare backup, altrimenti
@@ -41,54 +45,105 @@ class SyncPlugin : Plugin() {
     @Volatile
     private var runnableStarted = false
 
+    /** Evita cicli sovrapposti quando una chiamata di rete dura più di un tick. */
+    @Volatile
+    private var cycleRunning = false
+
     private val runnable = object : Runnable {
         override fun run() {
             try {
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val currentResumeWatching = getResumeWatching()
-                        if (currentResumeWatching != lastResumeWatching) {
-                            counter = 0
-                            backupDevice(true)
-                            lastResumeWatching = currentResumeWatching
+                if (!cycleRunning) {
+                    cycleRunning = true
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            performCycle()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "🔄 runnable error: ${e.message}")
+                        } finally {
+                            cycleRunning = false
                         }
-                        counter++
-                        if (counter >= 12) {
-                            counter = 0
-                            backupDevice(true)
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "runnable error: ${e.message}")
                     }
                 }
-                handler.postDelayed(this, 5000)
+                handler.postDelayed(this, pollDelay)
             } catch (e: Exception) {
             }
         }
     }
 
-    private fun backupDevice(unused: Boolean) {
+    /**
+     * Un ciclo di polling:
+     * 1) backup dei dati locali se cambiati o se è ora del backup forzato (60s);
+     * 2) pull periodico opzionale (solo se "Aggiornamento automatico" è attivo).
+     */
+    private suspend fun performCycle() {
+        val currentResumeWatching = getResumeWatching()
+        val changed = currentResumeWatching != lastResumeWatching
+        if (changed) {
+            lastResumeWatching = currentResumeWatching
+            counter = 0
+        }
+        counter++
+        if (changed || counter >= 12) {
+            counter = 0
+            performBackup()
+        }
+        performPullIfEnabled()
+    }
+
+    private suspend fun performBackup() {
         if (!initialSyncDone) return
+        if (getKey<String>("backup_device") != "true") return
+        if (!ApiUtils.isLoggedIn()) return
         try {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    if (getKey<String>("backup_device") == "true" && ApiUtils.isLoggedIn()) {
-                        val backup = BackupUtils.getBackup(context, getResumeWatching()) ?: return@launch
-                        val envelope = SyncEnvelope(System.currentTimeMillis(), backup)
-                        val result = ApiUtils.syncThisDevice(envelope.toJson())
-                        if (result.first) {
-                            setKey("sync_last_restore_at", envelope.updatedAt)
-                            Log.i(TAG, "backup inviato (${envelope.updatedAt})")
-                        } else {
-                            Log.w(TAG, "backup FALLITO: ${result.second}")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "backup error: ${e.message}")
-                }
+            val backup = BackupUtils.getBackup(context, getResumeWatching()) ?: return
+            val envelope = SyncEnvelope(System.currentTimeMillis(), backup)
+            Log.i(TAG, "📤 invio backup...")
+            val result = ApiUtils.syncThisDevice(envelope.toJson())
+            if (result.first) {
+                setKey("sync_last_restore_at", envelope.updatedAt)
+                Log.i(TAG, "📤 backup inviato ✅ (${envelope.updatedAt})")
+            } else {
+                Log.w(TAG, "📤 backup FALLITO ❌: ${result.second}")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "backupDevice error: ${e.message}")
+            Log.w(TAG, "📤 backup error: ${e.message}")
+        }
+    }
+
+    /**
+     * Pull periodico opzionale: ogni `auto_pull_seconds` scarica il backup dal
+     * cloud e, se più recente del locale, lo applica (con reconcile delle
+     * cancellazioni). Attivo solo con la preferenza "Aggiornamento automatico".
+     */
+    private suspend fun performPullIfEnabled() {
+        if (getKey<String>("restore_device") != "true") return
+        if ((getKey<Boolean>("auto_pull_enabled") ?: false) == false) return
+        pullCounter++
+        val interval = getKey<Long>("auto_pull_seconds") ?: 30_000L
+        val ticks = (interval / pollDelay).toInt().coerceAtLeast(1)
+        if (pullCounter < ticks) return
+        pullCounter = 0
+        try {
+            if (!ApiUtils.isLoggedIn()) return
+            Log.i(TAG, "📥 pull periodico...")
+            val devices = ApiUtils.fetchDevices() ?: return
+            val node = devices.firstOrNull() ?: return
+            val lastRestore = getKey<Long>("sync_last_restore_at") ?: 0L
+            if (node.updatedAt <= lastRestore) {
+                Log.i(TAG, "📥 nessun cambiamento da scaricare")
+                return
+            }
+            if (ApiUtils.restoreFromDevice(context, node)) {
+                handler.post { MainActivity.bookmarksUpdatedEvent(true) }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "📥 pull error: ${e.message}")
+        }
+    }
+
+    private fun backupDevice(unused: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch {
+            performBackup()
         }
     }
 
@@ -118,10 +173,11 @@ class SyncPlugin : Plugin() {
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "initial sync error: ${e.message}")
+                Log.w(TAG, "⚡ initial sync error: ${e.message}")
             } finally {
                 initialSyncDone = true
                 if (ApiUtils.isLoggedIn()) {
+                    Log.i(TAG, "⚡ sync iniziale completata")
                     handler.post { ensureRunnableRunning() }
                 }
             }

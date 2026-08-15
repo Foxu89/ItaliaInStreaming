@@ -10,7 +10,14 @@ import com.lagradost.cloudstream3.mapper
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKeys
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.removeKey
 import com.lagradost.cloudstream3.ui.home.HomeViewModel.Companion.getResumeWatching
+import com.lagradost.cloudstream3.utils.DataStoreHelper
+import com.lagradost.cloudstream3.utils.DataStoreHelper.RESULT_RESUME_WATCHING
+import com.lagradost.cloudstream3.utils.DataStoreHelper.RESULT_SEASON
+import com.lagradost.cloudstream3.utils.DataStoreHelper.RESULT_EPISODE
+import com.lagradost.cloudstream3.utils.DataStoreHelper.RESULT_DUB
 import com.fasterxml.jackson.module.kotlin.readValue
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -35,11 +42,11 @@ object ApiUtils {
             val res = app.post(apiUrl, headers = header, json = data)
             val parsed = res.parsedSafe<APIRes>()
             if (parsed?.errors?.isNotEmpty() == true) {
-                Log.w(TAG, "GraphQL error: ${parsed.errors?.joinToString { it.message ?: "" }}")
+                Log.w(TAG, "⚠️ GraphQL error: ${parsed.errors?.joinToString { it.message ?: "" }}")
             }
             return parsed
         } catch (e: Exception) {
-            Log.w(TAG, "apiCall error: ${e.message}")
+            Log.w(TAG, "💥 apiCall error: ${e.message}")
             return null
         }
     }
@@ -109,13 +116,42 @@ object ApiUtils {
                 return false
             }
             BackupUtils.restore(context, backup, true, true)
+            reconcileResumeWatching(backup)
             setKey("sync_last_restore_at", if (updatedAt > 0L) updatedAt else System.currentTimeMillis())
-            Log.i(TAG, "restore applicato (updatedAt=$updatedAt)")
+            Log.i(TAG, "📥 restore applicato ✅ (updatedAt=$updatedAt)")
             return true
         } catch (e: Exception) {
-            Log.w(TAG, "restore fallito: ${e.message}")
+            Log.w(TAG, "📥 restore fallito ❌: ${e.message}")
             return false
         }
+    }
+
+    /**
+     * Riconciliazione a snapshot del "Continua a guardare": dopo il restore (che
+     * è solo-merge e non elimina mai), rimuove localmente i resume item che non
+     * sono più presenti nel backup. Così le cancellazioni si propagano a tutti
+     * i dispositivi. Elimina anche le relative chiavi stagione/episodio/dub.
+     */
+    private fun reconcileResumeWatching(backup: BackupFile) {
+        val account = DataStoreHelper.currentAccount
+        val folder = "$account/$RESULT_RESUME_WATCHING"
+        val backupIds = backup.datastore.string
+            ?.keys
+            ?.mapNotNull { key ->
+                if (key.startsWith("$folder/")) key.substringAfterLast("/").toIntOrNull() else null
+            }
+            ?.toSet()
+            ?: emptySet()
+        val localIds = getKeys(folder)?.mapNotNull { it.substringAfterLast("/").toIntOrNull() } ?: return
+        val toRemove = localIds.filter { it !in backupIds }
+        if (toRemove.isEmpty()) return
+        toRemove.forEach { id ->
+            DataStoreHelper.removeLastWatched(id)
+            removeKey("$account/$RESULT_SEASON", id.toString())
+            removeKey("$account/$RESULT_EPISODE", id.toString())
+            removeKey("$account/$RESULT_DUB", id.toString())
+        }
+        Log.i(TAG, "🗑️ reconcile: rimossi ${toRemove.size} item non più nel cloud: $toRemove")
     }
 
     suspend fun syncProjectDetails(context: Context?): Pair<Boolean, String?> {
@@ -181,7 +217,7 @@ object ApiUtils {
         val query = """ query User { viewer { projectV2(number: ${projectNum}) { id items(first: 100) { nodes { id content { __typename ... on DraftIssue { id title bodyText updatedAt } } } } } } } """
         val res = apiCall(query.toStringData()) ?: return null
         val nodes = res.data?.viewer?.projectV2?.items?.nodes ?: return emptyList()
-        return nodes.mapNotNull { node ->
+        val devices = nodes.mapNotNull { node ->
             val content = node.content
             if (content.typeName != "DraftIssue") return@mapNotNull null
             val raw = content.bodyText ?: return@mapNotNull null
@@ -199,5 +235,7 @@ object ApiUtils {
                 updatedAt = envelopeUpdatedAt(decoded) ?: parseIsoTime(content.updatedAt) ?: 0L
             )
         }.sortedByDescending { it.updatedAt }
+        Log.i(TAG, "📡 trovati ${devices.size} nodi validi")
+        return devices
     }
 }

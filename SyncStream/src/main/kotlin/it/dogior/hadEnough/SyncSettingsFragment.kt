@@ -93,6 +93,7 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
         view.findView<TextView>("header_status").text = status
 
         view.findView<View>("login_card").applyOutlineBackground()
+        view.findView<View>("prefs_card").applyOutlineBackground()
         view.findView<View>("guide_card").applyOutlineBackground()
 
         view.findView<View>("login_card").setOnClickListener {
@@ -102,6 +103,39 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
         view.findView<View>("guide_card").setOnClickListener {
             val url = "https://github.com/DieGon7771/ItaliaInStreaming/blob/master/guide/README_SyncStream.md"
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+
+        setupPreferences(view)
+    }
+
+    private fun setupPreferences(view: View) {
+        val intervals = listOf(15_000L, 30_000L, 60_000L)
+        val autoPullSwitch = view.findView<Switch>("auto_pull_switch")
+        val prefsOptions = view.findView<View>("auto_pull_options")
+
+        fun refreshPrefsUI() {
+            val enabled = getKey<Boolean>("auto_pull_enabled") ?: false
+            autoPullSwitch.isChecked = enabled
+            prefsOptions.visibility = if (enabled) View.VISIBLE else View.GONE
+            val current = getKey<Long>("auto_pull_seconds") ?: 30_000L
+            intervals.forEach { sec ->
+                view.findView<TextView>("auto_pull_${sec / 1000}_check").text =
+                    if (sec == current) "✓" else ""
+            }
+        }
+
+        refreshPrefsUI()
+
+        autoPullSwitch.setOnCheckedChangeListener { _, isChecked ->
+            setKey("auto_pull_enabled", isChecked)
+            prefsOptions.visibility = if (isChecked) View.VISIBLE else View.GONE
+        }
+
+        intervals.forEach { sec ->
+            view.findView<View>("auto_pull_${sec / 1000}_row").setOnClickListener {
+                setKey("auto_pull_seconds", sec)
+                refreshPrefsUI()
+            }
         }
     }
 }
