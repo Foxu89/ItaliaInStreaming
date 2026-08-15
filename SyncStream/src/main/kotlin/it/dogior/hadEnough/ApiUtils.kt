@@ -10,14 +10,8 @@ import com.lagradost.cloudstream3.mapper
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
-import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKeys
-import com.lagradost.cloudstream3.CloudStreamApp.Companion.removeKey
 import com.lagradost.cloudstream3.ui.home.HomeViewModel.Companion.getResumeWatching
-import com.lagradost.cloudstream3.utils.DataStoreHelper
-import com.lagradost.cloudstream3.utils.DataStoreHelper.RESULT_RESUME_WATCHING
-import com.lagradost.cloudstream3.utils.DataStoreHelper.RESULT_SEASON
-import com.lagradost.cloudstream3.utils.DataStoreHelper.RESULT_EPISODE
-import com.lagradost.cloudstream3.utils.DataStoreHelper.RESULT_DUB
+import com.lagradost.cloudstream3.utils.DataStore.getSharedPrefs
 import com.fasterxml.jackson.module.kotlin.readValue
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -116,7 +110,7 @@ object ApiUtils {
                 return false
             }
             BackupUtils.restore(context, backup, true, true)
-            reconcileResumeWatching(backup)
+            reconcileResumeWatching(context, backup)
             setKey("sync_last_restore_at", if (updatedAt > 0L) updatedAt else System.currentTimeMillis())
             Log.i(TAG, "📥 restore applicato ✅ (updatedAt=$updatedAt)")
             return true
@@ -131,27 +125,48 @@ object ApiUtils {
      * è solo-merge e non elimina mai), rimuove localmente i resume item che non
      * sono più presenti nel backup. Così le cancellazioni si propagano a tutti
      * i dispositivi. Elimina anche le relative chiavi stagione/episodio/dub.
+     *
+     * Lavora direttamente sulle SharedPreferences (come BackupUtils) usando le
+     * stringhe delle cartelle, senza dipendere da costanti interne non esposte
+     * dall'artefatto pre-release di CloudStream su cui compila il plugin.
      */
-    private fun reconcileResumeWatching(backup: BackupFile) {
-        val account = DataStoreHelper.currentAccount
-        val folder = "$account/$RESULT_RESUME_WATCHING"
-        val backupIds = backup.datastore.string
-            ?.keys
-            ?.mapNotNull { key ->
-                if (key.startsWith("$folder/")) key.substringAfterLast("/").toIntOrNull() else null
+    private fun reconcileResumeWatching(context: Context, backup: BackupFile) {
+        val resumeFolder = "result_resume_watching_2"
+        val seasonFolder = "result_season"
+        val episodeFolder = "result_episode"
+        val dubFolder = "result_dub"
+
+        // account -> id presenti nel backup (chiavi "account/folder/id")
+        val backupIdsByAccount = mutableMapOf<String, Set<Int>>()
+        backup.datastore.string?.keys?.forEach { key ->
+            val parts = key.split("/")
+            if (parts.size == 3 && parts[1] == resumeFolder) {
+                parts[2].toIntOrNull()?.let { id ->
+                    backupIdsByAccount[parts[0]] = backupIdsByAccount[parts[0]].orEmpty() + id
+                }
             }
-            ?.toSet()
-            ?: emptySet()
-        val localIds = getKeys(folder)?.mapNotNull { it.substringAfterLast("/").toIntOrNull() } ?: return
-        val toRemove = localIds.filter { it !in backupIds }
-        if (toRemove.isEmpty()) return
-        toRemove.forEach { id ->
-            DataStoreHelper.removeLastWatched(id)
-            removeKey("$account/$RESULT_SEASON", id.toString())
-            removeKey("$account/$RESULT_EPISODE", id.toString())
-            removeKey("$account/$RESULT_DUB", id.toString())
         }
-        Log.i(TAG, "🗑️ reconcile: rimossi ${toRemove.size} item non più nel cloud: $toRemove")
+
+        val prefs = context.getSharedPrefs()
+        val removed = mutableListOf<Int>()
+        prefs.all.keys.forEach { key ->
+            val parts = key.split("/")
+            if (parts.size == 3 && parts[1] == resumeFolder) {
+                val id = parts[2].toIntOrNull() ?: return@forEach
+                val backupIds = backupIdsByAccount[parts[0]].orEmpty()
+                if (id !in backupIds) {
+                    val account = parts[0]
+                    prefs.edit().remove(key).apply()
+                    prefs.edit().remove("$account/$seasonFolder/$id").apply()
+                    prefs.edit().remove("$account/$episodeFolder/$id").apply()
+                    prefs.edit().remove("$account/$dubFolder/$id").apply()
+                    removed += id
+                }
+            }
+        }
+        if (removed.isNotEmpty()) {
+            Log.i(TAG, "🗑️ reconcile: rimossi ${removed.size} item non più nel cloud: $removed")
+        }
     }
 
     suspend fun syncProjectDetails(context: Context?): Pair<Boolean, String?> {
