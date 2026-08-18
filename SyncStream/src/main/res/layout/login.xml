@@ -26,7 +26,8 @@
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
             android:background="@android:color/transparent"
-            android:contentDescription="Salva" />
+            android:contentDescription="Salva"
+            android:focusable="true" />
     </RelativeLayout>
 
     <LinearLayout
