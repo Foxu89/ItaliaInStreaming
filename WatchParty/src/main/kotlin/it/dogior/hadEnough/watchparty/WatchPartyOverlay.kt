@@ -288,9 +288,8 @@ class WatchPartyOverlay(
                 indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFF4FC3F7.toInt())
             }
             val size = dp(activity, 42)
-            // mini-rotellina leggermente SOPRA quella nativa del player (che
-            // è al centro): non si sovrappongono più, e il colore azzurro la
-            // distingue come "attesa del plugin".
+            // rotellina del plugin: azzurra e leggermente sopra quella nativa
+            // del player (al centro), per non confonderle
             val height = decor.height
             val params = FrameLayout.LayoutParams(size, size).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
@@ -367,7 +366,7 @@ class WatchPartyOverlay(
         ))
 
         val panel = run {
-            // larghezza 42% dello schermo (leggermente meno di prima)
+            // larghezza 42% dello schermo
             val panelWidth = (activity.window?.decorView?.width ?: 0 * 1) * 0.42f
             val w = if (panelWidth > 0) panelWidth.toInt() else (activity.resources.displayMetrics.widthPixels * 0.42f).toInt()
             val p = LinearLayout(activity).apply {
@@ -379,7 +378,6 @@ class WatchPartyOverlay(
                 setPadding(dp(activity, 12), dp(activity, 10), dp(activity, 12), dp(activity, 10))
             }
 
-            // header "Chat"
             val header = LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -404,7 +402,6 @@ class WatchPartyOverlay(
             header.addView(closeBtn)
             p.addView(header)
 
-            // lista messaggi
             val scroll = ScrollView(activity).apply {
                 isFillViewport = true
                 layoutParams = LinearLayout.LayoutParams(
@@ -561,8 +558,7 @@ class WatchPartyOverlay(
         val list = chatMessages ?: return
         val activity = CommonActivity.activity ?: return
         val theme = chatTheme()
-        // messaggi consecutivi dello stesso mittente: niente nome ripetuto e
-        // bolle più vicine (un solo "Tu"/"Amico", poi solo le bolle)
+        // stesso mittente di fila: niente nome ripetuto e bolle più vicine
         val grouped = sender == lastGroupSender
         lastGroupSender = sender
         // distanza uniforme tra messaggi di fila: bottom SEMPRE 2dp, top 5dp

@@ -14,8 +14,8 @@ dependencies {
     compileOnly("com.jaredrummler:colorpicker:1.1.0")
 }
 
-// usa un intero per il numero di versione
-version = 27
+
+version = 2
 
 android {
     defaultConfig {
@@ -40,13 +40,13 @@ cloudstream {
      * 2: Slow
      * 3: Beta only
      * */
-    status = 3 // sperimentale: si appoggia a dettagli interni non ufficiali dell'app
+    status = 3 
 
     tvTypes = listOf(
         "Others",
     )
 
-    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/WatchParty/WatchParty_icon.png"
+    iconUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/WatchParty/WatchParty_icon.png"
     description = "⚠️ BETA ⚠️ Watch movies and TV series together in real-time with live chat (Max 2 users for now)."
     requiresResources = true
 }
