@@ -170,7 +170,7 @@ class WatchPartySettingsFragment(
             val nextEpisodeSwitch = permissionRow("Can change episode", current.canNextEpisode)
 
             com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
-                .setTitle("Permissions for ${manager.remotePeerName ?: "this participant"}")
+                .setTitle("Permissions for guests")
                 .setView(container)
                 .setPositiveButton("Save") { _, _ ->
                     manager.sendPermissionsToGuest(
@@ -231,16 +231,19 @@ class WatchPartySettingsFragment(
             val meLabel = if (manager.role == WatchPartyManager.Role.HOST) "$me (Host, You)" else "$me (You)"
             participantsContainer.addView(buildParticipantCard(meLabel, editable = false))
 
-            val peerName = manager.remotePeerName
-            if (peerName != null) {
-                val isHost = manager.role == WatchPartyManager.Role.HOST
-                val peerLabel = if (isHost) peerName else "$peerName (Host)"
-                // editabile solo se IO sono host (i permessi si impostano sull'ospite)
-                participantsContainer.addView(buildParticipantCard(peerLabel, editable = isHost))
-            } else {
+            val roster = manager.participants
+            if (roster.isEmpty()) {
                 participantsContainer.addView(
-                    buildParticipantCard("Waiting for a participant…", editable = false)
+                    buildParticipantCard("Waiting for participants…", editable = false)
                 )
+                return
+            }
+            // editabile solo se IO sono host (i permessi si impostano sugli ospiti)
+            val editable = manager.role == WatchPartyManager.Role.HOST
+            for (p in roster) {
+                val isPeerHost = p.cid == manager.currentHostCid
+                val label = if (isPeerHost) "${p.name} (Host)" else p.name
+                participantsContainer.addView(buildParticipantCard(label, editable = editable))
             }
         }
 
@@ -295,7 +298,7 @@ class WatchPartySettingsFragment(
             }
             val pin = manager.createRoom()
             pinDisplay.text = pin
-            status.text = "Share this PIN with your friend. They need to open the same video."
+            status.text = "Share this PIN with your friends. They need to open the same video."
             refreshUiForActiveRoom()
         }
 
@@ -313,7 +316,7 @@ class WatchPartySettingsFragment(
                 return@setOnClickListener
             }
             if (!PlayerAccess.isPlayerScreenActive()) {
-                showToast("Open the same video as your friend first")
+                showToast("Open the same video as your friends first")
                 return@setOnClickListener
             }
             manager.joinRoom(pin)

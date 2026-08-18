@@ -15,6 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -25,8 +26,15 @@ data class ParticipantPermissions(
     val canNextEpisode: Boolean = true,
 )
 
+/** Partecipante visibile all'UI. seq = ordine di ingresso (1 = primo entrato, cioè l'host originale). */
+data class WatchPartyParticipant(
+    val cid: String,
+    val name: String,
+    val seq: Int,
+)
+
 /**
- * Gestisce una Watch Party a 2 utenti su un canale WebSocket di relay.
+ * Gestisce una Watch Party fino a 5 utenti su un canale WebSocket di relay.
  *
  * A differenza della versione "fork" (che agganciava un listener diretto
  * sul player interno), qui lo stato locale viene rilevato via POLLING
@@ -36,21 +44,26 @@ data class ParticipantPermissions(
  * Prevenzione loop: quando applichiamo un comando remoto (seekTo/handleEvent
  * con source = Sync) marchiamo `lastRemoteCommandMs`. Il polling ignora ogni
  * variazione di stato avvenuta entro ECHO_WINDOW_MS da quel momento, così
- * non la re-invia al peer.
+ * non la re-invia agli altri peer.
+ *
+ * Multi-peer: il server traccia identità (cid), ordine di ingresso (seq) e chi
+ * è l'host (hostCid). Quando l'host esce, il server promuove il più "vecchio"
+ * tra i rimanenti e lo comunica con hostCid: qui ci allineiamo al ruolo indicato.
  *
  * LIMITE NOTO: il cambio di episodio/sorgente non viene propagato
  * automaticamente (IPlayer non espone un metodo pubblico per caricare un
  * nuovo URL). Viene solo inviata una notifica "EPISODE_HINT" col titolo,
- * l'altro utente deve cambiare episodio manualmente.
+ * gli altri utenti devono cambiare episodio manualmente.
  */
 class WatchPartyManager {
 
     enum class Role { IDLE, HOST, GUEST }
 
-    /** Stato di connessione al relay, indipendente da "l'amico è nella stanza". */
+    /** Stato di connessione al relay, indipendente da "gli altri sono nella stanza". */
     enum class ConnectionState { DISCONNESSO, CONNESSIONE_IN_CORSO, CONNESSO, RICONNESSIONE_IN_CORSO }
 
     companion object {
+        const val MAX_PARTICIPANTS = 5
         private const val POLL_INTERVAL_MS = 200L
         // Basta coprire il primo tick dopo aver applicato un comando remoto:
         // da lì in poi lastKnownPosition riflette già il nuovo valore, quindi
@@ -64,7 +77,7 @@ class WatchPartyManager {
         private const val RECONNECT_MAX_DELAY_MS = 15000L
         private const val GATE_SAFETY_TIMEOUT_MS = 9000L
         // tempo di buffering presunto dopo un seek: scaduto questo, il lato
-        // locale si dichiara pronto (READY) e il resolve aspetta l'altro peer
+        // locale si dichiara pronto (READY) e il resolve aspetta gli altri peer
         private const val LOCAL_SEEK_READY_MS = 900L
 
         /** Endpoint del server di relay. Vedi WatchPartyServer/ per l'implementazione di riferimento.
@@ -72,6 +85,9 @@ class WatchPartyManager {
          *  l'URL non compare nel sorgente. */
         val DEFAULT_RELAY_URL: String = BuildConfig.WATCHPARTY_RELAY
     }
+
+    /** Identità stabile di QUESTO client: sopravvive ai reconnect, il server la usa per roster e host migration. */
+    val myClientId: String = UUID.randomUUID().toString()
 
     var role: Role = Role.IDLE
         private set
@@ -83,16 +99,28 @@ class WatchPartyManager {
             mainHandler.post { onConnectionStateChanged?.invoke(value) }
         }
 
-    /** True SOLO quando l'amico è davvero nella stanza, non solo "io sono connesso al relay". */
+    /** True quando c'è ALMENO un altro utente in stanza, non solo "io sono connesso al relay". */
     var peerPresent: Boolean = false
-        private set(value) {
-            field = value
-            mainHandler.post { onPeerConnected?.invoke(value) }
+        private set
+
+    /** Ordine di ingresso assegnatomi dal server (ROOM_STATE). 1 = primo entrato (host). */
+    var mySeq: Int? = null
+        private set
+
+    /** cid dell'host corrente, secondo il server (host migration). */
+    var currentHostCid: String? = null
+        private set
+
+    /** Roster degli ALTRI partecipanti, ordinati per ingresso. */
+    val participants: List<WatchPartyParticipant>
+        get() = participantsMap.values.sortedBy { it.seq }.map {
+            WatchPartyParticipant(it.cid, it.name, it.seq)
         }
 
-    /** Nome mostrato per l'amico, valorizzato al primo messaggio "HELLO" ricevuto. */
-    var remotePeerName: String? = null
-        private set
+    private val participantsMap = LinkedHashMap<String, Participant>()
+
+    /** Dato interno di roster: seq non è aggiornato ai reconnect, resta l'ordine originale. */
+    private class Participant(val cid: String, val seq: Int, var name: String)
 
     /**
      * Permessi APPLICATI A ME. Rilevanti solo se sono Guest — l'host ha
@@ -112,7 +140,7 @@ class WatchPartyManager {
     var onParticipantsChanged: (() -> Unit)? = null
     /** true = mostra la rotellina di attesa sincronizzata, false = nascondila. */
     var onBufferingGateChanged: ((Boolean) -> Unit)? = null
-    /** Messaggio della chat ricevuto dall'altro peer: (nome mittente, testo). */
+    /** Messaggio della chat ricevuto da un altro partecipante: (nome mittente, testo). */
     var onChatMessage: ((sender: String, text: String) -> Unit)? = null
 
     val isConnected: Boolean get() = socket?.isOpen == true
@@ -148,7 +176,7 @@ class WatchPartyManager {
     private var gateGeneration = 0
     private var gateExpectedPlaying = true
     private var localReady = false
-    private var remoteReady = false
+    private var remoteReadyCount = 0
 
     fun createRoom(relayUrl: String = DEFAULT_RELAY_URL): String {
         this.relayUrl = relayUrl
@@ -195,7 +223,9 @@ class WatchPartyManager {
         lastKnownPlaying = null
         connectionState = ConnectionState.DISCONNESSO
         peerPresent = false
-        remotePeerName = null
+        mySeq = null
+        currentHostCid = null
+        participantsMap.clear()
         myPermissions = ParticipantPermissions()
         guestPermissions = ParticipantPermissions()
         gateActive = false
@@ -210,17 +240,18 @@ class WatchPartyManager {
     private fun connectSocket(pin: String) {
         connectionState = if (reconnectAttempt > 0) ConnectionState.RICONNESSIONE_IN_CORSO
         else ConnectionState.CONNESSIONE_IN_CORSO
-        peerPresent = false // non sappiamo ancora se l'amico c'è, lo scopriremo dai messaggi
+        peerPresent = false // non sappiamo ancora se c'è qualcun altro, lo scopriremo dai messaggi
 
         socket = WatchPartySocket(
             baseWsUrl = relayUrl,
+            clientId = myClientId,
             onOpen = {
                 mainHandler.post {
                     reconnectAttempt = 0
                     connectionState = ConnectionState.CONNESSO
-                    onStatusText?.invoke("Connected to the server, waiting for your friend…")
-                    // annuncia il nostro nome; se l'altro è già in stanza risponderà
-                    // a sua volta (vedi handleRemoteMessage) e sapremo che è presente
+                    onStatusText?.invoke("Connected to the server, waiting for other participants…")
+                    // annuncia il nostro nome; chi è già in stanza risponderà a sua volta
+                    // (vedi handleRemoteMessage) e sapremo che c'è
                     socket?.send(WatchPartyMessage(type = "HELLO", name = localDisplayName()))
                     if (role == Role.GUEST) socket?.send("SYNC_REQUEST")
                 }
@@ -233,9 +264,15 @@ class WatchPartyManager {
                     scheduleReconnect()
                 }
             },
-            onFailure = { t ->
+            onFailure = { t, response ->
                 mainHandler.post {
-                    onStatusText?.invoke("Connection error: ${t.message}")
+                    if (response?.code == 409) {
+                        // stanza piena: riprovare non serve, fermiamo il loop di reconnect
+                        shouldStayConnected = false
+                        onStatusText?.invoke("The room is full (max $MAX_PARTICIPANTS people)")
+                    } else {
+                        onStatusText?.invoke("Connection error: ${t.message}")
+                    }
                     peerPresent = false
                     scheduleReconnect()
                 }
@@ -364,32 +401,62 @@ class WatchPartyManager {
     // ---------------------------------------------------------------------
 
     private fun handleRemoteMessage(msg: WatchPartyMessage) {
-        // qualsiasi messaggio in arrivo (a parte quelli di uscita) prova che
-        // l'amico è davvero nella stanza, non solo che noi siamo connessi al relay
-        if (msg.type != "PEER_LEFT" && msg.type != "LEAVE_ROOM") {
-            peerPresent = true
-        }
-
         when (msg.type) {
+            // ---- messaggi del server: roster + host migration ----
+
+            "ROOM_STATE" -> {
+                // arrivato subito dopo la connessione: conosce già tutti (incluso me)
+                msg.roster?.forEach { peer ->
+                    if (peer.cid != myClientId) upsertParticipant(peer.cid, peer.seq, null)
+                }
+                mySeq = msg.roster?.firstOrNull { it.cid == myClientId }?.seq
+                msg.hostCid?.let { currentHostCid = it }
+                applyRoleFromHost()
+                onStatusText?.invoke(
+                    if (participantsMap.isEmpty()) "Connected, waiting for other participants…"
+                    else "Connected, ${participantsMap.size} participant(s) in the room"
+                )
+                syncParticipants()
+            }
+
             "PEER_JOINED" -> {
-                onStatusText?.invoke("Friend connected, sending my name…")
+                msg.cid?.let { upsertParticipant(it, msg.seq ?: Int.MAX_VALUE, null) }
+                msg.hostCid?.let { currentHostCid = it }
+                applyRoleFromHost()
+                onStatusText?.invoke("New participant connected, sending my name…")
                 socket?.send(WatchPartyMessage(type = "HELLO", name = localDisplayName()))
                 if (role == Role.HOST) sendSyncState()
+                syncParticipants()
             }
 
             "PEER_LEFT" -> {
-                peerPresent = false
-                remotePeerName = null
-                onStatusText?.invoke("Your friend left the room")
-                onParticipantsChanged?.invoke()
+                msg.cid?.let { participantsMap.remove(it) }
+                msg.hostCid?.let { currentHostCid = it }
+                applyRoleFromHost()
+                onStatusText?.invoke(
+                    if (participantsMap.isEmpty()) "The room is now empty"
+                    else "A participant left the room"
+                )
+                syncParticipants()
+                // se l'ex host è uscito e ora sono io l'host, riallineo subito tutti
+                if (role == Role.HOST) sendSyncState()
             }
 
+            // ---- messaggi degli altri client ----
+
             "HELLO" -> {
-                remotePeerName = msg.name?.takeIf { it.isNotBlank() } ?: "Friend"
-                onStatusText?.invoke("Friend connected: $remotePeerName")
-                onParticipantsChanged?.invoke()
+                val name = msg.name?.takeIf { it.isNotBlank() } ?: "Participant"
+                val cid = msg.cid
+                if (cid == null) {
+                    // client "vecchio" senza cid: un solo peer, teniamolo per compatibilità
+                    if (participantsMap.isEmpty()) upsertParticipant("legacy", 0, name)
+                } else if (cid != myClientId) {
+                    upsertParticipant(cid, msg.seq ?: Int.MAX_VALUE, name)
+                }
+                onStatusText?.invoke("Participant connected: $name")
+                syncParticipants()
                 // se sono host e avevo già impostato dei permessi, li rimando ora
-                // che l'ospite si è (ri)connesso, altrimenti li perderebbe al reconnect
+                // che qualcuno si è (ri)connesso, altrimenti li perderebbe al reconnect
                 if (role == Role.HOST && guestPermissions != ParticipantPermissions()) {
                     sendPermissionsToGuest(guestPermissions)
                 }
@@ -458,7 +525,7 @@ class WatchPartyManager {
 
             "CHAT" -> {
                 val text = msg.text?.trim()?.takeIf { it.isNotEmpty() } ?: return
-                onChatMessage?.invoke(msg.name?.takeIf { it.isNotBlank() } ?: "Friend", text)
+                onChatMessage?.invoke(msg.name?.takeIf { it.isNotBlank() } ?: "Participant", text)
             }
 
             "EPISODE_HINT" -> msg.title?.let { onEpisodeHint?.invoke(it) }
@@ -468,12 +535,55 @@ class WatchPartyManager {
             }
 
             "LEAVE_ROOM" -> {
-                peerPresent = false
-                remotePeerName = null
-                onStatusText?.invoke("Your friend left the room")
-                onParticipantsChanged?.invoke()
+                msg.cid?.let { participantsMap.remove(it) }
+                onStatusText?.invoke(
+                    if (participantsMap.isEmpty()) "The room is now empty"
+                    else "A participant left the room"
+                )
+                syncParticipants()
             }
         }
+    }
+
+    /** Aggiunge o aggiorna un partecipante. Il seq resta quello originale anche se il client si riconnette. */
+    private fun upsertParticipant(cid: String, seq: Int, name: String?) {
+        val existing = participantsMap[cid]
+        if (existing != null) {
+            if (!name.isNullOrBlank()) existing.name = name
+        } else {
+            participantsMap[cid] = Participant(cid, seq, name ?: "Participant")
+        }
+    }
+
+    /** Riallinea il ruolo (HOST/GUEST) a quello indicato dal server (hostCid). */
+    private fun applyRoleFromHost() {
+        if (role == Role.IDLE) return
+        val h = currentHostCid ?: return
+        val shouldBeHost = h == myClientId
+        if (shouldBeHost && role != Role.HOST) {
+            role = Role.HOST
+            // l'host ha sempre pieno controllo: resetta i permessi di default
+            myPermissions = ParticipantPermissions()
+            guestPermissions = ParticipantPermissions()
+            onStatusText?.invoke("You are now the host of the room")
+            // i permessi del vecchio host NON sopravvivono al cambio: li rimando
+            // di default a tutti, così anche i guest tornano ai valori iniziali
+            sendPermissionsToGuest(guestPermissions)
+            sendSyncState()
+        } else if (!shouldBeHost && role == Role.HOST) {
+            role = Role.GUEST
+            onStatusText?.invoke("You are now a participant")
+        }
+    }
+
+    /** Aggiorna peerPresent e notifica UI ogni volta che cambia il roster. */
+    private fun syncParticipants() {
+        val present = participantsMap.isNotEmpty()
+        if (present != peerPresent) {
+            peerPresent = present
+            mainHandler.post { onPeerConnected?.invoke(present) }
+        }
+        mainHandler.post { onParticipantsChanged?.invoke() }
     }
 
     /**
@@ -491,17 +601,18 @@ class WatchPartyManager {
                 playing = player.getIsPlaying(),
             )
         )
-        onStatusText?.invoke("Resync sent to your friend")
+        onStatusText?.invoke("Resync sent to all participants")
     }
 
     // ---------------------------------------------------------------------
-    // Gate di attesa sincronizzata dopo un seek: entrambi in pausa con
+    // Gate di attesa sincronizzata dopo un seek: tutti in pausa con
     // rotellina finché non sono davvero pronti, poi ripartono insieme.
     // Una sola pausa pulita (niente più doppio play→pausa→play che
-    // "lampeggiava" ad ogni seek) + attesa a tempo sui due lati: il lato
+    // "lampeggiava" ad ogni seek) + attesa a tempo su TUTTI i lati: il lato
     // locale manda READY dopo LOCAL_SEEK_READY_MS, il resolve avviene quando
-    // entrambi sono pronti. Un nuovo seek durante l'attesa invalida quella
-    // vecchia (gateGeneration) e ne parte una nuova pulita.
+    // tutti gli altri partecipanti sono pronti (o dopo il timeout di sicurezza).
+    // Un nuovo seek durante l'attesa invalida quella vecchia (gateGeneration)
+    // e ne parte una nuova pulita.
     // ---------------------------------------------------------------------
 
     private fun beginSeekGate(targetPos: Long, expectedPlaying: Boolean) {
@@ -511,7 +622,7 @@ class WatchPartyManager {
         val myGen = gateGeneration
         gateExpectedPlaying = expectedPlaying
         localReady = false
-        remoteReady = false
+        remoteReadyCount = 0
         onBufferingGateChanged?.invoke(true)
 
         lastRemoteCommandMs = System.currentTimeMillis()
@@ -521,7 +632,7 @@ class WatchPartyManager {
         player.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync)
 
         // il lato locale si considera "pronto" dopo un piccolo tempo di buffering,
-        // poi avvisa l'altro. Il resolve aspetta comunque l'READY del peer.
+        // poi avvisa gli altri. Il resolve aspetta comunque i loro READY.
         mainHandler.postDelayed({
             if (gateActive && gateGeneration == myGen) {
                 localReady = true
@@ -537,13 +648,17 @@ class WatchPartyManager {
     }
 
     private fun onRemoteReady() {
-        remoteReady = true
+        remoteReadyCount++
         maybeResolveGate(gateGeneration)
     }
 
     private fun maybeResolveGate(gen: Int) {
         if (gen != gateGeneration || !gateActive) return
-        if (localReady && remoteReady) resolveGate(gen)
+        if (!localReady) return
+        // da soli basta il locale; con altri, servono i READY di tutti
+        if (participantsMap.isEmpty() || remoteReadyCount >= participantsMap.size) {
+            resolveGate(gen)
+        }
     }
 
     private fun resolveGate(gen: Int) {
@@ -575,7 +690,7 @@ class WatchPartyManager {
     }
 
     /**
-     * Cambia episodio sul proprio player e lo propaga all'altro.
+     * Cambia episodio sul proprio player e lo propaga agli altri.
      * Può essere chiamato da entrambi, MA il guest solo se l'host glielo
      * consente (canNextEpisode); senza permesso non fa nulla.
      */
@@ -588,7 +703,7 @@ class WatchPartyManager {
         socket?.send("NEXT_EPISODE")
     }
 
-    /** Invia un messaggio della chat all'altro peer. No-op se non siamo in stanza. */
+    /** Invia un messaggio della chat agli altri partecipanti. No-op se non siamo in stanza. */
     fun sendChatMessage(text: String) {
         val clean = text.trim()
         if (clean.isEmpty() || role == Role.IDLE || !isConnected) return
