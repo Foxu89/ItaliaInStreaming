@@ -25,7 +25,7 @@ class WatchPartySocket(
     private val clientId: String,
     private val onOpen: () -> Unit,
     private val onMessage: (WatchPartyMessage) -> Unit,
-    private val onClosed: () -> Unit,
+    private val onClosed: (code: Int, reason: String) -> Unit,
     private val onFailure: (Throwable, okhttp3.Response?) -> Unit,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -57,7 +57,7 @@ class WatchPartySocket(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                onClosed()
+                onClosed(code, reason)
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {

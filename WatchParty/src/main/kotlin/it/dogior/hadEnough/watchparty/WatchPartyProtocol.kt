@@ -35,8 +35,10 @@ data class PeerInfo(
  * per tracciare roster e ordine di ingresso, e per l'host migration.
  *
  * type possibili (vedi WatchPartyManager.handleRemoteMessage):
- *  - "ROOM_STATE"                — al nuovo entrato: count, hostCid e roster completo (incluso sé stesso)
+ *  - "ROOM_STATE"                — al nuovo entrato: count, hostCid, roster (incluso sé stesso) e stato lucchetto
  *  - "PEER_JOINED" / "PEER_LEFT" — generati dal server con cid/seq/count/hostCid
+ *  - "LOCK" / "LOCK_STATE"       — lucchetto stanza: l'host lo imposta (server), lo stato torna via LOCK_STATE
+ *  - "KICK"                      — espulsione: l'host indica targetCid, il server chiude il socket target
  *  - "HELLO"                     — scambio del nome visualizzato (porta il cid)
  *  - "SYNC_REQUEST" / "SYNC_STATE" — sincronizzazione periodica (host → guest)
  *  - "FORCE_SYNC"                — risync esplicito dal pulsante "Risincronizza ora"
@@ -60,6 +62,10 @@ data class WatchPartyMessage(
     val hostCid: String? = null,
     /** Roster completo con i seq di ingresso, solo in ROOM_STATE. */
     val roster: List<PeerInfo>? = null,
+    /** Stato del lucchetto stanza (LOCK / LOCK_STATE / ROOM_STATE). */
+    val locked: Boolean? = null,
+    /** Destinatario di un KICK: il server chiude il socket con questo cid. */
+    val targetCid: String? = null,
     val position: Long? = null,
     val playing: Boolean? = null,
     val url: String? = null,

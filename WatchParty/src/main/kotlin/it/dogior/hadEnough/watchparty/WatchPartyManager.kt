@@ -142,6 +142,12 @@ class WatchPartyManager {
     var onBufferingGateChanged: ((Boolean) -> Unit)? = null
     /** Messaggio della chat ricevuto da un altro partecipante: (nome mittente, testo). */
     var onChatMessage: ((sender: String, text: String) -> Unit)? = null
+    /** Notifica di sistema da mostrare come bolla in chat ("X joined", "X left"). */
+    var onSystemMessage: ((text: String) -> Unit)? = null
+
+    /** True se l'host ha bloccato nuovi ingressi (lucchetto stanza). */
+    var roomLocked: Boolean = false
+        private set
 
     val isConnected: Boolean get() = socket?.isOpen == true
 
@@ -225,12 +231,15 @@ class WatchPartyManager {
         peerPresent = false
         mySeq = null
         currentHostCid = null
+        roomLocked = false
         participantsMap.clear()
         myPermissions = ParticipantPermissions()
         guestPermissions = ParticipantPermissions()
         gateActive = false
         gateGeneration++
         onBufferingGateChanged?.invoke(false)
+        onConnectionStateChanged?.invoke(connectionState)
+        onParticipantsChanged?.invoke()
     }
 
     // ---------------------------------------------------------------------
@@ -257,8 +266,15 @@ class WatchPartyManager {
                 }
             },
             onMessage = { msg -> mainHandler.post { handleRemoteMessage(msg) } },
-            onClosed = {
+            onClosed = { code, reason ->
                 mainHandler.post {
+                    if (reason == "kicked") {
+                        // espulsi dall'host: niente riconnessione, si esce dalla stanza
+                        onStatusText?.invoke("You were kicked by the host")
+                        shouldStayConnected = false
+                        release()
+                        return@post
+                    }
                     onStatusText?.invoke("Connection closed")
                     peerPresent = false
                     scheduleReconnect()
@@ -266,12 +282,18 @@ class WatchPartyManager {
             },
             onFailure = { t, response ->
                 mainHandler.post {
-                    if (response?.code == 409) {
-                        // stanza piena: riprovare non serve, fermiamo il loop di reconnect
-                        shouldStayConnected = false
-                        onStatusText?.invoke("The room is full (max $MAX_PARTICIPANTS people)")
-                    } else {
-                        onStatusText?.invoke("Connection error: ${t.message}")
+                    when (response?.code) {
+                        409 -> {
+                            // stanza piena: riprovare non serve, fermiamo il loop di reconnect
+                            shouldStayConnected = false
+                            onStatusText?.invoke("The room is full (max $MAX_PARTICIPANTS people)")
+                        }
+                        403 -> {
+                            // stanza bloccata dall'host: fermiamo il loop di reconnect
+                            shouldStayConnected = false
+                            onStatusText?.invoke("The room is locked by the host")
+                        }
+                        else -> onStatusText?.invoke("Connection error: ${t.message}")
                     }
                     peerPresent = false
                     scheduleReconnect()
@@ -411,6 +433,7 @@ class WatchPartyManager {
                 }
                 mySeq = msg.roster?.firstOrNull { it.cid == myClientId }?.seq
                 msg.hostCid?.let { currentHostCid = it }
+                msg.locked?.let { roomLocked = it }
                 applyRoleFromHost()
                 onStatusText?.invoke(
                     if (participantsMap.isEmpty()) "Connected, waiting for other participants…"
@@ -430,6 +453,8 @@ class WatchPartyManager {
             }
 
             "PEER_LEFT" -> {
+                // leggo il nome PRIMA di rimuoverlo, per la bolla di sistema
+                val who = msg.cid?.let { participantsMap[it]?.name ?: "Participant" }
                 msg.cid?.let { participantsMap.remove(it) }
                 msg.hostCid?.let { currentHostCid = it }
                 applyRoleFromHost()
@@ -437,9 +462,23 @@ class WatchPartyManager {
                     if (participantsMap.isEmpty()) "The room is now empty"
                     else "A participant left the room"
                 )
+                who?.let { onSystemMessage?.invoke("$it left the room") }
                 syncParticipants()
                 // se l'ex host è uscito e ora sono io l'host, riallineo subito tutti
                 if (role == Role.HOST) sendSyncState()
+            }
+
+            "LOCK_STATE" -> {
+                roomLocked = msg.locked ?: false
+                onSystemMessage?.invoke(
+                    if (roomLocked) "The host locked the room"
+                    else "The host unlocked the room"
+                )
+                onStatusText?.invoke(
+                    if (roomLocked) "The room is now locked, no new participants"
+                    else "The room is now unlocked"
+                )
+                onParticipantsChanged?.invoke()
             }
 
             // ---- messaggi degli altri client ----
@@ -451,6 +490,10 @@ class WatchPartyManager {
                     // client "vecchio" senza cid: un solo peer, teniamolo per compatibilità
                     if (participantsMap.isEmpty()) upsertParticipant("legacy", 0, name)
                 } else if (cid != myClientId) {
+                    // bolla di sistema solo alla PRIMA volta che vediamo questo cid
+                    if (!participantsMap.containsKey(cid)) {
+                        onSystemMessage?.invoke("$name joined the room")
+                    }
                     upsertParticipant(cid, msg.seq ?: Int.MAX_VALUE, name)
                 }
                 onStatusText?.invoke("Participant connected: $name")
@@ -535,11 +578,14 @@ class WatchPartyManager {
             }
 
             "LEAVE_ROOM" -> {
+                // leggo il nome PRIMA di rimuoverlo, per la bolla di sistema
+                val who = msg.cid?.let { participantsMap[it]?.name ?: "Participant" }
                 msg.cid?.let { participantsMap.remove(it) }
                 onStatusText?.invoke(
                     if (participantsMap.isEmpty()) "The room is now empty"
                     else "A participant left the room"
                 )
+                who?.let { onSystemMessage?.invoke("$it left the room") }
                 syncParticipants()
             }
         }
@@ -728,6 +774,20 @@ class WatchPartyManager {
                 canNextEpisode = permissions.canNextEpisode,
             )
         )
+    }
+
+    /** Solo l'host: blocca/sblocca i nuovi ingressi (lucchetto stanza). Il server lo salva e fa da arbitro. */
+    fun setRoomLock(locked: Boolean) {
+        if (role != Role.HOST) return
+        roomLocked = locked
+        socket?.send(WatchPartyMessage(type = "LOCK", locked = locked))
+        onParticipantsChanged?.invoke()
+    }
+
+    /** Solo l'host: espelle un partecipante. Il server chiude il socket del targetCid. */
+    fun kickParticipant(cid: String) {
+        if (role != Role.HOST) return
+        socket?.send(WatchPartyMessage(type = "KICK", targetCid = cid))
     }
 
     private fun applyRemote(block: () -> Unit) {

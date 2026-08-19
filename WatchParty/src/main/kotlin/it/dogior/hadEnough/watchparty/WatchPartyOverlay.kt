@@ -175,6 +175,7 @@ class WatchPartyOverlay(
         handler.post(tick)
         manager.onBufferingGateChanged = { show -> handler.post { setSpinnerVisible(show) } }
         manager.onChatMessage = { sender, text -> handler.post { onChatReceived(sender, text) } }
+        manager.onSystemMessage = { text -> handler.post { appendSystemBubble(text) } }
     }
 
     fun stop() {
@@ -590,6 +591,31 @@ class WatchPartyOverlay(
         row.addView(bubble)
         list.addView(row)
         bubbleRefs += bubble to mine
+        scrollToBottom()
+    }
+
+    /** Bolla di sistema: centrata, piccola e in grigio fisso. NON entra in bubbleRefs,
+     *  quindi il repaint del tema non la tocca e non ha colore "mio/altrui". */
+    private fun appendSystemBubble(text: String) {
+        val list = chatMessages ?: return
+        val activity = CommonActivity.activity ?: return
+        // una bolla di sistema spezza la sequenza: il prossimo messaggio
+        // torna a mostrare il nome del mittente
+        lastGroupSender = null
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(activity, 4), 0, dp(activity, 2))
+        }
+        val bubble = TextView(activity).apply {
+            this.text = text
+            textSize = 11f
+            setTextColor(0xFF8A8A8A.toInt())
+            maxWidth = (list.width * 0.9f).toInt()
+            setPadding(dp(activity, 8), dp(activity, 3), dp(activity, 8), dp(activity, 3))
+        }
+        row.addView(bubble)
+        list.addView(row)
         scrollToBottom()
     }
 
