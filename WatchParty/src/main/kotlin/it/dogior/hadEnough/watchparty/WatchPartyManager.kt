@@ -497,6 +497,18 @@ class WatchPartyManager {
                 onParticipantsChanged?.invoke()
             }
 
+            "HOST_CHANGED" -> {
+                val h = msg.hostCid ?: return
+                val promotedName = participantsMap[h]?.name ?: "Participant"
+                currentHostCid = h
+                applyRoleFromHost()
+                onSystemMessage?.invoke(
+                    if (h == myClientId) "You are now the host of the room"
+                    else "$promotedName is now the host"
+                )
+                onParticipantsChanged?.invoke()
+            }
+
             // ---- messaggi degli altri client ----
 
             "HELLO" -> {
@@ -793,6 +805,13 @@ class WatchPartyManager {
     fun kickParticipant(cid: String) {
         if (role != Role.HOST) return
         socket?.send(WatchPartyMessage(type = "KICK", targetCid = cid))
+    }
+
+    /** Solo l'host: promuove un altro partecipante a host. Il server salva
+     *  l'override e lo comunica a tutti con HOST_CHANGED. */
+    fun promoteParticipant(cid: String) {
+        if (role != Role.HOST) return
+        socket?.send(WatchPartyMessage(type = "PROMOTE", targetCid = cid))
     }
 
     private fun applyRemote(block: () -> Unit) {

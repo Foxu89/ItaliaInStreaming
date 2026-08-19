@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
@@ -77,6 +78,25 @@ class WatchPartyAdvancedSettingsFragment(
         invisibleChatSwitch.setOnCheckedChangeListener { _, checked ->
             CloudStreamApp.setKey("wp_chat_invisible", if (checked) "true" else "false")
         }
+
+        // larghezza pannello chat in % (default 42, clamp 20-85). Salvata su
+        // invio della tastiera o quando il campo perde il focus: mentre si
+        // digita non forziamo nulla, così "5" non diventa "50" da sola.
+        val chatWidthInput = root.findView<EditText>("wpa_chat_width")
+        chatWidthInput.background = getDrawable("outline")
+        val savedWidth = CloudStreamApp.getKey<String>("wp_chat_width")?.toIntOrNull()?.coerceIn(20, 85) ?: 42
+        chatWidthInput.setText(savedWidth.toString())
+
+        fun saveChatWidth() {
+            val v = chatWidthInput.text?.toString()?.toIntOrNull()?.coerceIn(20, 85) ?: 42
+            CloudStreamApp.setKey("wp_chat_width", v.toString())
+            chatWidthInput.setText(v.toString())
+        }
+        chatWidthInput.setOnEditorActionListener { _, _, _ ->
+            saveChatWidth()
+            true
+        }
+        chatWidthInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveChatWidth() }
 
         glow = CloudStreamApp.getKey<String>("wp_chat_glow") == "true"
         glowSwitch.isChecked = glow

@@ -39,6 +39,7 @@ data class PeerInfo(
  *  - "PEER_JOINED" / "PEER_LEFT" — generati dal server con cid/seq/count/hostCid; PEER_LEFT porta anche kicked=true quando è un'espulsione
  *  - "LOCK" / "LOCK_STATE"       — lucchetto stanza: l'host lo imposta (server), lo stato torna via LOCK_STATE
  *  - "KICK"                      — espulsione: l'host indica targetCid, il server chiude il socket target
+ *  - "PROMOTE" / "HOST_CHANGED"  — promozione manuale: l'host indica targetCid, il server comunica il nuovo hostCid
  *  - "HELLO"                     — scambio del nome visualizzato (porta il cid)
  *  - "SYNC_REQUEST" / "SYNC_STATE" — sincronizzazione periodica (host → guest)
  *  - "FORCE_SYNC"                — risync esplicito dal pulsante "Risincronizza ora"

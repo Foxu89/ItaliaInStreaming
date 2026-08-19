@@ -54,7 +54,9 @@ class WatchPartyOverlay(
     // --- chat ---
     private var chatArrowHost: FrameLayout? = null
     private var chatArrowImage: ImageView? = null
-    private var chatUnreadDot: View? = null
+    private var chatUnreadDot: TextView? = null
+    // contatore non letti: mostrato come numero dentro il pallino rosso
+    private var chatUnreadCount = 0
     private var chatRoot: FrameLayout? = null
     private var chatPanel: LinearLayout? = null
     private var chatScrollView: ScrollView? = null
@@ -71,6 +73,7 @@ class WatchPartyOverlay(
     private var lastThemeIndex = -1
     private var lastGlow: Boolean? = null
     private var lastChatInvisible: Boolean? = null
+    private var lastChatWidth = -1
 
     private class ChatTheme(val mineBubble: Int, val peerBubble: Int, val accent: Int)
 
@@ -113,6 +116,10 @@ class WatchPartyOverlay(
     private fun isChatInvisible(): Boolean =
         CloudStreamApp.getKey<String>("wp_chat_invisible") == "true"
 
+    /** Larghezza del pannello chat in % dello schermo (default 42, clamp 20–85). */
+    private fun chatWidthPercent(): Int =
+        CloudStreamApp.getKey<String>("wp_chat_width")?.toIntOrNull()?.coerceIn(20, 85) ?: 42
+
     /** Applica tema + visibilità icona chat. Chiamato ad ogni tick: così i
      *  cambi fatti dalle impostazioni valgono anche a chat già costruita. */
     private fun applyChatPrefs() {
@@ -140,6 +147,18 @@ class WatchPartyOverlay(
                     }
                 }
             }
+        }
+        // larghezza pannello: cambia anche a chat già costruita (pref impostata
+        // nelle Impostazioni avanzate mentre si guarda il video)
+        val width = chatWidthPercent()
+        if (width != lastChatWidth) {
+            lastChatWidth = width
+            val panel = chatPanel ?: return
+            val params = panel.layoutParams as? FrameLayout.LayoutParams ?: return
+            val screenW = CommonActivity.activity?.window?.decorView?.width
+                ?: (panel.context.resources.displayMetrics.widthPixels)
+            params.width = screenW * width / 100
+            panel.layoutParams = params
         }
     }
 
@@ -344,15 +363,23 @@ class WatchPartyOverlay(
         host.addView(arrowImage, FrameLayout.LayoutParams(size, size))
         chatArrowImage = arrowImage
 
-        val dot = View(activity).apply {
+        val dot = TextView(activity).apply {
+            text = ""
+            textSize = 11f
+            setTextColor(Color.WHITE)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(0xFFE53935.toInt())
             }
+            minWidth = dp(activity, 20)
+            minHeight = dp(activity, 20)
+            setPadding(dp(activity, 5), 0, dp(activity, 5), 0)
             visibility = View.GONE
         }
-        val dotSize = dp(activity, 12)
-        val dotParams = FrameLayout.LayoutParams(dotSize, dotSize).apply {
+        val dotSize = dp(activity, 20)
+        val dotParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dotSize).apply {
             gravity = Gravity.END or Gravity.TOP
         }
         host.addView(dot, dotParams)
@@ -367,9 +394,11 @@ class WatchPartyOverlay(
         ))
 
         val panel = run {
-            // larghezza 42% dello schermo
-            val panelWidth = (activity.window?.decorView?.width ?: 0 * 1) * 0.42f
-            val w = if (panelWidth > 0) panelWidth.toInt() else (activity.resources.displayMetrics.widthPixels * 0.42f).toInt()
+            // larghezza regolabile (% dello schermo, default 42)
+            val percent = chatWidthPercent()
+            val screenW = activity.window?.decorView?.width
+                ?: activity.resources.displayMetrics.widthPixels
+            val w = screenW * percent / 100
             val p = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 background = GradientDrawable().apply {
@@ -507,6 +536,7 @@ class WatchPartyOverlay(
         host.visibility = View.GONE // la freccia sparisce quando si apre
         root.visibility = View.VISIBLE
         chatUnreadDot?.visibility = View.GONE
+        chatUnreadCount = 0
         panel.visibility = View.VISIBLE
         panel.translationX = -panel.width.toFloat()
         panel.animate().translationX(0f).setDuration(220).start()
@@ -534,7 +564,17 @@ class WatchPartyOverlay(
     private fun onChatReceived(sender: String, text: String) {
         if (chatRoot == null) return
         appendLocalBubble(sender, text, mine = false)
-        if (!chatPanelOpen) chatUnreadDot?.visibility = View.VISIBLE
+        bumpUnread()
+    }
+
+    /** Messaggio/notifica arrivato a chat chiusa: aggiorna il badge non letti.
+     *  Funziona per i messaggi normali e per le bolle di sistema (entrati/usciti/kick/lucchetto). */
+    private fun bumpUnread() {
+        if (chatPanelOpen) return
+        chatUnreadCount++
+        val dot = chatUnreadDot ?: return
+        dot.text = if (chatUnreadCount > 99) "99+" else chatUnreadCount.toString()
+        dot.visibility = View.VISIBLE
     }
 
     private fun sendChat() {
@@ -617,6 +657,7 @@ class WatchPartyOverlay(
         row.addView(bubble)
         list.addView(row)
         scrollToBottom()
+        bumpUnread()
     }
 
     private fun scrollToBottom() {
@@ -631,6 +672,7 @@ class WatchPartyOverlay(
         chatArrowHost = null
         chatArrowImage = null
         chatUnreadDot = null
+        chatUnreadCount = 0
         chatRoot = null
         chatPanel = null
         chatScrollView = null
@@ -642,6 +684,7 @@ class WatchPartyOverlay(
         lastThemeIndex = -1
         lastGlow = null
         lastChatInvisible = null
+        lastChatWidth = -1
     }
 
     private fun dp(activity: Activity, value: Int): Int =

@@ -241,6 +241,21 @@ class WatchPartySettingsFragment(
                 row.isClickable = true
                 row.isFocusable = true
                 row.setOnClickListener { showPermissionsEditor() }
+                // long-press = promuovi a host (come il kick, con conferma)
+                row.setOnLongClickListener {
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(root.context)
+                        .setTitle("Promote participant")
+                        .setMessage("Make ${label.replace(" (Host)", "")} the new host?")
+                        .setPositiveButton("Promote") { _, _ ->
+                            cid?.let {
+                                manager.promoteParticipant(it)
+                                showToast("Host changed")
+                            }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                    true
+                }
             }
             return row
         }
