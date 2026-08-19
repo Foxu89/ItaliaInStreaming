@@ -36,7 +36,7 @@ data class PeerInfo(
  *
  * type possibili (vedi WatchPartyManager.handleRemoteMessage):
  *  - "ROOM_STATE"                — al nuovo entrato: count, hostCid, roster (incluso sé stesso) e stato lucchetto
- *  - "PEER_JOINED" / "PEER_LEFT" — generati dal server con cid/seq/count/hostCid
+ *  - "PEER_JOINED" / "PEER_LEFT" — generati dal server con cid/seq/count/hostCid; PEER_LEFT porta anche kicked=true quando è un'espulsione
  *  - "LOCK" / "LOCK_STATE"       — lucchetto stanza: l'host lo imposta (server), lo stato torna via LOCK_STATE
  *  - "KICK"                      — espulsione: l'host indica targetCid, il server chiude il socket target
  *  - "HELLO"                     — scambio del nome visualizzato (porta il cid)
@@ -66,6 +66,8 @@ data class WatchPartyMessage(
     val locked: Boolean? = null,
     /** Destinatario di un KICK: il server chiude il socket con questo cid. */
     val targetCid: String? = null,
+    /** In PEER_LEFT: true se il partecipante è stato espulso dall'host (KICK), non è uscito da solo. */
+    val kicked: Boolean? = null,
     val position: Long? = null,
     val playing: Boolean? = null,
     val url: String? = null,

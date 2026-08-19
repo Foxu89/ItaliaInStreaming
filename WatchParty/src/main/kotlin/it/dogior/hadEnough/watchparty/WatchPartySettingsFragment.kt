@@ -130,6 +130,7 @@ class WatchPartySettingsFragment(
         resyncBtn.applyBlueBackground()
         leaveBtn.applyDangerBackground()   // azione distruttiva, rossa
         nextEpisodeBtn.applyOutlineBackground()
+        lockBtn.applyOutlineBackground()
         copyPinBtn.applyOutlineBackground()
         copyPinBtn.setImageDrawable(getDrawable("copy_icon"))
         settingsCard.applyOutlineBackground()

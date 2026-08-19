@@ -119,6 +119,12 @@ class WatchPartyManager {
 
     private val participantsMap = LinkedHashMap<String, Participant>()
 
+    /** cid che hanno appena fatto PEER_JOINED ma di cui non ho ancora il nome (HELLO).
+     *  Consumato al primo HELLO: è lì che emetto la bolla "X entered the room",
+     *  solo per chi era GIÀ in stanza. Chi era già dentro prima di me arriva via
+     *  ROOM_STATE e non va annunciato. */
+    private val pendingJoinCids = mutableSetOf<String>()
+
     /** Dato interno di roster: seq non è aggiornato ai reconnect, resta l'ordine originale. */
     private class Participant(val cid: String, val seq: Int, var name: String)
 
@@ -237,6 +243,7 @@ class WatchPartyManager {
         guestPermissions = ParticipantPermissions()
         gateActive = false
         gateGeneration++
+        pendingJoinCids.clear()
         onBufferingGateChanged?.invoke(false)
         onConnectionStateChanged?.invoke(connectionState)
         onParticipantsChanged?.invoke()
@@ -443,7 +450,10 @@ class WatchPartyManager {
             }
 
             "PEER_JOINED" -> {
-                msg.cid?.let { upsertParticipant(it, msg.seq ?: Int.MAX_VALUE, null) }
+                msg.cid?.let {
+                    upsertParticipant(it, msg.seq ?: Int.MAX_VALUE, null)
+                    pendingJoinCids += it
+                }
                 msg.hostCid?.let { currentHostCid = it }
                 applyRoleFromHost()
                 onStatusText?.invoke("New participant connected, sending my name…")
@@ -462,7 +472,13 @@ class WatchPartyManager {
                     if (participantsMap.isEmpty()) "The room is now empty"
                     else "A participant left the room"
                 )
-                who?.let { onSystemMessage?.invoke("$it left the room") }
+                who?.let {
+                    // kicked=true se il server l'ha chiuso per KICK dell'host
+                    onSystemMessage?.invoke(
+                        if (msg.kicked == true) "$it was kicked by the host"
+                        else "$it left the room"
+                    )
+                }
                 syncParticipants()
                 // se l'ex host è uscito e ora sono io l'host, riallineo subito tutti
                 if (role == Role.HOST) sendSyncState()
@@ -490,8 +506,9 @@ class WatchPartyManager {
                     // client "vecchio" senza cid: un solo peer, teniamolo per compatibilità
                     if (participantsMap.isEmpty()) upsertParticipant("legacy", 0, name)
                 } else if (cid != myClientId) {
-                    // bolla di sistema solo alla PRIMA volta che vediamo questo cid
-                    if (!participantsMap.containsKey(cid)) {
+                    // bolla di sistema solo se questo cid è entrato DOPO di me
+                    // (segnato in PEER_JOINED); chi c'era già non va annunciato
+                    if (pendingJoinCids.remove(cid)) {
                         onSystemMessage?.invoke("$name joined the room")
                     }
                     upsertParticipant(cid, msg.seq ?: Int.MAX_VALUE, name)
@@ -575,18 +592,6 @@ class WatchPartyManager {
 
             "NEXT_EPISODE" -> applyRemote {
                 PlayerAccess.currentPlayer()?.handleEvent(CSPlayerEvent.NextEpisode, PlayerEventSource.Sync)
-            }
-
-            "LEAVE_ROOM" -> {
-                // leggo il nome PRIMA di rimuoverlo, per la bolla di sistema
-                val who = msg.cid?.let { participantsMap[it]?.name ?: "Participant" }
-                msg.cid?.let { participantsMap.remove(it) }
-                onStatusText?.invoke(
-                    if (participantsMap.isEmpty()) "The room is now empty"
-                    else "A participant left the room"
-                )
-                who?.let { onSystemMessage?.invoke("$it left the room") }
-                syncParticipants()
             }
         }
     }
