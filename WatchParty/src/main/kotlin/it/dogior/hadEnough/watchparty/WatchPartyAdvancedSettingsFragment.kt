@@ -111,7 +111,12 @@ class WatchPartyAdvancedSettingsFragment(
         }
         chatWidthInput.setOnEditorActionListener { _, _, _ ->
             saveChatWidth()
-            true
+            // false = lascia che sia il sistema a fare l'azione di default per
+            // "Fine"/spunta, che include la chiusura della tastiera (esattamente
+            // come il campo PIN, che non ha nemmeno bisogno di un listener suo).
+            // Con "true" qui, la tastiera restava aperta perché dicevamo ad
+            // Android "ho già gestito tutto io".
+            false
         }
         chatWidthInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveChatWidth() }
 
@@ -199,7 +204,7 @@ class WatchPartyAdvancedSettingsFragment(
             }
         }
         val icon = ImageView(activity).apply {
-            setImageDrawable(getDrawable("chat_bubbles") ?: getDrawable("watchparty_icon"))
+            setImageDrawable(getDrawable("chat_bubble") ?: getDrawable("watchparty_icon"))
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(9), dp(9), dp(12), dp(9))
         }
