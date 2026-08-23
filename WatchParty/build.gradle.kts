@@ -15,7 +15,7 @@ dependencies {
 }
 
 
-version = 7
+version = 8
 
 android {
     defaultConfig {

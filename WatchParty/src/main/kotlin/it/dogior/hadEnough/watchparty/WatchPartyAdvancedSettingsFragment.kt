@@ -199,7 +199,7 @@ class WatchPartyAdvancedSettingsFragment(
             }
         }
         val icon = ImageView(activity).apply {
-            setImageDrawable(getDrawable("chat_chevron") ?: getDrawable("watchparty_icon"))
+            setImageDrawable(getDrawable("chat_bubbles") ?: getDrawable("watchparty_icon"))
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(9), dp(9), dp(12), dp(9))
         }
