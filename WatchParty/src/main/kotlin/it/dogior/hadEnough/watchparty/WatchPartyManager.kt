@@ -564,18 +564,17 @@ class WatchPartyManager {
                 }
             }
 
-            "FORCE_SYNC" -> applyRemote {
+            "FORCE_SYNC" -> {
                 // richiesta ESPLICITA dell'utente (pulsante "Risincronizza ora"):
-                // applica sempre, a differenza di SYNC_STATE che corregge solo
-                // se lo scarto supera la soglia — qui deve avere sempre un effetto visibile
-                val player = PlayerAccess.currentPlayer() ?: return@applyRemote
-                msg.position?.let { player.seekTo(it, PlayerEventSource.Sync) }
-                if (msg.playing != null) {
-                    player.handleEvent(
-                        if (msg.playing) CSPlayerEvent.Play else CSPlayerEvent.Pause,
-                        PlayerEventSource.Sync
-                    )
-                }
+                // applica sempre, a differenza di SYNC_STATE che corregge solo se lo
+                // scarto supera la soglia. Passa dal MEDESIMO gate di un SEEK organico
+                // (non più un seekTo+Play "a freddo"): altrimenti si ripresenta esattamente
+                // il problema "chi carica prima riparte prima" che il gate risolve per i
+                // seek normali — con più ospiti ognuno ripartirebbe per conto suo.
+                val pos = msg.position ?: return
+                val playing = msg.playing ?: true
+                lastRemoteCommandMs = System.currentTimeMillis()
+                mainHandler.post { beginSeekGate(pos, playing) }
             }
 
             "PLAY" -> applyRemote {
@@ -657,13 +656,20 @@ class WatchPartyManager {
      */
     fun requestResyncNow() {
         val player = PlayerAccess.currentPlayer() ?: return
+        val position = player.getPosition() ?: 0L
+        val playing = player.getIsPlaying()
         socket?.send(
             WatchPartyMessage(
                 type = "FORCE_SYNC",
-                position = player.getPosition() ?: 0L,
-                playing = player.getIsPlaying(),
+                position = position,
+                playing = playing,
             )
         )
+        // Anche chi lo richiede passa dal gate, come per un SEEK organico ("anche
+        // IO aspetto il gate"): così nessuno riparte prima degli altri. È un seek
+        // sulla propria posizione attuale (di fatto un no-op), ma serve a tenere
+        // tutti sincronizzati sulla stessa pausa/attesa/ripartenza.
+        beginSeekGate(position, playing)
         onStatusText?.invoke("Resync sent to all participants")
     }
 
