@@ -136,7 +136,8 @@ class WatchPartySettingsFragment(
         settingsCard.applyOutlineBackground()
 
         settingsCard.setOnClickListener {
-            WatchPartyAdvancedSettingsFragment(plugin).show(parentFragmentManager, "WatchPartyAdvancedSettings")
+            WatchPartyAdvancedSettingsFragment(plugin, this@WatchPartySettingsFragment)
+                .show(parentFragmentManager, "WatchPartyAdvancedSettings")
         }
 
         // --- Editor permessi ospite (solo host) ---
