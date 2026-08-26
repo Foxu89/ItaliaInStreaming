@@ -28,6 +28,15 @@
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
+            <ImageView
+                android:id="@+id/save"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="9dp"
+                android:focusable="true"
+                android:clickable="true"
+                android:nextFocusDown="@id/config_row" />
+
         </LinearLayout>
 
         <!-- Configura sezioni -->
@@ -40,7 +49,6 @@
             android:padding="14dp"
             android:layout_marginBottom="10dp"
             android:focusable="true"
-            android:focusableInTouchMode="true"
             android:clickable="true"
             android:nextFocusDown="@id/reorder_row">
 
@@ -86,7 +94,6 @@
             android:padding="14dp"
             android:layout_marginBottom="10dp"
             android:focusable="true"
-            android:focusableInTouchMode="true"
             android:clickable="true"
             android:nextFocusUp="@id/config_row"
             android:nextFocusDown="@id/ext_name_on_home_row">
@@ -133,7 +140,6 @@
             android:padding="14dp"
             android:layout_marginBottom="10dp"
             android:focusable="true"
-            android:focusableInTouchMode="true"
             android:clickable="true"
             android:nextFocusUp="@id/reorder_row"
             android:nextFocusDown="@id/guide_row">
@@ -179,7 +185,6 @@
             android:padding="14dp"
             android:layout_marginBottom="18dp"
             android:focusable="true"
-            android:focusableInTouchMode="true"
             android:clickable="true"
             android:nextFocusUp="@id/ext_name_on_home_row"
             android:nextFocusDown="@id/delete_row">
@@ -209,7 +214,6 @@
             android:orientation="horizontal"
             android:gravity="center"
             android:focusable="true"
-            android:focusableInTouchMode="true"
             android:clickable="true"
             android:nextFocusUp="@id/guide_row">
 

@@ -27,7 +27,15 @@ import it.dogior.hadEnough.UltimaUtils.SectionInfo
  *  riavviare l'app perche' le modifiche si vedano in home. */
 class Ultima(val plugin: UltimaPlugin) : MainAPI() {
     override var name = "Homepage"
-    override var supportedTypes = setOf(TvType.Movie, TvType.TvSeries, TvType.Anime)
+    // Tutti i TvType, non solo Movie/TvSeries/Anime: "Homepage" è un
+    // pass-through puro verso qualsiasi provider l'utente abiliti in
+    // Configura sezioni. Con un set più stretto, CloudStream può escludere
+    // silenziosamente "Homepage" da alcuni filtri/selettori quando i suoi
+    // tipi dichiarati non si sovrappongono a quelli attivi nell'app (visto
+    // nel codice reale di HomeFragment: it.supportedTypes.any(preSelectedTypes::contains))
+    // — capitava proprio con provider come StreamingCommunity che
+    // dichiarano anche Cartoon/Documentary, non coperti dal vecchio set.
+    override var supportedTypes = TvType.entries.toSet()
     override var lang = "it"
     override val hasMainPage = true
     override val hasQuickSearch = false
@@ -79,7 +87,7 @@ class Ultima(val plugin: UltimaPlugin) : MainAPI() {
 
         return try {
             val section = AppUtils.parseJson<SectionInfo>(request.data)
-            val provider = allProviders.find { it.name == section.pluginName }
+            val provider = findProvider(section.pluginName)
                 ?: throw ErrorLoadingException("Plugin '${section.pluginName}' non disponibile.")
 
             provider.getMainPage(
@@ -96,13 +104,33 @@ class Ultima(val plugin: UltimaPlugin) : MainAPI() {
         }
     }
 
+    /** Trova il provider per nome, come [allProviders].find, ma avvisa nel
+     *  log se il nome e' AMBIGUO (piu' provider installati con lo stesso
+     *  nome visualizzato, es. due estensioni chiamate entrambe
+     *  "StreamingCommunity" installate da repo diversi). In quel caso
+     *  CloudStream/SectionOrganizer possono ritrovarsi ad usare quello
+     *  "sbagliato" senza nessun errore esplicito — solo una sezione che
+     *  misteriosamente non carica bene. */
+    private fun findProvider(pluginName: String): MainAPI? {
+        val matches = allProviders.filter { it.name == pluginName }
+        if (matches.size > 1) {
+            Log.e(
+                "Ultima",
+                "ATTENZIONE: ${matches.size} provider installati con nome '$pluginName' " +
+                    "(forse la stessa estensione installata da due repo diversi?). " +
+                    "SectionOrganizer usera' il primo che trova, potrebbe non essere quello giusto."
+            )
+        }
+        return matches.firstOrNull()
+    }
+
     override suspend fun search(query: String): List<SearchResponse>? {
         val enabledPluginNames = enabledSections().map { it.pluginName }.distinct()
 
         val tasks = mutableListOf<suspend () -> List<SearchResponse>>()
 
         for (pluginName in enabledPluginNames) {
-            val provider = allProviders.find { it.name == pluginName } ?: continue
+            val provider = findProvider(pluginName) ?: continue
             tasks += suspend {
                 try {
                     when (val result = provider.search(query)) {

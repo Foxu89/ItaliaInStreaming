@@ -2,6 +2,7 @@ package it.dogior.hadEnough
 
 import it.dogior.hadEnough.UltimaUtils.ExtensionInfo
 import it.dogior.hadEnough.UltimaUtils.SectionInfo
+import com.lagradost.api.Log
 import com.lagradost.cloudstream3.APIHolder.allProviders
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
@@ -32,6 +33,16 @@ object UltimaStorageManager {
     fun fetchExtensions(): Array<ExtensionInfo> = synchronized(allProviders) {
         val cachedExtensions = getKey<Array<ExtensionInfo>>("ULTIMA_EXTENSIONS_LIST")
         val providers = allProviders.filter { it.name != "Homepage" }
+
+        val duplicateNames = providers.groupBy { it.name }.filter { it.value.size > 1 }.keys
+        if (duplicateNames.isNotEmpty()) {
+            Log.e(
+                "UltimaStorageManager",
+                "ATTENZIONE: piu' provider installati con lo stesso nome: $duplicateNames " +
+                    "(es. la stessa estensione installata da due repo diversi). " +
+                    "Compariranno duplicati in Configura sezioni ed e' facile abilitare quello 'sbagliato'."
+            )
+        }
 
         providers.map { provider ->
             val cached = cachedExtensions?.find { it.name == provider.name }

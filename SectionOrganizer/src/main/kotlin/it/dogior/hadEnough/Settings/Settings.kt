@@ -48,6 +48,21 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val settings = getLayout("settings", inflater, container)
 
+        val saveBtn = settings.findView<ImageView>("save")
+        saveBtn.setImageDrawable(getDrawable("save_icon"))
+        saveBtn.card("outline_blue")
+        saveBtn.setOnClickListener {
+            AlertDialog.Builder(requireContext())
+                .setTitle("Riavvio necessario")
+                .setMessage("Per applicare le modifiche fatte in Configura/Riordina sezioni serve riavviare l'app. Vuoi farlo ora?")
+                .setPositiveButton("Riavvia ora") { _, _ ->
+                    dismiss()
+                    restartApp()
+                }
+                .setNegativeButton("Più tardi") { dialog, _ -> dialog.dismiss() }
+                .show()
+        }
+
         val configRow = settings.findView<View>("config_row")
         configRow.card()
         configRow.findView<ImageView>("config_img").setImageDrawable(getDrawable("edit_icon"))
@@ -117,5 +132,14 @@ class UltimaSettings(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
         }
 
         return settings
+    }
+
+    private fun restartApp() {
+        val context = requireContext().applicationContext
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        intent?.component?.let {
+            context.startActivity(Intent.makeRestartActivityTask(it))
+            Runtime.getRuntime().exit(0)
+        }
     }
 }

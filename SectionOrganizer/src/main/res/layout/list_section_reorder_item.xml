@@ -11,7 +11,6 @@
     android:paddingBottom="10dp"
     android:layout_marginBottom="8dp"
     android:focusable="true"
-    android:focusableInTouchMode="true"
     android:clickable="true"
     android:nextFocusRight="@+id/increase">
 
@@ -34,7 +33,6 @@
         android:layout_height="36dp"
         android:padding="10dp"
         android:focusable="true"
-        android:focusableInTouchMode="true"
         android:clickable="true"
         android:nextFocusLeft="@id/section_container"
         android:nextFocusRight="@id/decrease" />
@@ -46,7 +44,6 @@
         android:layout_marginStart="4dp"
         android:padding="10dp"
         android:focusable="true"
-        android:focusableInTouchMode="true"
         android:clickable="true"
         android:nextFocusLeft="@id/increase"
         android:nextFocusRight="@id/section_container" />

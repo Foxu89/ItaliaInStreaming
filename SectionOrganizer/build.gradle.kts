@@ -2,7 +2,7 @@ dependencies {
     implementation("com.google.android.material:material:1.13.0")
 }
 
-version = 4
+version = 5
 
 cloudstream {
     description = "Organizza homepage tra vari plugin"
