@@ -20,7 +20,7 @@ include(
 //    "Huhu",
 //    "IlGenioDelloStreaming",
     "OnlineSerieTV",
-//    "SectionOrganizer",
+    "SectionOrganizer",
     "StreamCenter",
 //    "StreamingCommunity",
     "StreamITA",

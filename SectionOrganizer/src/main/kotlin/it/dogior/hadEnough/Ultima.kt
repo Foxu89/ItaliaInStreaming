@@ -15,11 +15,16 @@ import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvSeriesSearchResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.mainPageOf
-import com.lagradost.cloudstream3.newHomePageResponse
 import com.lagradost.cloudstream3.newMovieLoadResponse
 import com.lagradost.cloudstream3.utils.AppUtils
 import it.dogior.hadEnough.UltimaUtils.SectionInfo
 
+/** Provider "virtuale": non scarica nulla da solo, smista ogni richiesta
+ *  verso il vero provider indicato in [SectionInfo.pluginName]. La lista
+ *  di sezioni ([mainPage]) e' calcolata UNA SOLA VOLTA alla costruzione di
+ *  questa classe (limite dell'API mainPage di CloudStream): per questo,
+ *  dopo aver cambiato le impostazioni da Configura/Riordina, serve
+ *  riavviare l'app perche' le modifiche si vedano in home. */
 class Ultima(val plugin: UltimaPlugin) : MainAPI() {
     override var name = "Homepage"
     override var supportedTypes = setOf(TvType.Movie, TvType.TvSeries, TvType.Anime)
@@ -29,10 +34,8 @@ class Ultima(val plugin: UltimaPlugin) : MainAPI() {
     private val sm = UltimaStorageManager
 
     private val mapper = jacksonObjectMapper()
-    private var sectionNamesList: List<String> = emptyList()
 
     private fun loadSections(): List<MainPageData> {
-        val tempSectionNames = mutableListOf<String>()
         val result = mutableListOf<MainPageData>()
         val savedPlugins = sm.currentExtensions
 
@@ -41,36 +44,36 @@ class Ultima(val plugin: UltimaPlugin) : MainAPI() {
             .filter { it.enabled }
             .sortedByDescending { it.priority }
 
+        val nameCounts = mutableMapOf<String, Int>()
+
         enabledSections.forEach { section ->
             try {
                 val sectionKey = mapper.writeValueAsString(section)
-                val sectionName = buildSectionName(section, tempSectionNames)
+                val sectionName = buildSectionName(section, nameCounts)
                 result += mainPageOf(sectionKey to sectionName)
             } catch (e: Exception) {
                 Log.e("loadSections", "Failed to load section ${section.name}: ${e.message}")
             }
         }
 
-        sectionNamesList = tempSectionNames
-        return if (result.isEmpty()) mainPageOf("" to "Nessuna sezione selezionata") else result
+        return if (result.isEmpty()) mainPageOf("" to NO_SECTIONS_LABEL) else result
     }
 
-    private fun buildSectionName(section: SectionInfo, names: MutableList<String>): String {
-        val name = if (sm.extNameOnHome) {
-            "${section.pluginName}: ${section.name}"
-        } else if (names.contains(section.name)) {
-            "${section.name} ${names.count { it.startsWith(section.name) } + 1}"
-        } else {
-            section.name
-        }
-        names += name
-        return name
+    private fun buildSectionName(section: SectionInfo, nameCounts: MutableMap<String, Int>): String {
+        if (sm.extNameOnHome) return "${section.pluginName}: ${section.name}"
+
+        // Conta per nome ESATTO della sezione originale, non con startsWith:
+        // altrimenti "Nuovi" e "Nuovi Episodi" (sezioni diverse) si
+        // contaminavano a vicenda nel conteggio dei duplicati.
+        val count = (nameCounts[section.name] ?: 0) + 1
+        nameCounts[section.name] = count
+        return if (count == 1) section.name else "${section.name} $count"
     }
 
     override val mainPage = loadSections()
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
-        if (request.name == "Nessuna sezione selezionata" || request.data.isEmpty()) {
+        if (request.data.isEmpty()) {
             throw ErrorLoadingException("Seleziona le sezioni dalle impostazioni dell'estensione per visualizzarle qui.")
         }
 
@@ -94,20 +97,11 @@ class Ultima(val plugin: UltimaPlugin) : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse>? {
-        val enabledSections = mainPage
-            .filter { it.name != "Nessuna sezione selezionata" }
-            .mapNotNull {
-                try {
-                    val section = AppUtils.parseJson<SectionInfo>(it.data)
-                    section.pluginName to section
-                } catch (_: Exception) {
-                    null
-                }
-            }
+        val enabledPluginNames = enabledSections().map { it.pluginName }.distinct()
 
         val tasks = mutableListOf<suspend () -> List<SearchResponse>>()
 
-        for ((pluginName, _) in enabledSections) {
+        for (pluginName in enabledPluginNames) {
             val provider = allProviders.find { it.name == pluginName } ?: continue
             tasks += suspend {
                 try {
@@ -131,21 +125,13 @@ class Ultima(val plugin: UltimaPlugin) : MainAPI() {
             }
         }
 
+        if (tasks.isEmpty()) return emptyList()
         return runLimitedParallel(limit = 4, tasks).flatten()
     }
 
     override suspend fun load(url: String): LoadResponse {
-        val enabledPlugins = mainPage
-            .filter { it.name != "Nessuna sezione selezionata" }
-            .mapNotNull {
-                try {
-                    AppUtils.parseJson<SectionInfo>(it.data).pluginName
-                } catch (_: Exception) {
-                    null
-                }
-            }
-
-        val providersToTry = allProviders.filter { it.name in enabledPlugins }
+        val enabledPluginNames = enabledSections().map { it.pluginName }.distinct()
+        val providersToTry = allProviders.filter { it.name in enabledPluginNames }
 
         for (provider in providersToTry) {
             try {
@@ -159,5 +145,23 @@ class Ultima(val plugin: UltimaPlugin) : MainAPI() {
         }
 
         return newMovieLoadResponse("Benvenuto su SectionOrganizer", "", TvType.Others, "")
+    }
+
+    /** Sezioni correntemente presenti in [mainPage], escluso il segnaposto
+     *  "nessuna sezione". Sostituisce il vecchio confronto sul testo
+     *  visualizzato (fragile: si rompeva se cambiava la stringa in un solo
+     *  punto) con un controllo basato sui dati, che e' quello che conta
+     *  davvero per capire se una entry e' una sezione vera. */
+    private fun enabledSections(): List<SectionInfo> =
+        mainPage.filter { it.data.isNotEmpty() }.mapNotNull {
+            try {
+                AppUtils.parseJson<SectionInfo>(it.data)
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+    companion object {
+        const val NO_SECTIONS_LABEL = "Nessuna sezione selezionata"
     }
 }

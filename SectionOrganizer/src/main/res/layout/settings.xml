@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:layoutDirection="ltr"
@@ -11,203 +10,224 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="?android:attr/listPreferredItemPaddingStart"
-        android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
-        android:paddingBottom="20dp"
-        tools:background="@color/cardview_dark_background">
+        android:padding="18dp">
 
-        <!-- Header Row -->
+        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="14dp">
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="5dp"
-                android:text="Impostazioni SectionOrganizer"
+                android:layout_weight="1"
+                android:text="SectionOrganizer"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="right">
-
-                <ImageView
-                    android:id="@+id/save"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
-                    android:layout_marginBottom="5dp"
-                    android:padding="5dp"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:clickable="true"
-                    android:background="@drawable/outline"
-                    android:nextFocusDown="@id/config_row" />
-
-            </LinearLayout>
-
         </LinearLayout>
 
-        <!-- Divider -->
-        <ImageView
-            android:src="@android:drawable/divider_horizontal_dark"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:scaleType="fitXY"
-            android:paddingLeft="2dp"
-            android:paddingRight="2dp"
-            android:layout_marginBottom="10dp"
-            android:layout_marginTop="10dp" />
-
-        <!-- Configure Extension Sections -->
+        <!-- Configura sezioni -->
         <LinearLayout
             android:id="@+id/config_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:layout_marginBottom="10dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:clickable="true"
-            android:background="@drawable/outline"
-            android:padding="10dp"
-            android:nextFocusDown="@id/reorder_row"
-            android:nextFocusUp="@id/save">
+            android:nextFocusDown="@id/reorder_row">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:text="Configura sezioni estensioni"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:focusable="false" />
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Configura sezioni"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Scegli quali sezioni di ogni estensione mostrare in home"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
 
             <ImageView
                 android:id="@+id/config_img"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="5dp"
-                android:focusable="false" />
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
 
         </LinearLayout>
 
-        <!-- Reorder Sections -->
+        <!-- Riordina sezioni -->
         <LinearLayout
             android:id="@+id/reorder_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:layout_marginBottom="10dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:clickable="true"
-            android:background="@drawable/outline"
-            android:padding="10dp"
-            android:nextFocusDown="@id/guide_row"
-            android:nextFocusUp="@id/config_row">
+            android:nextFocusUp="@id/config_row"
+            android:nextFocusDown="@id/ext_name_on_home_row">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:text="Riordina sezioni"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:focusable="false" />
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Riordina sezioni"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Decidi l'ordine in cui le sezioni abilitate compaiono in home"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
 
             <ImageView
                 android:id="@+id/reorder_img"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
+
+        </LinearLayout>
+
+        <!-- Mostra nome estensione -->
+        <LinearLayout
+            android:id="@+id/ext_name_on_home_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:layout_marginBottom="10dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:clickable="true"
+            android:nextFocusUp="@id/reorder_row"
+            android:nextFocusDown="@id/guide_row">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Mostra nome estensione in home"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:alpha="0.6"
+                    android:text="Es. &quot;NomeEstensione: Nome sezione&quot; invece del solo nome sezione"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/ext_name_on_home_toggle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:padding="5dp"
                 android:focusable="false" />
 
         </LinearLayout>
 
-        <!-- Guide Link -->
+        <!-- Guida rapida -->
         <LinearLayout
             android:id="@+id/guide_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:layout_marginBottom="18dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:clickable="true"
-            android:background="@drawable/outline"
-            android:padding="10dp"
-            android:nextFocusDown="@id/delete_row"
-            android:nextFocusUp="@id/reorder_row">
+            android:nextFocusUp="@id/ext_name_on_home_row"
+            android:nextFocusDown="@id/delete_row">
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
-                android:text="Guida rapida -->"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:focusable="false" />
+                android:layout_weight="1"
+                android:text="Guida rapida"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
             <ImageView
                 android:id="@+id/guide_icon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="5dp"
-                android:focusable="false" />
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
 
         </LinearLayout>
 
-        <!-- Divider -->
-        <ImageView
-            android:src="@android:drawable/divider_horizontal_dark"
-            android:layout_width="fill_parent"
-            android:layout_height="wrap_content"
-            android:scaleType="fitXY"
-            android:paddingLeft="2dp"
-            android:paddingRight="2dp"
-            android:layout_marginBottom="10dp"
-            android:layout_marginTop="10dp" />
-
-        <!-- Reset Button -->
+        <!-- Reset -->
         <LinearLayout
             android:id="@+id/delete_row"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="52dp"
             android:orientation="horizontal"
-            android:layout_marginTop="10dp"
+            android:gravity="center"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:clickable="true"
-            android:background="@drawable/outline"
-            android:padding="10dp"
-            android:nextFocusDown="@id/save"
             android:nextFocusUp="@id/guide_row">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_rowWeight="1"
                 android:text="Resetta SectionOrganizer"
-                android:textSize="18sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:focusable="false" />
 
-            <TextView
-                android:id="@+id/delete_img"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="10dp"
-                android:text="Reset"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:focusable="false" />
+            <ImageView
+                android:id="@+id/delete_icon"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="8dp"
+                android:focusable="false"
+                android:importantForAccessibility="no" />
 
         </LinearLayout>
 

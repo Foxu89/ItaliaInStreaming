@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:layoutDirection="ltr"
@@ -11,58 +10,50 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="?android:attr/listPreferredItemPaddingStart"
-        android:paddingEnd="?android:attr/listPreferredItemPaddingEnd"
-        android:paddingBottom="20dp"
-        tools:background="@color/cardview_dark_background">
+        android:padding="18dp">
 
-        <!-- Header Row -->
+        <!-- Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
 
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="5dp"
                 android:text="Riordina sezioni"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
             <ImageView
                 android:id="@+id/save"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:layout_marginBottom="5dp"
-                android:padding="5dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="9dp"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:clickable="true"
-                android:background="@drawable/outline"
                 android:nextFocusDown="@id/section_list" />
+
         </LinearLayout>
 
-        <!-- Divider -->
-        <ImageView
-            android:src="@android:drawable/divider_horizontal_dark"
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:scaleType="fitXY"
-            android:layout_marginVertical="10dp"
-            android:paddingHorizontal="2dp" />
+            android:layout_marginBottom="14dp"
+            android:alpha="0.6"
+            android:text="Usa le frecce, oppure tocca una sezione e poi la destinazione dove spostarla."
+            android:textSize="12sp" />
 
         <!-- Section List -->
         <LinearLayout
             android:id="@+id/section_list"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="10dp" />
+            android:orientation="vertical" />
 
         <!-- No Section Warning -->
         <TextView
@@ -70,9 +61,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:layout_marginBottom="20dp"
-            android:text="Non hai abilitato nessuna estensione"
-            android:textSize="15sp"
+            android:text="Non hai abilitato nessuna sezione. Vai su &quot;Configura sezioni&quot; per selezionarne."
+            android:textSize="14sp"
+            android:alpha="0.7"
             android:gravity="center"
             android:visibility="gone" />
 

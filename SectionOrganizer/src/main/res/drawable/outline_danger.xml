@@ -1,27 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Card "distruttiva" (es. reset), stesso stile di WatchParty -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape>
-            <solid android:color="#26FFFFFF" />
-            <stroke android:width="2dp" android:color="#FFFFFF" />
+            <solid android:color="#55FF5252" />
+            <stroke android:width="2dp" android:color="#FF5252" />
             <corners android:radius="16dp" />
         </shape>
     </item>
     <item android:state_pressed="true">
         <shape>
-            <solid android:color="#26FFFFFF" />
+            <solid android:color="#55FF5252" />
             <corners android:radius="16dp" />
         </shape>
     </item>
     <item android:state_hovered="true">
         <shape>
-            <solid android:color="#1FFFFFFF" />
+            <solid android:color="#40FF5252" />
             <corners android:radius="16dp" />
         </shape>
     </item>
     <item>
         <shape>
-            <solid android:color="#14FFFFFF" />
+            <solid android:color="#33FF5252" />
             <corners android:radius="16dp" />
         </shape>
     </item>

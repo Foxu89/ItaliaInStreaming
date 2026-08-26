@@ -1,11 +1,9 @@
 package it.dogior.hadEnough
 
 import android.annotation.SuppressLint
+import android.content.DialogInterface
 import android.content.res.Resources
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -20,15 +18,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private var selectedSection: UltimaUtils.SectionInfo? = null
-
 class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
     private val sm = UltimaStorageManager
     private val extensions = sm.fetchExtensions()
     private val res: Resources = plugin.resources ?: throw Exception("Unable to read resources")
     private val packageName = "it.dogior.hadEnough"
 
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState) }
+    // Campo di ISTANZA (non più a livello di file!): prima era condiviso da
+    // TUTTE le aperture di questa schermata per l'intera vita del processo.
+    // Se l'utente selezionava una sezione e chiudeva senza completare lo
+    // spostamento, la selezione restava "appesa"; alla riapertura, un
+    // riferimento ormai orfano (non più presente nella nuova lista appena
+    // ricostruita da fetchExtensions()) mandava removeAt(-1) in crash.
+    // Ora si azzera automaticamente ogni volta che il fragment viene ricreato.
+    private var selectedSection: UltimaUtils.SectionInfo? = null
 
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
         val id = res.getIdentifier(name, "layout", packageName)
@@ -41,16 +44,13 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
         return res.getDrawable(id, null) ?: throw Exception("Unable to find drawable $name")
     }
 
-    @SuppressLint("UseCompatLoadingForDrawables")
     private fun <T : View> View.findView(name: String): T {
         val id = res.getIdentifier(name, "id", packageName)
         return findViewById(id)
     }
 
-    @SuppressLint("UseCompatLoadingForDrawables")
-    private fun View.makeTvCompatible() {
-        val outlineId = res.getIdentifier("outline", "drawable", packageName)
-        background = res.getDrawable(outlineId, null)
+    private fun View.card(drawableName: String = "outline") {
+        background = getDrawable(drawableName)
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -58,7 +58,7 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
 
         val saveBtn = root.findView<ImageView>("save")
         saveBtn.setImageDrawable(getDrawable("save_icon"))
-        saveBtn.makeTvCompatible()
+        saveBtn.card("outline_blue")
         saveBtn.setOnClickListener {
             lifecycleScope.launch {
                 withContext(Dispatchers.IO) { sm.currentExtensions = extensions }
@@ -91,6 +91,7 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
             noSectionWarning?.visibility = View.VISIBLE
             return
         }
+        noSectionWarning?.visibility = View.GONE
 
         val displaySections = sections.sortedByDescending { it.priority }
         var counter = displaySections.size
@@ -102,29 +103,39 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
             if (section.priority == 0) section.priority = counter
             sectionName.text = "${section.pluginName}: ${section.name}"
 
-            sectionView.background = LayerDrawable(
-                arrayOf(
-                    ColorDrawable(if (section == selectedSection) 0x2200FF00.toInt() else Color.TRANSPARENT),
-                    getDrawable("outline")
-                )
-            )
+            // Confronto per IDENTITÀ (===), non per uguaglianza di valore (==).
+            // SectionInfo è una data class: due sezioni con stessi
+            // nome/url/pluginName/enabled/priority risulterebbero "uguali"
+            // anche se sono oggetti diversi, con il rischio di evidenziare o
+            // spostare quella sbagliata.
+            sectionView.card(if (section === selectedSection) "outline_blue" else "outline")
 
             sectionView.setOnClickListener {
-                when (selectedSection) {
-                    null -> {
+                val selected = selectedSection
+                when {
+                    selected == null -> {
                         selectedSection = section
                         showToast("Selezionata! Ora tocca una destinazione.")
                         updateSectionList(sectionsListView, inflater, container, noSectionWarning, displaySections)
                     }
-                    section -> {
+                    selected === section -> {
                         selectedSection = null
                         updateSectionList(sectionsListView, inflater, container, noSectionWarning, displaySections)
                     }
                     else -> {
-                        val selected = selectedSection!!
                         val sectionsMutable = displaySections.toMutableList()
-                        val selectedIndex = sectionsMutable.indexOf(selected)
-                        val targetIndex = sectionsMutable.indexOf(section)
+                        val selectedIndex = sectionsMutable.indexOfFirst { it === selected }
+                        val targetIndex = sectionsMutable.indexOfFirst { it === section }
+
+                        // Rete di sicurezza: se per qualche motivo la sezione
+                        // selezionata non è (più) in questa lista, non
+                        // crashiamo con removeAt(-1) — semplicemente
+                        // ripartiamo da una selezione pulita.
+                        if (selectedIndex == -1 || targetIndex == -1) {
+                            selectedSection = null
+                            updateSectionList(sectionsListView, inflater, container, noSectionWarning, displaySections)
+                            return@setOnClickListener
+                        }
 
                         if (selectedIndex == targetIndex) {
                             showToast("Già in questa posizione")
@@ -147,11 +158,11 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
             increaseBtn.setImageDrawable(getDrawable("triangle"))
             decreaseBtn.setImageDrawable(getDrawable("triangle"))
             decreaseBtn.rotation = 180f
-            increaseBtn.makeTvCompatible()
-            decreaseBtn.makeTvCompatible()
+            increaseBtn.card()
+            decreaseBtn.card()
 
             increaseBtn.setOnClickListener {
-                val idx = displaySections.indexOf(section)
+                val idx = displaySections.indexOfFirst { it === section }
                 if (idx > 0) {
                     val newList = displaySections.toMutableList()
                     newList.removeAt(idx)
@@ -162,8 +173,8 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
             }
 
             decreaseBtn.setOnClickListener {
-                val idx = displaySections.indexOf(section)
-                if (idx < displaySections.lastIndex) {
+                val idx = displaySections.indexOfFirst { it === section }
+                if (idx in 0 until displaySections.lastIndex) {
                     val newList = displaySections.toMutableList()
                     newList.removeAt(idx)
                     newList.add(idx + 1, section)
@@ -177,8 +188,15 @@ class UltimaReorder(val plugin: UltimaPlugin) : BottomSheetDialogFragment() {
         }
     }
 
-    override fun onDetach() {
-        super.onDetach()
-        UltimaSettings(plugin).show(activity?.supportFragmentManager ?: throw Exception("Impossibile aprire le impostazioni"), "")
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        selectedSection = null
+        // Come per ConfigureExtensions: torna alle Impostazioni solo alla
+        // chiusura VOLONTARIA (onDismiss), non da onDetach — che scattava
+        // anche a fragment/Activity distrutti dal sistema e mandava in
+        // crash l'app quando activity era già null.
+        val act = activity ?: return
+        if (act.isFinishing || act.isDestroyed) return
+        UltimaSettings(plugin).show(act.supportFragmentManager, "UltimaSettingsDialog")
     }
 }

@@ -4,14 +4,15 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
-    android:paddingTop="12dp"
-    android:paddingBottom="12dp"
+    android:gravity="center_vertical"
+    android:paddingStart="14dp"
+    android:paddingEnd="6dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:layout_marginBottom="8dp"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true"
-    android:background="@drawable/outline"
     android:nextFocusRight="@+id/increase">
 
     <TextView
@@ -19,9 +20,8 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textSize="16sp"
+        android:textSize="15sp"
         android:textStyle="bold"
-        android:textColor="#DDDDDD"
         android:maxLines="1"
         android:ellipsize="end"
         android:gravity="center_vertical"
@@ -30,25 +30,24 @@
 
     <ImageView
         android:id="@+id/increase"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:padding="8dp"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:padding="10dp"
         android:focusable="true"
         android:focusableInTouchMode="true"
         android:clickable="true"
-        android:background="@drawable/outline"
         android:nextFocusLeft="@id/section_container"
         android:nextFocusRight="@id/decrease" />
 
     <ImageView
         android:id="@+id/decrease"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:padding="8dp"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_marginStart="4dp"
+        android:padding="10dp"
         android:focusable="true"
         android:focusableInTouchMode="true"
         android:clickable="true"
-        android:background="@drawable/outline"
         android:nextFocusLeft="@id/increase"
         android:nextFocusRight="@id/section_container" />
 </LinearLayout>
