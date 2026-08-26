@@ -3,8 +3,9 @@ package it.dogior.hadEnough
 import it.dogior.hadEnough.UltimaUtils.ExtensionInfo
 import it.dogior.hadEnough.UltimaUtils.SectionInfo
 import com.lagradost.cloudstream3.APIHolder.allProviders
-import com.lagradost.cloudstream3.AcraApplication.Companion.getKey
-import com.lagradost.cloudstream3.AcraApplication.Companion.setKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.removeKey
 
 object UltimaStorageManager {
     var extNameOnHome: Boolean
@@ -20,7 +21,7 @@ object UltimaStorageManager {
 
     fun deleteAllData() {
         listOf("ULTIMA_EXT_NAME_ON_HOME", "ULTIMA_EXTENSIONS_LIST")
-            .forEach { setKey(it, null) }
+            .forEach { removeKey(it) }
     }
 
     /** Estensioni effettivamente installate ORA, con le preferenze salvate
