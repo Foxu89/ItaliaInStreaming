@@ -21,11 +21,11 @@ include(
 //    "IlGenioDelloStreaming",
     "OnlineSerieTV",
     "SectionOrganizer",
-    "StreamCenter",
+//    "StreamCenter",
 //    "StreamingCommunity",
     "StreamITA",
 //    "Stremio",
-    "SyncStream",
+//    "SyncStream",
 //    "TV",
     "ToonItalia",
 //    "Torrentio"
