@@ -27,7 +27,7 @@ include(
 //    "Stremio",
     "SyncStream",
 //    "TV",
- //   "ToonItalia",
+    "ToonItalia",
 //    "Torrentio"
     "WatchParty",
     "DiscordRPC",
