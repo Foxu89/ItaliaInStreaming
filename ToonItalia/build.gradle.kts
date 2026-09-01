@@ -1,11 +1,11 @@
 // use an integer for version numbers
-version = 6
+version = 1
 
 cloudstream {
     // All of these properties are optional, you can safely remove them
 
-    description = "Movies, TV Shows and Anime from ToonItalia.green"
-    authors = listOf("doGior")
+    description = "Film, SerieTV e Anime da ToonItalia"
+    authors = listOf("doGior","DieGon")
 
     /**
     * Status int as the following:
@@ -20,5 +20,5 @@ cloudstream {
 
     language = "it"
 
-    iconUrl = "https://toonitalia.green/wp-content/uploads/2023/08/favicon.ico"
+    iconUrl = "https://toonitalia.space/wp-content/uploads/2023/08/favicon.ico"
 }
