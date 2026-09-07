@@ -12,7 +12,9 @@ import kotlinx.coroutines.coroutineScope
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
+import org.json.JSONArray
 import org.json.JSONObject
+import java.nio.charset.Charsets
 import java.util.Calendar
 import java.util.Locale
 import kotlin.io.encoding.Base64
@@ -154,109 +156,171 @@ class CalcioStreaming : MainAPI() {
         }
     }
 
-    /* ─── Stream resolution ─────────────────────────────────────────────────── */
+    /* ─── Universal Embed Resolver ─────────────────────────────────────────────── */
 
     /**
-     * Decodes the `window._econfig` blob the sportsonline embed pages carry: base64
-     * wrapping four shuffled, individually base64'd chunks, each missing its 4th
-     * character.
+     * Risolve un URL embed generico provando multiple strategie in ordine.
+     * Restituisce Pair<m3u8Url, referer> o null.
      */
-    fun getStreamUrl(html: String): String? {
-        val configMatch = Regex("""window\._econfig\s*=\s*['"]([^'"]+)['"]""").find(html)
-            ?: return null
-
-        return try {
-            val encodedConfig = configMatch.groupValues[1]
-            val decodedConfig =
-                Base64.decode(encodedConfig + "=".repeat((-encodedConfig.length % 4 + 4) % 4))
-                    .toString(Charsets.ISO_8859_1)
-
-            val partOrder = listOf(2, 0, 3, 1)
-            val partLength = (decodedConfig.length + 3) / 4
-            val encodedParts = mutableListOf<String>()
-            var offset = 0
-
-            repeat(4) {
-                val part = decodedConfig.substring(
-                    offset,
-                    minOf(offset + partLength, decodedConfig.length)
-                )
-                offset += partLength
-                encodedParts.add(part.take(3) + part.drop(4))
-            }
-
-            val decodedParts = Array(4) { "" }
-            encodedParts.forEachIndexed { index, part ->
-                val padded = part + "=".repeat((-part.length % 4 + 4) % 4)
-                decodedParts[partOrder[index]] = Base64.decode(padded)
-                    .toString(Charsets.ISO_8859_1)
-            }
-
-            val joinedConfig = decodedParts.joinToString("")
-            val configJson = Base64
-                .decode(joinedConfig + "=".repeat((-joinedConfig.length % 4 + 4) % 4))
-                .toString(Charsets.UTF_8)
-
-            val config = JSONObject(configJson)
-            config.optString("stream_url_nop2p").ifEmpty { null }
-                ?: config.optString("stream_url").ifEmpty { null }
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /** Resolves a relative iframe src against the page that contains it. */
-    private fun absolutize(base: String, link: String): String = when {
-        link.startsWith("http", ignoreCase = true) -> link
-        link.startsWith("//") -> "https:$link"
-        else -> base.toHttpUrlOrNull()?.resolve(link)?.toString() ?: link
-    }
-
-    /**
-     * Walks the iframe chain of a sportsonline channel page until one exposes
-     * `_econfig`. Returns the m3u8 and the embed page to use as referer.
-     */
-    private suspend fun extractVideoStream(
-        url: String,
-        ref: String,
-        n: Int
-    ): Pair<String, String>? {
+    private suspend fun resolveEmbedUrl(url: String, referer: String): Pair<String, String>? {
         if (url.toHttpUrlOrNull() == null) return null
-        if (n > 10) return null
 
-        // These embed hosts sit behind Cloudflare and hand out 403s without it.
-        val doc = app.get(url, referer = ref, interceptor = cfKiller).document
-        val iframe = doc.selectFirst("iframe")?.attr("src")?.takeIf { it.isNotBlank() }
-            ?: return null
-        val next = absolutize(url, iframe)
+        var currentUrl = url
+        var currentReferer = referer
+        val visited = mutableSetOf<String>()
 
-        val newPage = app.get(
-            next, referer = url, headers = mapOf(
-                "Sec-Fetch-Dest" to "iframe"
-            ), interceptor = cfKiller
-        ).document
+        // Segue catena iframe (max 5 hop)
+        repeat(6) { hop ->
+            if (currentUrl in visited) return null
+            visited.add(currentUrl)
 
-        val streamUrl = getStreamUrl(newPage.toString())
-        return if (!streamUrl.isNullOrEmpty()) {
-            streamUrl to next
-        } else {
-            extractVideoStream(url = next, ref = url, n = n + 1)
+            val html = try {
+                app.get(currentUrl, referer = currentReferer, interceptor = cfKiller).text
+            } catch (e: Exception) {
+                Log.w(TAG, "Fetch failed for $currentUrl: ${e.message}")
+                return null
+            }
+
+            // ─── Strategia 1: Direct m3u8 in HTML ───
+            val directM3u8 = Regex("""["'](https?://[^"']+\.m3u8[^"']*)["']""").find(html)?.groupValues?.get(1)
+                ?.takeIf { it.isNotBlank() }
+            if (directM3u8 != null) {
+                Log.d(TAG, "Found direct m3u8 at hop $hop: $currentUrl")
+                return directM3u8 to currentUrl
+            }
+
+            // ─── Strategia 2: Clappr atob (bestembeds.buzz) ───
+            val atobMatch = Regex("""source:\s*atob\(["']([^"']+)["']\)""").find(html)
+            if (atobMatch != null) {
+                try {
+                    val encoded = atobMatch.groupValues[1]
+                    val decoded = Base64.decode(encoded).toString(Charsets.UTF_8)
+                    if (decoded.contains(".m3u8")) {
+                        Log.d(TAG, "Found Clappr atob m3u8 at hop $hop")
+                        return decoded to currentUrl
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // ─── Strategia 3: Clappr direct source ───
+            val clapprDirect = Regex("""source:\s*["'](https?://[^"']+\.m3u8[^"']*)["']""").find(html)?.groupValues?.get(1)
+            if (clapprDirect != null && clapprDirect.contains(".m3u8")) {
+                Log.d(TAG, "Found Clappr direct m3u8 at hop $hop")
+                return clapprDirect to currentUrl
+            }
+
+            // ─── Strategia 4: ZT_SOURCES (zicotv classic) ───
+            val ztMatch = ZICO_SOURCES_REGEX.find(html)
+            if (ztMatch != null) {
+                try {
+                    val raw = ztMatch.groupValues[1]
+                    val sources = parseJson<List<ZicoSource>>(raw)
+                    val m3u8 = sources.firstOrNull { it.url.contains(".m3u8") }?.url
+                    if (m3u8 != null) {
+                        val origin = currentUrl.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}/" } ?: currentUrl
+                        Log.d(TAG, "Found ZT_SOURCES m3u8 at hop $hop")
+                        return m3u8 to origin
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // ─── Strategia 5: window._econfig (sportsonline) ───
+            val econfigMatch = Regex("""window\._econfig\s*=\s*['"]([^'"]+)['"]""").find(html)
+            if (econfigMatch != null) {
+                val decoded = try {
+                    val encoded = econfigMatch.groupValues[1]
+                    val padded = encoded + "=".repeat((-encoded.length % 4 + 4) % 4)
+                    val decodedConfig = Base64.decode(padded).toString(Charsets.ISO_8859_1)
+                    val partOrder = listOf(2, 0, 3, 1)
+                    val partLen = (decodedConfig.length + 3) / 4
+                    val parts = mutableListOf<String>()
+                    var offset = 0
+                    repeat(4) {
+                        val part = decodedConfig.substring(offset, minOf(offset + partLen, decodedConfig.length))
+                        offset += partLen
+                        parts.add(part.take(3) + part.drop(4))
+                    }
+                    val decodedParts = Array(4) { "" }
+                    parts.forEachIndexed { idx, part ->
+                        val padded = part + "=".repeat((-part.length % 4 + 4) % 4)
+                        decodedParts[listOf(2, 0, 3, 1)[idx]] = Base64.decode(padded).toString(Charsets.ISO_8859_1)
+                    }
+                    val joined = decodedParts.joinToString("")
+                    val json = Base64.decode(joined + "=".repeat((-joined.length % 4 + 4) % 4)).toString(Charsets.UTF_8)
+                    JSONObject(json).optString("stream_url_nop2p").takeIf { it.isNotBlank() }
+                        ?: JSONObject(json).optString("stream_url").takeIf { it.isNotBlank() }
+                } catch (_: Exception) { null }
+                if (!it.isNullOrEmpty()) {
+                    Log.d(TAG, "Found _econfig m3u8 at hop $hop")
+                    return it to currentUrl
+                }
+            }
+
+            // ─── Strategia 6: JSON in script tags ───
+            val soup = org.jsoup.Jsoup.parse(html)
+            for (script in soup.select("script")) {
+                script.data()?.let { data ->
+                    if (data.trim().startsWith("{")) {
+                        try {
+                            val json = JSONObject(data)
+                            fun findM3u8(obj: Any): String? = when (obj) {
+                                is JSONObject -> obj.keys().mapNotNull { findM3u8(obj.get(it)) }.firstOrNull()
+                                is JSONArray -> (0 until obj.length()).mapNotNull { findM3u8(obj.get(it)) }.firstOrNull()
+                                is String -> if (it.contains(".m3u8")) it else null
+                                else -> null
+                            }
+                            findM3u8(json)?.let { m3u8 ->
+                                Log.d(TAG, "Found JSON m3u8 at hop $hop")
+                                return@resolveEmbedUrl m3u8 to currentUrl
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+
+            // ─── Strategia 6: video/source tags ───
+            soup.select("video, source").forEach { tag ->
+                tag.attr("src")?.takeIf { it.contains(".m3u8") }?.let { m3u8 ->
+                    Log.d(TAG, "Found video/source tag m3u8 at hop $hop")
+                    return@resolveEmbedUrl m3u8 to currentUrl
+                }
+            }
+
+            // ─── Segue iframe chain ───
+            val iframe = soup.selectFirst("iframe")?.attr("src")?.takeIf { it.isNotBlank() }
+            if (iframe != null) {
+                val next = absolutize(currentUrl, iframe)
+                if (next !in visited) {
+                    currentUrl = next
+                    currentReferer = currentUrl
+                    continue
+                }
+            }
+
+            // Nessun m3u8 trovato e nessun iframe da seguire
+            break
         }
+
+        Log.w(TAG, "No m3u8 found for $url after iframe chain")
+        return null
     }
 
-    /** zicotv player pages inline every CDN in a `ZT_SOURCES` JSON array. */
-    private suspend fun extractZicoTv(stream: CalcioStream, name: String): List<Link> {
-        val html = app.get(stream.url, referer = "$mainUrl/").text
-        val raw = ZICO_SOURCES_REGEX.find(html)?.groupValues?.get(1) ?: return emptyList()
-        val origin = stream.url.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}/" }
-            ?: stream.url
-
-        return parseJson<List<ZicoSource>>(raw)
-            .filter { it.url.contains(".m3u8") }
-            .mapIndexed { index, source ->
-                val label = source.label?.takeIf { it.isNotBlank() } ?: "CDN ${index + 1}"
-                Link("$name - $label", source.url, origin)
+    /** Risolve un singolo stream provando l'universal resolver. */
+    private suspend fun resolveStream(stream: CalcioStream): List<Link> {
+        val name = stream.displayName()
+        return try {
+            val ref = stream.url.substringBefore("channels")
+                .takeIf { it.isNotBlank() } ?: stream.url
+            val resolved = resolveEmbedUrl(stream.url, ref)
+            if (resolved != null) {
+                listOf(Link(name, resolved.first, resolved.second))
+            } else {
+                Log.w(TAG, "Failed to resolve: ${stream.url}")
+                emptyList()
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to resolve ${stream.url}: ${e.message}")
+            emptyList()
+        }
     }
 
     private fun CalcioStream.displayName(): String {
@@ -267,21 +331,11 @@ class CalcioStreaming : MainAPI() {
         return if (language == null) base else "$base [${language.uppercase(Locale.ROOT)}]"
     }
 
-    private suspend fun resolveStream(stream: CalcioStream): List<Link> {
-        val name = stream.displayName()
-        return try {
-            if (stream.source.equals("zicotv", true) || stream.url.contains("zicotv", true)) {
-                extractZicoTv(stream, name)
-            } else {
-                val resolved =
-                    extractVideoStream(stream.url, stream.url.substringBefore("channels"), 1)
-                if (resolved == null) emptyList()
-                else listOf(Link(name, resolved.first, resolved.second))
-            }
-        } catch (e: Exception) {
-            Log.d(TAG, "Failed to resolve ${stream.url}: ${e.message}")
-            emptyList()
-        }
+    /** Risolve un relativo iframe src contro la pagina che lo contiene. */
+    private fun absolutize(base: String, link: String): String = when {
+        link.startsWith("http", ignoreCase = true) -> link
+        link.startsWith("//") -> "https:$link"
+        else -> base.toHttpUrlOrNull()?.resolve(link)?.toString() ?: link
     }
 
     override suspend fun loadLinks(
