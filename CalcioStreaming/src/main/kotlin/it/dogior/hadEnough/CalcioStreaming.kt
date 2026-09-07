@@ -89,12 +89,12 @@ class CalcioStreaming : MainAPI() {
     private fun CalcioEvent.displayTitle() =
         listOfNotNull(homeTeam, awayTeam).joinToString(" VS ").ifBlank { id }
 
-    /** Mappa lo sport al drawable locale (orizzontale). */
+    /** Mappa lo sport al drawable locale (orizzontale) via android.resource URI. */
     private fun CalcioEvent.sportPosterUrl(): String = when (sport?.lowercase(Locale.ROOT)) {
-        "soccer", "calcio", "football" -> "sport_calcio"
-        "basketball", "basket" -> "sport_basket"
-        "tennis" -> "sport_tennis"
-        else -> "sport_default"
+        "soccer", "calcio", "football" -> "android.resource://it.dogior.hadEnough/drawable/sport_calcio"
+        "basketball", "basket" -> "android.resource://it.dogior.hadEnough/drawable/sport_basket"
+        "tennis" -> "android.resource://it.dogior.hadEnough/drawable/sport_tennis"
+        else -> "android.resource://it.dogior.hadEnough/drawable/sport_default"
     }
 
     private suspend fun CalcioEvent.toSearchResponse(): SearchResponse {
