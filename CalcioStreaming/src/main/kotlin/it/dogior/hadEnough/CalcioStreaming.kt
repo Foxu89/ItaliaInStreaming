@@ -14,7 +14,7 @@ import okhttp3.Interceptor
 import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
-import java.nio.charset.Charsets
+import java.nio.charset.StandardCharsets
 import java.util.Calendar
 import java.util.Locale
 import kotlin.io.encoding.Base64
@@ -70,7 +70,6 @@ class CalcioStreaming : MainAPI() {
     private suspend fun findEvent(url: String): CalcioEvent? {
         val id = eventIdFromUrl(url)
         if (id.isBlank()) return null
-        // The schedule rotates, so a stale cache miss is worth one refetch.
         return getEvents().firstOrNull { it.id == id }
             ?: getEvents(forceRefresh = true).firstOrNull { it.id == id }
     }
@@ -149,7 +148,6 @@ class CalcioStreaming : MainAPI() {
         ) {
             this.posterUrl = event.sportPosterUrl()
             this.plot = description
-            // Badge lega (stile "genere" CloudStream) — solo se presente
             event.league?.takeIf { it.isNotBlank() }?.let {
                 this.tags = listOf(it)
             }
@@ -169,7 +167,6 @@ class CalcioStreaming : MainAPI() {
         var currentReferer = referer
         val visited = mutableSetOf<String>()
 
-        // Segue catena iframe (max 5 hop)
         repeat(6) { hop ->
             if (currentUrl in visited) return null
             visited.add(currentUrl)
@@ -194,7 +191,7 @@ class CalcioStreaming : MainAPI() {
             if (atobMatch != null) {
                 try {
                     val encoded = atobMatch.groupValues[1]
-                    val decoded = Base64.decode(encoded).toString(Charsets.UTF_8)
+                    val decoded = Base64.decode(encoded).toString(StandardCharsets.UTF_8)
                     if (decoded.contains(".m3u8")) {
                         Log.d(TAG, "Found Clappr atob m3u8 at hop $hop")
                         return decoded to currentUrl
@@ -230,7 +227,7 @@ class CalcioStreaming : MainAPI() {
                 val decoded = try {
                     val encoded = econfigMatch.groupValues[1]
                     val padded = encoded + "=".repeat((-encoded.length % 4 + 4) % 4)
-                    val decodedConfig = Base64.decode(padded).toString(Charsets.ISO_8859_1)
+                    val decodedConfig = Base64.decode(padded).toString(StandardCharsets.ISO_8859_1)
                     val partOrder = listOf(2, 0, 3, 1)
                     val partLen = (decodedConfig.length + 3) / 4
                     val parts = mutableListOf<String>()
@@ -243,16 +240,16 @@ class CalcioStreaming : MainAPI() {
                     val decodedParts = Array(4) { "" }
                     parts.forEachIndexed { idx, part ->
                         val padded = part + "=".repeat((-part.length % 4 + 4) % 4)
-                        decodedParts[listOf(2, 0, 3, 1)[idx]] = Base64.decode(padded).toString(Charsets.ISO_8859_1)
+                        decodedParts[listOf(2, 0, 3, 1)[idx]] = Base64.decode(padded).toString(StandardCharsets.ISO_8859_1)
                     }
                     val joined = decodedParts.joinToString("")
-                    val json = Base64.decode(joined + "=".repeat((-joined.length % 4 + 4) % 4)).toString(Charsets.UTF_8)
+                    val json = Base64.decode(joined + "=".repeat((-joined.length % 4 + 4) % 4)).toString(StandardCharsets.UTF_8)
                     JSONObject(json).optString("stream_url_nop2p").takeIf { it.isNotBlank() }
                         ?: JSONObject(json).optString("stream_url").takeIf { it.isNotBlank() }
                 } catch (_: Exception) { null }
-                if (!it.isNullOrEmpty()) {
+                if (decoded != null && decoded.isNotBlank()) {
                     Log.d(TAG, "Found _econfig m3u8 at hop $hop")
-                    return it to currentUrl
+                    return decoded to currentUrl
                 }
             }
 
@@ -296,7 +293,6 @@ class CalcioStreaming : MainAPI() {
                 }
             }
 
-            // Nessun m3u8 trovato e nessun iframe da seguire
             break
         }
 
