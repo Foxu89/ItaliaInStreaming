@@ -85,21 +85,21 @@ class CalcioStreaming : MainAPI() {
     private fun CalcioEvent.clockTime() =
         startTime?.substringAfter("T", "")?.take(5)?.takeIf { it.length == 5 }
 
+    /** Titolo pulito: "Home VS Away" */
     private fun CalcioEvent.displayTitle() =
-        title?.takeIf { it.isNotBlank() }
-            ?: listOfNotNull(homeTeam, awayTeam).joinToString(" x ").ifBlank { id }
+        listOfNotNull(homeTeam, awayTeam).joinToString(" VS ").ifBlank { id }
 
-    private fun CalcioEvent.badge() =
-        homeTeamBadge?.takeIf { it.isNotBlank() } ?: awayTeamBadge?.takeIf { it.isNotBlank() }
+    /** Mappa lo sport al drawable locale (orizzontale). */
+    private fun CalcioEvent.sportPosterUrl(): String = when (sport?.lowercase(Locale.ROOT)) {
+        "soccer", "calcio", "football" -> "sport_calcio"
+        "basketball", "basket" -> "sport_basket"
+        "tennis" -> "sport_tennis"
+        else -> "sport_default"
+    }
 
     private suspend fun CalcioEvent.toSearchResponse(): SearchResponse {
-        val prefix = when {
-            status == "live" -> "🔴 "
-            clockTime() != null -> "${clockTime()} "
-            else -> ""
-        }
-        return newLiveSearchResponse(prefix + displayTitle(), eventUrl(id), TvType.Live) {
-            this.posterUrl = badge()
+        return newLiveSearchResponse(displayTitle(), eventUrl(id), TvType.Live) {
+            this.posterUrl = sportPosterUrl()
         }
     }
 
@@ -110,13 +110,13 @@ class CalcioStreaming : MainAPI() {
         val sections = listOf(
             "🔴 In Diretta" to events.filter { it.status == "live" },
             "Oggi" to events.filter { it.status == "scheduled" && isToday(it.startTs) },
-            "Prossimi Eventi" to events.filter { it.status == "scheduled" && !isToday(it.startTs) }
+            "Domani" to events.filter { it.status == "scheduled" && !isToday(it.startTs) }
         ).mapNotNull { (sectionName, sectionEvents) ->
             if (sectionEvents.isEmpty()) return@mapNotNull null
             HomePageList(
                 sectionName,
                 sectionEvents.sortedBy { it.startTs ?: 0L }.map { it.toSearchResponse() },
-                isHorizontalImages = false
+                isHorizontalImages = true
             )
         }
 
@@ -136,25 +136,21 @@ class CalcioStreaming : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         val event = findEvent(url) ?: throw ErrorLoadingException("Evento non disponibile")
 
-        val description = listOfNotNull(
-            event.league?.takeIf { it.isNotBlank() },
-            event.sport?.takeIf { it.isNotBlank() },
-            event.clockTime()?.let { "Inizio $it" },
-            when (event.status) {
-                "live" -> "In diretta"
-                "finished" -> "Terminato"
-                else -> null
-            },
-            "${event.streams.size} stream"
-        ).joinToString(" - ")
+        val timeStr = event.clockTime() ?: "??:??"
+        val liveMarker = if (event.status == "live") " 🔴" else ""
+        val description = "Inizio $timeStr$liveMarker"
 
         return newLiveStreamLoadResponse(
             name = event.displayTitle(),
             url = url,
             dataUrl = url
         ) {
-            this.posterUrl = event.badge()
+            this.posterUrl = event.sportPosterUrl()
             this.plot = description
+            // Badge lega (stile "genere" CloudStream) — solo se presente
+            event.league?.takeIf { it.isNotBlank() }?.let {
+                this.tags = listOf(it)
+            }
         }
     }
 
