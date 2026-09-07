@@ -89,12 +89,12 @@ class CalcioStreaming : MainAPI() {
     private fun CalcioEvent.displayTitle() =
         listOfNotNull(homeTeam, awayTeam).joinToString(" VS ").ifBlank { id }
 
-    /** Mappa lo sport al drawable locale (orizzontale) via android.resource URI. */
+    /** Mappa lo sport al poster orizzontale su GitHub (raw). */
     private fun CalcioEvent.sportPosterUrl(): String = when (sport?.lowercase(Locale.ROOT)) {
-        "soccer", "calcio", "football" -> "android.resource://it.dogior.hadEnough/drawable/sport_calcio"
-        "basketball", "basket" -> "android.resource://it.dogior.hadEnough/drawable/sport_basket"
-        "tennis" -> "android.resource://it.dogior.hadEnough/drawable/sport_tennis"
-        else -> "android.resource://it.dogior.hadEnough/drawable/sport_default"
+        "soccer", "calcio", "football" -> "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/CalcioStreaming/src/main/res/drawable-nodpi/sport_calcio.png"
+        "basketball", "basket" -> "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/CalcioStreaming/src/main/res/drawable-nodpi/sport_basket.png"
+        "tennis" -> "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/CalcioStreaming/src/main/res/drawable-nodpi/sport_tennis.png"
+        else -> "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/CalcioStreaming/src/main/res/drawable-nodpi/sport_default.png"
     }
 
     private suspend fun CalcioEvent.toSearchResponse(): SearchResponse {
