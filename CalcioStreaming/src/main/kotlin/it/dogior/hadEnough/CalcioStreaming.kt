@@ -260,10 +260,10 @@ class CalcioStreaming : MainAPI() {
                     if (data.trim().startsWith("{")) {
                         try {
                             val json = JSONObject(data)
-                            fun findM3u8(obj: Any): String? = when (obj) {
-                                is JSONObject -> obj.keys().mapNotNull { findM3u8(obj.get(it)) }.firstOrNull()
-                                is JSONArray -> (0 until obj.length()).mapNotNull { findM3u8(obj.get(it)) }.firstOrNull()
-                                is String -> if (it.contains(".m3u8")) it else null
+                            fun findM3u8(obj: Any?): String? = when (obj) {
+                                is JSONObject -> obj.keys().asSequence().mapNotNull { findM3u8(obj.get(it)) }.firstOrNull()
+                                is JSONArray -> (0 until obj.length()).asSequence().mapNotNull { findM3u8(obj.get(it)) }.firstOrNull()
+                                is String -> if (obj.contains(".m3u8")) obj else null
                                 else -> null
                             }
                             findM3u8(json)?.let { m3u8 ->
@@ -273,8 +273,9 @@ class CalcioStreaming : MainAPI() {
                         } catch (_: Exception) {}
                     }
                 }
+            }
 
-            // ─── Strategia 6: video/source tags ───
+            // ─── Strategia 7: video/source tags ───
             soup.select("video, source").forEach { tag ->
                 tag.attr("src")?.takeIf { it.contains(".m3u8") }?.let { m3u8 ->
                     Log.d(TAG, "Found video/source tag m3u8 at hop $hop")
