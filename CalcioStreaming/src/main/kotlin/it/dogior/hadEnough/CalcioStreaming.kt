@@ -167,7 +167,7 @@ class CalcioStreaming : MainAPI() {
         var currentReferer = referer
         val visited = mutableSetOf<String>()
 
-        repeat(6) { hop ->
+        for (hop in 0 until 6) {
             if (currentUrl in visited) return null
             visited.add(currentUrl)
 
