@@ -25,6 +25,15 @@ class WatchPartyPlugin : Plugin() {
 
     override fun load(context: Context) {
         Log.d(TAG, "🔌 WatchPartyPlugin.load() chiamato")
+
+        // Nuvio Enhanced rifiuta i plugin che non registrano almeno un
+        // MainAPI (vedi WatchPartyNuvioProvider). Su CloudStream vero non
+        // serve e non lo registriamo, per non sporcare la lista fonti.
+        if (!WatchPartyPlayback.isCloudStreamHost) {
+            Log.d(TAG, "🧩 Host non-CloudStream rilevato, registro il provider di compatibilità")
+            registerMainAPI(WatchPartyNuvioProvider())
+        }
+
         overlay = WatchPartyOverlay(plugin = this, manager = manager, onClick = {
             Log.d(TAG, "👆 FAB del player cliccato")
             openSettingsSheet()
@@ -47,7 +56,7 @@ class WatchPartyPlugin : Plugin() {
             Log.e(TAG, "❌ openSettingsSheet(): il cast ad AppCompatActivity è fallito, esco senza fare nulla (era questo il bug del 'non succede niente'?)")
             return
         }
-        Log.d(TAG, "📄 openSettingsSheet(): apro la BottomSheetDialogFragment")
+        Log.d(TAG, "📄 openSettingsSheet(): apro il DialogFragment")
         WatchPartySettingsFragment(this, manager).show(activity.supportFragmentManager, "WatchParty")
     }
 

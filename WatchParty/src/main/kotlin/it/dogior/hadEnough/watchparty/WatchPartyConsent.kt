@@ -8,7 +8,6 @@ import android.view.Gravity
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CommonActivity
@@ -23,9 +22,11 @@ private const val TAG = "WatchParty"
  * riproduzione (play/pausa/posizione) passano attraverso un relay esterno
  * (il Cloudflare Worker) per essere inoltrati agli altri utenti della stanza.
  *
- * Usa MaterialAlertDialogBuilder (non il semplice AlertDialog) apposta:
- * eredita automaticamente lo stile Material dell'app — angoli arrotondati,
- * colori del tema — senza bisogno di forzare colori a mano.
+ * Usa android.app.AlertDialog (non più MaterialAlertDialogBuilder): quella
+ * dipendeva da com.google.android.material, che non è detto sia presente a
+ * runtime su ogni host dei plugin CloudStream (es. Nuvio Enhanced, dove
+ * causava un NoClassDefFoundError qui). Un po' meno "vestito" nello stile,
+ * ma funziona ovunque senza bisogno di rilevare l'host.
  */
 object WatchPartyConsent {
 
@@ -92,7 +93,11 @@ object WatchPartyConsent {
         handler.removeCallbacks(tick)
         try {
             show(activity)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Throwable e non solo Exception: un NoClassDefFoundError (classe
+            // mancante a runtime, es. libreria non presente sull'host) è un
+            // Error, non un'Exception — un catch (e: Exception) qui non lo
+            // avrebbe intercettato, lasciando il popup crashare comunque.
             Log.e(TAG, "💥 WatchPartyConsent: ECCEZIONE mentre costruivo il popup", e)
             shownThisSession = false // ritenta al prossimo giro se qualcosa è andato storto
         }
@@ -133,7 +138,7 @@ object WatchPartyConsent {
         container.addView(messageView)
         container.addView(checkBox)
 
-        val dialog = MaterialAlertDialogBuilder(context)
+        val dialog = android.app.AlertDialog.Builder(context)
             .setTitle("Privacy & Sync Notes")
             .setView(container)
             .setCancelable(false)

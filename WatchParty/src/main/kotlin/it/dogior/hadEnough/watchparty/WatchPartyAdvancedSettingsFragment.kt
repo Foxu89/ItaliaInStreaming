@@ -17,12 +17,11 @@ import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
-import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.bottomsheet.BottomSheetBehavior
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import androidx.fragment.app.DialogFragment
 import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.CommonActivity
-import com.lagradost.cloudstream3.CommonActivity.showToast
+// showToast: non importato da CommonActivity (assente su Nuvio Enhanced),
+// usa la funzione locale multi-host in WatchPartyToast.kt (stesso package).
 import com.lagradost.cloudstream3.plugins.Plugin
 import it.dogior.hadEnough.BuildConfig
 import kotlin.math.hypot
@@ -33,13 +32,13 @@ private const val TAG = "WatchParty"
  *
  *  [parentSettingsFragment] è passato solo per poter attenuare (dim) anche
  *  IL FOGLIO SOTTOSTANTE (WatchPartySettingsFragment) durante l'editor con
- *  touchpad della posizione icona chat: sono due BottomSheetDialogFragment
+ *  touchpad della posizione icona chat: sono due DialogFragment
  *  distinti, quindi due Window separate, ed entrambe devono farsi
  *  semi-trasparenti insieme per vedere l'icona vera sotto. */
 class WatchPartyAdvancedSettingsFragment(
     private val plugin: Plugin,
     private val parentSettingsFragment: WatchPartySettingsFragment? = null,
-) : BottomSheetDialogFragment() {
+) : DialogFragment() {
 
     private fun <T : View> View.findView(name: String): T {
         val id = plugin.resources!!.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
@@ -60,10 +59,10 @@ class WatchPartyAdvancedSettingsFragment(
 
     override fun onStart() {
         super.onStart()
-        (dialog as? BottomSheetDialog)?.behavior?.apply {
-            state = BottomSheetBehavior.STATE_EXPANDED
-            skipCollapsed = true
-        }
+        dialog?.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
     }
 
     private fun dp(value: Int): Int =
@@ -172,7 +171,7 @@ class WatchPartyAdvancedSettingsFragment(
     /** Attenua/ripristina insieme sia questo foglio (Impostazioni avanzate)
      *  sia quello sottostante (Watch Party), animando l'alpha dell'intera
      *  Window di ciascun Dialog: così sparisce anche lo scrim scuro di
-     *  entrambi i BottomSheetDialog e si vede l'icona vera sotto. Il
+     *  entrambi i Dialog e si vede l'icona vera sotto. Il
      *  touchpad resta comunque cliccabile: l'alpha non disabilita il touch. */
     private fun setSheetsDimmed(dimmed: Boolean) {
         val target = if (dimmed) 0.14f else 1f

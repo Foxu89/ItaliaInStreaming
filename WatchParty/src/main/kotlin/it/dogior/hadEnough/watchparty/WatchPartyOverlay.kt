@@ -17,7 +17,6 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.plugins.Plugin
@@ -30,8 +29,9 @@ import it.dogior.hadEnough.BuildConfig
  * farebbe una libreria di overlay/tutorial.
  *
  * Il controllo "sono nella schermata player?" avviene via polling
- * (PlayerAccess.isPlayerScreenActive) perché non esiste un evento pubblico
- * per l'apertura/chiusura del player. Lo stesso polling rileva anche
+ * (WatchPartyPlayback.isPlayerScreenActive, che sceglie da solo
+ * l'implementazione giusta per l'host in cui gira) perché non esiste un
+ * evento pubblico per l'apertura/chiusura del player. Lo stesso polling rileva anche
  * quando l'utente ESCE dal player con una stanza attiva, per chiuderla.
  *
  * Quando una stanza è attiva mostra anche una freccia a sinistra (centro
@@ -82,7 +82,7 @@ class WatchPartyOverlay(
     }
 
     private val handler = Handler(Looper.getMainLooper())
-    private var fab: FloatingActionButton? = null
+    private var fab: FabButton? = null
     private var spinner: ProgressBar? = null
     private var attachedActivity: Activity? = null
     private var running = false
@@ -283,7 +283,7 @@ class WatchPartyOverlay(
             removeChat()
             return
         }
-        val shouldShow = PlayerAccess.isPlayerScreenActive()
+        val shouldShow = WatchPartyPlayback.isPlayerScreenActive()
 
         // l'utente ha appena chiuso il player mentre la stanza era attiva: la chiudiamo
         if (wasPlayerActive && !shouldShow && manager.role != WatchPartyManager.Role.IDLE) {
@@ -330,7 +330,7 @@ class WatchPartyOverlay(
             val id = res.getIdentifier("watchparty_icon", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
             if (id != 0) res.getDrawable(id, null) else null
         }.getOrNull()
-        val button = FloatingActionButton(activity).apply {
+        val button = createFabButton(activity).apply {
             if (iconDrawable != null) setImageDrawable(iconDrawable)
             else setImageResource(android.R.drawable.ic_menu_share)
             setOnClickListener { onClick() }
@@ -350,7 +350,7 @@ class WatchPartyOverlay(
         }
     }
 
-    private fun updateVisibility(button: FloatingActionButton) {
+    private fun updateVisibility(button: FabButton) {
         val invisible = isButtonInvisible()
         if (invisible) {
             android.util.Log.d("WatchParty", "🙈 WatchPartyOverlay: pulsante impostato INVISIBILE (wp_button_invisible=true) — resta cliccabile ma non si vede")

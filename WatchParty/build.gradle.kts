@@ -7,7 +7,11 @@ plugins {
 }
 
 dependencies {
-    implementation("com.google.android.material:material:1.4.0")
+    // Material Components rimossa: non più usata da nessun file (FAB, dialog e
+    // bottom sheet ora usano solo Android/AndroidX standard, vedi FabButton.kt
+    // e NUVIO_COMPATIBILITY_NOTES.md). Non era comunque affidabile a runtime
+    // su ogni host dei plugin CloudStream: su Nuvio Enhanced causava
+    // NoClassDefFoundError perché la libreria non è inclusa lì.
     implementation("com.squareup.okhttp3:okhttp:4.12.0") // WebSocket puro Kotlin, nessuna libreria nativa
     // compileOnly: solo per compilare contro le classi app; a runtime vengono dall'app
     compileOnly("androidx.navigation:navigation-fragment-ktx:2.7.7")
@@ -15,7 +19,7 @@ dependencies {
 }
 
 
-version = 9
+version = 15
 
 android {
     defaultConfig {
