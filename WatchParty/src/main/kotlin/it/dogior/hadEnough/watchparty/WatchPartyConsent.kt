@@ -155,7 +155,7 @@ object WatchPartyConsent {
 
         dialog.setOnShowListener {
             Log.d(TAG, "👀 WatchPartyConsent: popup effettivamente visibile a schermo (onShow)")
-            val acceptBtn = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            val acceptBtn = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
             acceptBtn.isEnabled = false
             checkBox.setOnCheckedChangeListener { _, checked ->
                 Log.d(TAG, "☑️ WatchPartyConsent: checkbox = $checked")

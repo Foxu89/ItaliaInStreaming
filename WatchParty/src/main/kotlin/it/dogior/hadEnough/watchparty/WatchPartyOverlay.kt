@@ -87,7 +87,6 @@ class WatchPartyOverlay(
     private var attachedActivity: Activity? = null
     private var running = false
     private var wasPlayerActive = false
-    private var lastDebugToastMs = 0L
 
     // --- chat ---
     private var chatArrowHost: FrameLayout? = null
@@ -285,14 +284,6 @@ class WatchPartyOverlay(
             return
         }
         val shouldShow = WatchPartyPlayback.isPlayerScreenActive()
-
-        if (DEBUG_TOASTS) {
-            val now = System.currentTimeMillis()
-            if (now - lastDebugToastMs >= DEBUG_TOAST_INTERVAL_MS) {
-                lastDebugToastMs = now
-                showToast(WatchPartyPlayback.debugSnapshot(), long = true)
-            }
-        }
 
         // l'utente ha appena chiuso il player mentre la stanza era attiva: la chiudiamo
         if (wasPlayerActive && !shouldShow && manager.role != WatchPartyManager.Role.IDLE) {

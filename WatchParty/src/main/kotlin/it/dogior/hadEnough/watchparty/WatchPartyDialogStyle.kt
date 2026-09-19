@@ -1,18 +1,25 @@
 package it.dogior.hadEnough.watchparty
 
-import android.app.AlertDialog
 import android.app.Dialog
 import android.content.Context
 import android.graphics.drawable.Drawable
+import androidx.appcompat.app.AlertDialog
 
 /**
  * Crea un AlertDialog.Builder, scegliendo l'implementazione giusta per l'host:
  *  - CloudStream: MaterialAlertDialogBuilder vera (angoli arrotondati,
  *    colori del tema — comportamento identico a come era sempre stato).
  *  - Altri host (es. Nuvio Enhanced, dove Material non è disponibile a
- *    runtime): AlertDialog.Builder di sistema, poi vestito con
+ *    runtime): AlertDialog.Builder di AppCompat, poi vestito con
  *    styleAsWatchPartyPanel per restare comunque coerente col resto
  *    dell'interfaccia del plugin (vedi sotto).
+ *
+ * NOTA: il tipo qui è androidx.appcompat.app.AlertDialog, non
+ * android.app.AlertDialog — MaterialAlertDialogBuilder estende
+ * androidx.appcompat.app.AlertDialog.Builder, non quello di sistema (sono
+ * due gerarchie diverse, primo errore di compilazione che abbiamo preso).
+ * AppCompat è comunque presente su entrambi gli host (l'Activity reale di
+ * Nuvio estende già AppCompatActivity).
  *
  * Stesso motivo/stessa protezione di FabButton.kt: il riferimento a
  * MaterialAlertDialogBuilder vive in una funzione separata, chiamata solo
