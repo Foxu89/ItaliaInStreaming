@@ -7,6 +7,7 @@ import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.util.Log
+import android.view.WindowManager
 import com.lagradost.cloudstream3.CommonActivity
 
 private const val TAG = "WatchParty"
@@ -37,10 +38,19 @@ private const val TAG = "WatchParty"
  *    la MediaSession espone solo play/pause/seekTo, non cambio episodio;
  *  - nessuna informazione su QUALE contenuto è caricato (titolo/episodio):
  *    non necessaria per la sola sincronizzazione play/pausa/posizione;
- *  - funziona solo mentre la notifica è attiva, cioè durante la
- *    riproduzione vera e propria (non nella schermata dei dettagli prima
- *    di premere play) — comportamento accettabile per WatchParty, che ha
- *    senso solo durante la riproduzione.
+ *  - i comandi (seekTo/play/pause) e la lettura di posizione/stato
+ *    funzionano solo quando la notifica "now playing" è raggiungibile
+ *    (vedi controller() sotto). Se il servizio in foreground di Nuvio non
+ *    parte per qualche motivo (restrizioni del produttore del telefono
+ *    tipo MIUI, permesso notifiche negato, ecc.), questi continuano a
+ *    restituire null/false senza crashare, ma la sincronizzazione vera e
+ *    propria non funziona finché quel servizio non parte.
+ *  - isPlayerScreenActive() invece NON dipende solo dalla notifica: ha un
+ *    fallback (vedi windowKeepsScreenOn() sotto) che fa apparire comunque
+ *    l'icona quando un video è in riproduzione, anche se la notifica non
+ *    parte — così l'utente può almeno aprire il menu, anche se poi la
+ *    sincronizzazione stessa resta a posto solo quando la notifica
+ *    funziona davvero.
  */
 class NuvioPlaybackBridge : WatchPartyPlaybackBridge {
 
@@ -55,21 +65,44 @@ class NuvioPlaybackBridge : WatchPartyPlaybackBridge {
     private var cachedController: MediaController? = null
 
     private fun controller(): MediaController? {
-        val activity = CommonActivity.activity ?: return null
+        val activity = CommonActivity.activity
+        if (activity == null) {
+            Log.d(TAG, "🔍 NuvioPlaybackBridge: CommonActivity.activity è null (host non ha ancora agganciato l'Activity)")
+            return null
+        }
         val notificationManager = runCatching {
             activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-        }.getOrNull() ?: return null
+        }.getOrNull()
+        if (notificationManager == null) {
+            Log.d(TAG, "🔍 NuvioPlaybackBridge: NotificationManager non ottenibile")
+            return null
+        }
 
-        val active = runCatching { notificationManager.activeNotifications }.getOrNull() ?: return null
+        val active = runCatching { notificationManager.activeNotifications }.getOrNull()
+        if (active == null) {
+            Log.d(TAG, "🔍 NuvioPlaybackBridge: getActiveNotifications() ha lanciato un'eccezione")
+            return null
+        }
+        if (active.isEmpty()) {
+            Log.d(TAG, "🔍 NuvioPlaybackBridge: nessuna notifica attiva dell'app in questo momento (probabile: nessuna riproduzione in corso, oppure permesso notifiche non concesso su Android 13+)")
+            return null
+        }
         val statusBarNotification = active.firstOrNull { it.id == knownNotificationId }
             ?: active.firstOrNull { it.notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true }
-            ?: return null
+        if (statusBarNotification == null) {
+            Log.d(TAG, "🔍 NuvioPlaybackBridge: ${active.size} notifiche attive ma nessuna è quella \"now playing\" (id atteso 0x${knownNotificationId.toString(16)}, id trovati: ${active.joinToString { "0x" + it.id.toString(16) }})")
+            return null
+        }
 
         val token = runCatching {
             @Suppress("DEPRECATION")
             statusBarNotification.notification.extras
                 ?.getParcelable<MediaSession.Token>(Notification.EXTRA_MEDIA_SESSION)
-        }.getOrNull() ?: return null
+        }.getOrNull()
+        if (token == null) {
+            Log.d(TAG, "🔍 NuvioPlaybackBridge: notifica \"now playing\" trovata ma senza EXTRA_MEDIA_SESSION valido")
+            return null
+        }
 
         if (token != cachedToken || cachedController == null) {
             cachedController = runCatching { MediaController(activity, token) }.getOrNull()
@@ -81,7 +114,34 @@ class NuvioPlaybackBridge : WatchPartyPlaybackBridge {
         return cachedController
     }
 
-    override fun isPlayerScreenActive(): Boolean = controller() != null
+    override fun isPlayerScreenActive(): Boolean {
+        if (controller() != null) return true
+        return windowKeepsScreenOn()
+    }
+
+    /**
+     * Fallback che non passa dalla notifica: il player di Nuvio imposta
+     * View.keepScreenOn = true sulla view video mentre un contenuto è in
+     * riproduzione o in caricamento (PlayerEngine.android.kt). Questo
+     * propaga sempre WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON sulla
+     * Window dell'Activity — è comportamento standard della piattaforma
+     * Android (ViewRootImpl), non passa da notifiche/servizi in
+     * foreground/permessi, quindi non è soggetto alle restrizioni che
+     * bloccano quelli su alcuni produttori (es. MIUI) né al permesso
+     * notifiche. Unico limite: resta true solo mentre il video è in
+     * riproduzione/caricamento, torna false in pausa — l'icona potrebbe
+     * quindi sparire quando metti in pausa se la notifica non funziona.
+     */
+    private fun windowKeepsScreenOn(): Boolean {
+        val active = runCatching {
+            val flags = CommonActivity.activity?.window?.attributes?.flags ?: return false
+            (flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+        }.getOrDefault(false)
+        if (active) {
+            Log.d(TAG, "🔍 NuvioPlaybackBridge: notifica non trovata ma FLAG_KEEP_SCREEN_ON attivo, mostro comunque l'icona")
+        }
+        return active
+    }
 
     override fun getIsPlaying(): Boolean {
         val state = controller()?.playbackState?.state ?: return false
