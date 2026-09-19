@@ -164,4 +164,25 @@ class NuvioPlaybackBridge : WatchPartyPlaybackBridge {
 
     /** Nuvio non espone un comando "prossimo episodio" via MediaSession: non supportato. */
     override fun nextEpisode(localUserAction: Boolean): Boolean = false
+
+    override fun debugSnapshot(): String {
+        val activity = CommonActivity.activity
+        if (activity == null) return "activity=NO"
+
+        val nm = runCatching {
+            activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        }.getOrNull()
+        val active = runCatching { nm?.activeNotifications }.getOrNull()
+        val notifCount = active?.size ?: -1
+        val notifIds = active?.joinToString { "0x" + it.id.toString(16) } ?: "?"
+        val nowPlayingFound = active?.any {
+            it.id == knownNotificationId || it.notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
+        } ?: false
+        val keepScreenOn = windowKeepsScreenOn()
+        val hasController = controller() != null
+
+        return "activity=OK notif=$notifCount[$notifIds] nowPlaying=$nowPlayingFound " +
+            "controller=$hasController keepScreenOn=$keepScreenOn " +
+            "isPlayerActive=${isPlayerScreenActive()}"
+    }
 }

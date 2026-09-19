@@ -40,6 +40,11 @@ interface WatchPartyPlaybackBridge {
      * errori visibili all'utente.
      */
     fun nextEpisode(localUserAction: Boolean): Boolean
+
+    /** Stringa breve di diagnostica per capire perché isPlayerScreenActive()
+     *  ritorna true/false, da mostrare in un Toast quando non si ha accesso
+     *  al logcat. Non usata in produzione, solo per debug. */
+    fun debugSnapshot(): String
 }
 
 /**
@@ -91,4 +96,6 @@ object WatchPartyPlayback : WatchPartyPlaybackBridge {
     override fun pause() { runCatching { delegate.pause() } }
     override fun nextEpisode(localUserAction: Boolean): Boolean =
         runCatching { delegate.nextEpisode(localUserAction) }.getOrDefault(false)
+    override fun debugSnapshot(): String =
+        runCatching { delegate.debugSnapshot() }.getOrDefault("errore lettura snapshot")
 }

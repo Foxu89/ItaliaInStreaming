@@ -45,6 +45,14 @@ class WatchPartyOverlay(
 ) {
 
     companion object {
+        // TEMPORANEO: mostra ogni ~3s un Toast con lo stato di
+        // WatchPartyPlayback.debugSnapshot(), per capire perché l'icona non
+        // appare su un host senza bisogno di adb/logcat. Rimetti a false
+        // (o cancella questo blocco e le righe che lo usano in sync())
+        // una volta risolto.
+        private const val DEBUG_TOASTS = true
+        private const val DEBUG_TOAST_INTERVAL_MS = 3000L
+
         private const val KEY_POS_X = "wp_chat_icon_pos_x" // percent (0-100), centro icona, X
         private const val KEY_POS_Y = "wp_chat_icon_pos_y" // percent (0-100), centro icona, Y
         const val CHAT_ICON_SIZE_DP = 40
@@ -87,6 +95,7 @@ class WatchPartyOverlay(
     private var attachedActivity: Activity? = null
     private var running = false
     private var wasPlayerActive = false
+    private var lastDebugToastMs = 0L
 
     // --- chat ---
     private var chatArrowHost: FrameLayout? = null
@@ -284,6 +293,14 @@ class WatchPartyOverlay(
             return
         }
         val shouldShow = WatchPartyPlayback.isPlayerScreenActive()
+
+        if (DEBUG_TOASTS) {
+            val now = System.currentTimeMillis()
+            if (now - lastDebugToastMs >= DEBUG_TOAST_INTERVAL_MS) {
+                lastDebugToastMs = now
+                showToast(WatchPartyPlayback.debugSnapshot())
+            }
+        }
 
         // l'utente ha appena chiuso il player mentre la stanza era attiva: la chiudiamo
         if (wasPlayerActive && !shouldShow && manager.role != WatchPartyManager.Role.IDLE) {

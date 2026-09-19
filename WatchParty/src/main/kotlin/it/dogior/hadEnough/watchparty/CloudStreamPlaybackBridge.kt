@@ -41,4 +41,7 @@ class CloudStreamPlaybackBridge : WatchPartyPlaybackBridge {
         player.handleEvent(CSPlayerEvent.NextEpisode, source)
         return true
     }
+
+    override fun debugSnapshot(): String =
+        "CloudStream: player=${PlayerAccess.currentPlayer() != null}"
 }
