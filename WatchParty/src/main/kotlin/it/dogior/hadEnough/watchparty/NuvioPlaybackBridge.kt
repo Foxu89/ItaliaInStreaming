@@ -166,23 +166,16 @@ class NuvioPlaybackBridge : WatchPartyPlaybackBridge {
     override fun nextEpisode(localUserAction: Boolean): Boolean = false
 
     override fun debugSnapshot(): String {
-        val activity = CommonActivity.activity
-        if (activity == null) return "activity=NO"
+        val activity = CommonActivity.activity ?: return "activity=NO"
 
         val nm = runCatching {
             activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         }.getOrNull()
-        val active = runCatching { nm?.activeNotifications }.getOrNull()
-        val notifCount = active?.size ?: -1
-        val notifIds = active?.joinToString { "0x" + it.id.toString(16) } ?: "?"
-        val nowPlayingFound = active?.any {
-            it.id == knownNotificationId || it.notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
-        } ?: false
+        val notifCount = runCatching { nm?.activeNotifications?.size }.getOrNull() ?: -1
         val keepScreenOn = windowKeepsScreenOn()
         val hasController = controller() != null
 
-        return "activity=OK notif=$notifCount[$notifIds] nowPlaying=$nowPlayingFound " +
-            "controller=$hasController keepScreenOn=$keepScreenOn " +
-            "isPlayerActive=${isPlayerScreenActive()}"
+        // Corto apposta: deve stare leggibile in un Toast.
+        return "notif=$notifCount kso=$keepScreenOn ctrl=$hasController active=${isPlayerScreenActive()}"
     }
 }

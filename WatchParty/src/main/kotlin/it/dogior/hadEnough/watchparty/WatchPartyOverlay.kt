@@ -51,7 +51,7 @@ class WatchPartyOverlay(
         // (o cancella questo blocco e le righe che lo usano in sync())
         // una volta risolto.
         private const val DEBUG_TOASTS = true
-        private const val DEBUG_TOAST_INTERVAL_MS = 3000L
+        private const val DEBUG_TOAST_INTERVAL_MS = 4000L
 
         private const val KEY_POS_X = "wp_chat_icon_pos_x" // percent (0-100), centro icona, X
         private const val KEY_POS_Y = "wp_chat_icon_pos_y" // percent (0-100), centro icona, Y
@@ -298,7 +298,7 @@ class WatchPartyOverlay(
             val now = System.currentTimeMillis()
             if (now - lastDebugToastMs >= DEBUG_TOAST_INTERVAL_MS) {
                 lastDebugToastMs = now
-                showToast(WatchPartyPlayback.debugSnapshot())
+                showToast(WatchPartyPlayback.debugSnapshot(), long = true)
             }
         }
 

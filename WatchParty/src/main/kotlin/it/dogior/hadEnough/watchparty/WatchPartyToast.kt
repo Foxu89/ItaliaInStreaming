@@ -13,11 +13,12 @@ import com.lagradost.cloudstream3.CommonActivity
  * Stesso nome/firma della funzione originale (showToast(message: String)):
  * ai punti di chiamata basta cambiare l'import, nessun'altra modifica.
  */
-fun showToast(message: String) {
+fun showToast(message: String, long: Boolean = false) {
     val activity = CommonActivity.activity ?: return
+    val duration = if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
     runCatching {
         activity.runOnUiThread {
-            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, message, duration).show()
         }
     }
 }
