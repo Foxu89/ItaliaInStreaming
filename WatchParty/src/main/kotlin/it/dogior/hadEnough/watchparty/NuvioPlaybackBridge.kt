@@ -7,175 +7,167 @@ import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.media3.common.Player
+import androidx.media3.ui.PlayerView
 import com.lagradost.cloudstream3.CommonActivity
+import java.lang.ref.WeakReference
 
 private const val TAG = "WatchParty"
 
 /**
  * Bridge per Nuvio Enhanced (build "Android Full").
  *
- * Nuvio non esegue le classi ui.player.* di CloudStream (non sono presenti
- * a runtime: vedi CLOUDSTREAM_CROSS_PLATFORM_COMPATIBILITY.md e il runtime-
- * api aar del suo repository) e non offre alcun hook diretto sul player
- * verso i plugin caricati. Espone però, mentre un contenuto è in
- * riproduzione, una notifica "now playing" reale con una
- * android.media.session.MediaSession valida (vedi PlayerNowPlayingService.
- * android.kt / PlayerNowPlayingController.android.kt nel suo repository),
- * disponibile SOLO sulla build Android Full (non Play Store) e SOLO mentre
- * un contenuto è effettivamente caricato.
+ * FONTE PRIMARIA: androidx.media3.ui.PlayerView.
  *
- * Poiché il codice di questo plugin gira nello stesso processo/UID di
- * Nuvio (caricato via PathClassLoader nel suo stesso processo, non come
- * app separata), NotificationManager.getActiveNotifications() può leggere
- * le notifiche che Nuvio stesso ha pubblicato, incluso l'extra
- * EXTRA_MEDIA_SESSION con il token — senza bisogno del permesso speciale
- * di "notification listener" (quel permesso serve solo per leggere le
- * notifiche di ALTRE app).
+ * Nuvio usa Media3/ExoPlayer per riprodurre (vedi PlayerEngine.android.kt
+ * nel suo repository: androidx.media3.ui.PlayerView, androidx.media3.ui.
+ * SubtitleView, ecc.). A differenza delle classi interne di Nuvio (che
+ * l'R8 della build release rinomina, proguard-cloudstream-full.pro non le
+ * protegge) o di Material Components (che Nuvio non usa affatto, essendo
+ * un'app Compose/Material3), Media3 è una libreria AndroidX che Nuvio
+ * porta davvero con sé nel suo processo — cercarla nell'albero delle view
+ * dell'Activity corrente funziona senza passare da notifiche, permessi o
+ * servizi in foreground (tutte cose che su alcuni dispositivi, es. MIUI,
+ * possono fallire in silenzio: vedi i due fallback più sotto, tenuti solo
+ * come ulteriore rete di sicurezza).
  *
- * Limiti noti, per design, rispetto al bridge CloudStream:
+ * PlayerView.getPlayer() restituisce direttamente l'androidx.media3.common.
+ * Player reale (l'ExoPlayer in uso): play()/pause()/seekTo()/isPlaying/
+ * currentPosition sono chiamate dirette sul player vero, non un proxy.
+ *
+ * Limiti noti:
  *  - nessun comando "prossimo episodio" (nextEpisode ritorna sempre false):
- *    la MediaSession espone solo play/pause/seekTo, non cambio episodio;
- *  - nessuna informazione su QUALE contenuto è caricato (titolo/episodio):
- *    non necessaria per la sola sincronizzazione play/pausa/posizione;
- *  - i comandi (seekTo/play/pause) e la lettura di posizione/stato
- *    funzionano solo quando la notifica "now playing" è raggiungibile
- *    (vedi controller() sotto). Se il servizio in foreground di Nuvio non
- *    parte per qualche motivo (restrizioni del produttore del telefono
- *    tipo MIUI, permesso notifiche negato, ecc.), questi continuano a
- *    restituire null/false senza crashare, ma la sincronizzazione vera e
- *    propria non funziona finché quel servizio non parte.
- *  - isPlayerScreenActive() invece NON dipende solo dalla notifica: ha un
- *    fallback (vedi windowKeepsScreenOn() sotto) che fa apparire comunque
- *    l'icona quando un video è in riproduzione, anche se la notifica non
- *    parte — così l'utente può almeno aprire il menu, anche se poi la
- *    sincronizzazione stessa resta a posto solo quando la notifica
- *    funziona davvero.
+ *    Player non ha un concetto di "episodio", solo di traccia/posizione;
+ *  - Nuvio ha ANCHE un motore alternativo basato su libmpv
+ *    (NuvioLibmpvView, per contenuti che ExoPlayer non gestisce bene) che
+ *    NON è una PlayerView: quando è quello in uso, questo bridge non trova
+ *    nulla e cade sui due fallback sotto (notifica/keepScreenOn), che però
+ *    finora si sono rivelati inaffidabili sul dispositivo di test — quindi
+ *    con l'engine mpv l'icona potrebbe non apparire lo stesso. Da
+ *    verificare quando càpita un contenuto che usa quell'engine.
  */
 class NuvioPlaybackBridge : WatchPartyPlaybackBridge {
 
-    // Id fisso della notifica "now playing" di Nuvio (0x4E55), letto dal suo
-    // codice sorgente (PlayerNowPlayingService.android.kt). Usato come primo
-    // tentativo, con un fallback più permissivo (qualunque notifica di
-    // sistema con l'extra EXTRA_MEDIA_SESSION) nel caso l'id cambi in una
-    // versione futura di Nuvio.
-    private val knownNotificationId = 0x4E55
+    // --- Fonte primaria: PlayerView nell'albero delle view -------------
 
+    private var cachedPlayerViewRef: WeakReference<PlayerView>? = null
+
+    private fun findPlayerView(): PlayerView? {
+        cachedPlayerViewRef?.get()?.let { cached ->
+            if (cached.isShown && cached.player != null) return cached
+        }
+        val activity = CommonActivity.activity ?: return null
+        val decor = activity.window?.decorView as? ViewGroup ?: return null
+        val found = runCatching { searchPlayerView(decor) }.getOrNull()
+        cachedPlayerViewRef = found?.let { WeakReference(it) }
+        if (found != null) {
+            Log.d(TAG, "🎬 NuvioPlaybackBridge: PlayerView trovata nell'albero delle view")
+        }
+        return found
+    }
+
+    private fun searchPlayerView(view: View): PlayerView? {
+        if (view is PlayerView && view.player != null && view.isShown) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                searchPlayerView(view.getChildAt(i))?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun player(): Player? = findPlayerView()?.player
+
+    // --- Fallback secondario: MediaSession via notifica -----------------
+    // Tenuto come rete di sicurezza per l'engine mpv (senza PlayerView) o
+    // per versioni future di Nuvio. Sul dispositivo di test la notifica
+    // "now playing" non parte mai (notif=0 nei log), quindi in pratica
+    // oggi questo ramo non aiuta — ma non fa nemmeno danno, resta gratis.
+
+    private val knownNotificationId = 0x4E55
     private var cachedToken: MediaSession.Token? = null
     private var cachedController: MediaController? = null
 
     private fun controller(): MediaController? {
-        val activity = CommonActivity.activity
-        if (activity == null) {
-            Log.d(TAG, "🔍 NuvioPlaybackBridge: CommonActivity.activity è null (host non ha ancora agganciato l'Activity)")
-            return null
-        }
+        val activity = CommonActivity.activity ?: return null
         val notificationManager = runCatching {
             activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-        }.getOrNull()
-        if (notificationManager == null) {
-            Log.d(TAG, "🔍 NuvioPlaybackBridge: NotificationManager non ottenibile")
-            return null
-        }
-
+        }.getOrNull() ?: return null
         val active = runCatching { notificationManager.activeNotifications }.getOrNull()
-        if (active == null) {
-            Log.d(TAG, "🔍 NuvioPlaybackBridge: getActiveNotifications() ha lanciato un'eccezione")
-            return null
-        }
-        if (active.isEmpty()) {
-            Log.d(TAG, "🔍 NuvioPlaybackBridge: nessuna notifica attiva dell'app in questo momento (probabile: nessuna riproduzione in corso, oppure permesso notifiche non concesso su Android 13+)")
-            return null
-        }
+        if (active.isNullOrEmpty()) return null
         val statusBarNotification = active.firstOrNull { it.id == knownNotificationId }
             ?: active.firstOrNull { it.notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true }
-        if (statusBarNotification == null) {
-            Log.d(TAG, "🔍 NuvioPlaybackBridge: ${active.size} notifiche attive ma nessuna è quella \"now playing\" (id atteso 0x${knownNotificationId.toString(16)}, id trovati: ${active.joinToString { "0x" + it.id.toString(16) }})")
-            return null
-        }
-
+            ?: return null
         val token = runCatching {
             @Suppress("DEPRECATION")
             statusBarNotification.notification.extras
                 ?.getParcelable<MediaSession.Token>(Notification.EXTRA_MEDIA_SESSION)
-        }.getOrNull()
-        if (token == null) {
-            Log.d(TAG, "🔍 NuvioPlaybackBridge: notifica \"now playing\" trovata ma senza EXTRA_MEDIA_SESSION valido")
-            return null
-        }
-
+        }.getOrNull() ?: return null
         if (token != cachedToken || cachedController == null) {
             cachedController = runCatching { MediaController(activity, token) }.getOrNull()
             cachedToken = token
-            if (cachedController != null) {
-                Log.d(TAG, "🎬 NuvioPlaybackBridge: nuova MediaSession agganciata")
-            }
         }
         return cachedController
     }
 
-    override fun isPlayerScreenActive(): Boolean {
-        if (controller() != null) return true
-        return windowKeepsScreenOn()
-    }
+    // --- Fallback terziario: FLAG_KEEP_SCREEN_ON -------------------------
+    // Solo per isPlayerScreenActive(): non dà comandi/posizione, solo
+    // "sì/no un video sta giocando". Vedi debugSnapshot: sul dispositivo di
+    // test è risultato false anche durante la riproduzione, quindi non è
+    // affidabile quanto sperato — tenuto comunque, costa zero.
 
-    /**
-     * Fallback che non passa dalla notifica: il player di Nuvio imposta
-     * View.keepScreenOn = true sulla view video mentre un contenuto è in
-     * riproduzione o in caricamento (PlayerEngine.android.kt). Questo
-     * propaga sempre WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON sulla
-     * Window dell'Activity — è comportamento standard della piattaforma
-     * Android (ViewRootImpl), non passa da notifiche/servizi in
-     * foreground/permessi, quindi non è soggetto alle restrizioni che
-     * bloccano quelli su alcuni produttori (es. MIUI) né al permesso
-     * notifiche. Unico limite: resta true solo mentre il video è in
-     * riproduzione/caricamento, torna false in pausa — l'icona potrebbe
-     * quindi sparire quando metti in pausa se la notifica non funziona.
-     */
-    private fun windowKeepsScreenOn(): Boolean {
-        val active = runCatching {
-            val flags = CommonActivity.activity?.window?.attributes?.flags ?: return false
-            (flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
-        }.getOrDefault(false)
-        if (active) {
-            Log.d(TAG, "🔍 NuvioPlaybackBridge: notifica non trovata ma FLAG_KEEP_SCREEN_ON attivo, mostro comunque l'icona")
-        }
-        return active
-    }
+    private fun windowKeepsScreenOn(): Boolean = runCatching {
+        val flags = CommonActivity.activity?.window?.attributes?.flags ?: return false
+        (flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+    }.getOrDefault(false)
+
+    // --- API pubblica ------------------------------------------------
+
+    override fun isPlayerScreenActive(): Boolean =
+        player() != null || controller() != null || windowKeepsScreenOn()
 
     override fun getIsPlaying(): Boolean {
+        player()?.let { return it.isPlaying }
         val state = controller()?.playbackState?.state ?: return false
         return state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
     }
 
-    override fun getPosition(): Long? = controller()?.playbackState?.position
+    override fun getPosition(): Long? {
+        player()?.let { return it.currentPosition }
+        return controller()?.playbackState?.position
+    }
 
     override fun seekTo(positionMs: Long) {
+        player()?.let { it.seekTo(positionMs); return }
         controller()?.transportControls?.seekTo(positionMs)
     }
 
     override fun play() {
+        player()?.let { it.play(); return }
         controller()?.transportControls?.play()
     }
 
     override fun pause() {
+        player()?.let { it.pause(); return }
         controller()?.transportControls?.pause()
     }
 
-    /** Nuvio non espone un comando "prossimo episodio" via MediaSession: non supportato. */
+    /** Né Player né la MediaSession di Nuvio espongono un concetto di "episodio": non supportato. */
     override fun nextEpisode(localUserAction: Boolean): Boolean = false
 
     override fun debugSnapshot(): String {
         val activity = CommonActivity.activity ?: return "activity=NO"
-
+        val hasPlayerView = player() != null
         val nm = runCatching {
             activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         }.getOrNull()
         val notifCount = runCatching { nm?.activeNotifications?.size }.getOrNull() ?: -1
         val keepScreenOn = windowKeepsScreenOn()
         val hasController = controller() != null
-
         // Corto apposta: deve stare leggibile in un Toast.
-        return "notif=$notifCount kso=$keepScreenOn ctrl=$hasController active=${isPlayerScreenActive()}"
+        return "pv=$hasPlayerView notif=$notifCount kso=$keepScreenOn ctrl=$hasController active=${isPlayerScreenActive()}"
     }
 }

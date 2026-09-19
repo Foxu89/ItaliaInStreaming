@@ -16,10 +16,16 @@ dependencies {
     // compileOnly: solo per compilare contro le classi app; a runtime vengono dall'app
     compileOnly("androidx.navigation:navigation-fragment-ktx:2.7.7")
     compileOnly("com.jaredrummler:colorpicker:1.1.0")
+    // Solo per compilare contro androidx.media3.ui.PlayerView/Player (bridge
+    // Nuvio Enhanced, vedi NuvioPlaybackBridge.kt). Nuvio la ha già nel suo
+    // vero classpath (ci fa girare il player), non serve bundlarla — stessa
+    // versione che usa Nuvio (gradle/libs.versions.toml del suo repository).
+    compileOnly("androidx.media3:media3-ui:1.8.0")
+    compileOnly("androidx.media3:media3-common:1.8.0")
 }
 
 
-version = 11
+version = 12
 
 android {
     defaultConfig {
