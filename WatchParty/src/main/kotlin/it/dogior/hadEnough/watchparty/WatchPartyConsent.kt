@@ -138,12 +138,20 @@ object WatchPartyConsent {
         container.addView(messageView)
         container.addView(checkBox)
 
-        val dialog = android.app.AlertDialog.Builder(context)
+        val dialog = newAlertDialogBuilder(context)
             .setTitle("Privacy & Sync Notes")
             .setView(container)
             .setCancelable(false)
             .setPositiveButton("Accept", null) // listener sotto, per poterlo disabilitare all'inizio
             .create()
+
+        styleAsWatchPartyPanel(
+            dialog,
+            android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF000000.toInt())
+                cornerRadius = dp(context, 16).toFloat()
+            },
+        )
 
         dialog.setOnShowListener {
             Log.d(TAG, "👀 WatchPartyConsent: popup effettivamente visibile a schermo (onShow)")

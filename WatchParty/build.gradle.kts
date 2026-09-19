@@ -22,10 +22,18 @@ dependencies {
     // versione che usa Nuvio (gradle/libs.versions.toml del suo repository).
     compileOnly("androidx.media3:media3-ui:1.8.0")
     compileOnly("androidx.media3:media3-common:1.8.0")
+    // Solo per compilare contro MaterialAlertDialogBuilder/FloatingActionButton
+    // (usate solo su CloudStream, che le ha già nel suo classpath essendo
+    // un'app Material vera — vedi FabButton.kt e WatchPartyDialogStyle.kt).
+    // Su Nuvio quel codice non viene mai eseguito (host-detection), quindi
+    // non serve che sia bundlata: se la mettessimo "implementation" e per
+    // qualche motivo finisse comunque nel dex del plugin non farebbe danno,
+    // ma non è necessario.
+    compileOnly("com.google.android.material:material:1.4.0")
 }
 
 
-version = 12
+version = 13
 
 android {
     defaultConfig {

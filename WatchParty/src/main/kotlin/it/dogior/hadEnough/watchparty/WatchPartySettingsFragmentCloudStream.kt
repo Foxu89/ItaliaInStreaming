@@ -12,19 +12,20 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
-import androidx.fragment.app.DialogFragment
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.lagradost.cloudstream3.CloudStreamApp
-// showToast: non importato da CommonActivity (assente su Nuvio Enhanced),
-// usa la funzione locale multi-host in WatchPartyToast.kt (stesso package).
+import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.plugins.Plugin
 import it.dogior.hadEnough.BuildConfig
 
 private const val TAG = "WatchParty"
 
-class WatchPartySettingsFragment(
+class WatchPartySettingsFragmentCloudStream(
     private val plugin: Plugin,
     private val manager: WatchPartyManager,
-) : DialogFragment() {
+) : BottomSheetDialogFragment() {
 
     private fun <T : View> View.findView(name: String): T {
         val id = plugin.resources!!.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
@@ -82,13 +83,10 @@ class WatchPartySettingsFragment(
 
     override fun onStart() {
         super.onStart()
-        // Niente più BottomSheetBehavior (era Material): allarghiamo il
-        // dialog standard a piena larghezza per restare visivamente vicini
-        // al vecchio bottom sheet, senza dipendenze esterne.
-        dialog?.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        )
+        (dialog as? BottomSheetDialog)?.behavior?.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+        }
     }
 
     override fun onCreateView(
@@ -138,7 +136,7 @@ class WatchPartySettingsFragment(
         settingsCard.applyOutlineBackground()
 
         settingsCard.setOnClickListener {
-            WatchPartyAdvancedSettingsFragment(plugin, this@WatchPartySettingsFragment)
+            WatchPartyAdvancedSettingsFragmentCloudStream(plugin, this@WatchPartySettingsFragmentCloudStream)
                 .show(parentFragmentManager, "WatchPartyAdvancedSettings")
         }
 
@@ -174,7 +172,7 @@ class WatchPartySettingsFragment(
             val seekSwitch = permissionRow("Can seek", current.canSeek)
             val nextEpisodeSwitch = permissionRow("Can change episode", current.canNextEpisode)
 
-            android.app.AlertDialog.Builder(ctx)
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
                 .setTitle("Permissions for guests")
                 .setView(container)
                 .setPositiveButton("Save") { _, _ ->
@@ -215,7 +213,7 @@ class WatchPartySettingsFragment(
                     isFocusable = true
                 }
                 kick.setOnClickListener {
-                    android.app.AlertDialog.Builder(root.context)
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(root.context)
                         .setTitle("Kick participant")
                         .setMessage("Remove ${label.replace(" (Host)", "")} from the room?")
                         .setPositiveButton("Kick") { _, _ ->
@@ -246,7 +244,7 @@ class WatchPartySettingsFragment(
                 row.setOnClickListener { showPermissionsEditor() }
                 // long-press = promuovi a host (come il kick, con conferma)
                 row.setOnLongClickListener {
-                    android.app.AlertDialog.Builder(root.context)
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(root.context)
                         .setTitle("Promote participant")
                         .setMessage("Make ${label.replace(" (Host)", "")} the new host?")
                         .setPositiveButton("Promote") { _, _ ->
@@ -322,7 +320,7 @@ class WatchPartySettingsFragment(
         }
         updateStatusDot(manager.connectionState)
 
-        if (!WatchPartyPlayback.isPlayerScreenActive()) {
+        if (!PlayerAccess.isPlayerScreenActive()) {
             status.text = "Open a video first, then come back here to create or join a room."
         }
 
@@ -338,7 +336,7 @@ class WatchPartySettingsFragment(
         }
 
         createBtn.setOnClickListener {
-            if (!WatchPartyPlayback.isPlayerScreenActive()) {
+            if (!PlayerAccess.isPlayerScreenActive()) {
                 showToast("Open a video first")
                 return@setOnClickListener
             }
@@ -361,7 +359,7 @@ class WatchPartySettingsFragment(
                 showToast("Enter a valid PIN")
                 return@setOnClickListener
             }
-            if (!WatchPartyPlayback.isPlayerScreenActive()) {
+            if (!PlayerAccess.isPlayerScreenActive()) {
                 showToast("Open the same video as your friends first")
                 return@setOnClickListener
             }

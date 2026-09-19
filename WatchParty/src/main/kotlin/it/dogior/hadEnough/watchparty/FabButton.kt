@@ -10,24 +10,51 @@ import android.widget.ImageButton
 import android.widget.ImageView
 
 /**
- * Sostituto di com.google.android.material.floatingactionbutton.FloatingActionButton.
+ * Crea il FAB del player, scegliendo l'implementazione giusta per l'host:
+ *  - CloudStream: com.google.android.material.floatingactionbutton.
+ *    FloatingActionButton vera (che CloudStream ha già nel suo classpath,
+ *    essendo un'app Material) — stesso aspetto/animazioni di sempre.
+ *  - Altri host (es. Nuvio Enhanced, dove Material non è disponibile a
+ *    runtime — vedi NUVIO_COMPATIBILITY_NOTES.md): un ImageButton
+ *    circolare fatto a mano (GradientDrawable + RippleDrawable), senza
+ *    dipendenze esterne.
  *
- * Il loader dei plugin CloudStream sembra escludere le librerie AndroidX/
- * Material "comuni" dal pacchetto finale del plugin, assumendo che l'host
- * le fornisca già — vero per CloudStream (che è un'app Material), falso
- * per Nuvio Enhanced (Compose/Material3, non porta con sé la libreria
- * classica com.google.android.material) → NoClassDefFoundError a runtime
- * per qualunque plugin la usi, indipendentemente da questo bridge.
+ * FloatingActionButton eredita comunque da ImageButton (tramite
+ * AppCompatImageButton), quindi entrambi i rami restituiscono lo stesso
+ * tipo FabButton: nel resto del codice (WatchPartyOverlay.kt) non cambia
+ * nulla, si continua a chiamare setImageDrawable/setOnClickListener/alpha
+ * come sempre.
  *
- * Alias di tipo: nel resto del file basta cambiare il tipo dichiarato
- * (FloatingActionButton -> FabButton), la API usata (setImageDrawable,
- * setImageResource, setOnClickListener, alpha) è la stessa perché FabButton
- * è comunque un ImageView/View standard.
+ * Il ramo Material è isolato in createMaterialFab(), MAI chiamato quando
+ * WatchPartyPlayback.isCloudStreamHost è false: grazie alla risoluzione
+ * pigra delle classi di Android (stessa protezione già usata per
+ * CloudStreamPlaybackBridge/IPlayer), quel riferimento a
+ * FloatingActionButton non viene mai risolto su un host senza Material,
+ * quindi non causa NoClassDefFoundError anche se la libreria non è
+ * disponibile lì.
  */
 typealias FabButton = ImageButton
 
-/** Crea un ImageButton circolare che approssima visivamente una FAB, senza dipendenze esterne. */
 fun createFabButton(activity: Activity, sizeDp: Int = 56, backgroundColor: Int = 0xFF2E7DFF.toInt()): FabButton {
+    if (WatchPartyPlayback.isCloudStreamHost) {
+        runCatching { createMaterialFab(activity, backgroundColor) }.getOrNull()?.let { return it }
+        // Se anche su CloudStream qualcosa va storto (versione insolita
+        // dell'app, Material mancante per qualche motivo), non blocchiamo
+        // l'utente: cadiamo sul FAB fatto a mano qui sotto.
+    }
+    return createPlainFab(activity, sizeDp, backgroundColor)
+}
+
+private fun createMaterialFab(
+    activity: Activity,
+    backgroundColor: Int,
+): com.google.android.material.floatingactionbutton.FloatingActionButton =
+    com.google.android.material.floatingactionbutton.FloatingActionButton(activity).apply {
+        backgroundTintList = ColorStateList.valueOf(backgroundColor)
+        imageTintList = ColorStateList.valueOf(android.graphics.Color.WHITE)
+    }
+
+private fun createPlainFab(activity: Activity, sizeDp: Int, backgroundColor: Int): FabButton {
     val density = activity.resources.displayMetrics.density
     val sizePx = (sizeDp * density).toInt()
 

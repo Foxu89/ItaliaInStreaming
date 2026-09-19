@@ -56,8 +56,12 @@ class WatchPartyPlugin : Plugin() {
             Log.e(TAG, "❌ openSettingsSheet(): il cast ad AppCompatActivity è fallito, esco senza fare nulla (era questo il bug del 'non succede niente'?)")
             return
         }
-        Log.d(TAG, "📄 openSettingsSheet(): apro il DialogFragment")
-        WatchPartySettingsFragment(this, manager).show(activity.supportFragmentManager, "WatchParty")
+        Log.d(TAG, "📄 openSettingsSheet(): apro il foglio impostazioni (${if (WatchPartyPlayback.isCloudStreamHost) "CloudStream" else "Nuvio"})")
+        if (WatchPartyPlayback.isCloudStreamHost) {
+            WatchPartySettingsFragmentCloudStream(this, manager).show(activity.supportFragmentManager, "WatchParty")
+        } else {
+            WatchPartySettingsFragmentNuvio(this, manager).show(activity.supportFragmentManager, "WatchParty")
+        }
     }
 
     init {

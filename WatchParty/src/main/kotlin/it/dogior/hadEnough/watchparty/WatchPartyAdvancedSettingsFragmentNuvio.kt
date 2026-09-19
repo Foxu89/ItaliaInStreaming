@@ -35,9 +35,9 @@ private const val TAG = "WatchParty"
  *  touchpad della posizione icona chat: sono due DialogFragment
  *  distinti, quindi due Window separate, ed entrambe devono farsi
  *  semi-trasparenti insieme per vedere l'icona vera sotto. */
-class WatchPartyAdvancedSettingsFragment(
+class WatchPartyAdvancedSettingsFragmentNuvio(
     private val plugin: Plugin,
-    private val parentSettingsFragment: WatchPartySettingsFragment? = null,
+    private val parentSettingsFragment: WatchPartySettingsFragmentNuvio? = null,
 ) : DialogFragment() {
 
     private fun <T : View> View.findView(name: String): T {
@@ -63,6 +63,7 @@ class WatchPartyAdvancedSettingsFragment(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
         )
+        dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
     }
 
     private fun dp(value: Int): Int =

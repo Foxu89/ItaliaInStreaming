@@ -45,14 +45,6 @@ class WatchPartyOverlay(
 ) {
 
     companion object {
-        // TEMPORANEO: mostra ogni ~3s un Toast con lo stato di
-        // WatchPartyPlayback.debugSnapshot(), per capire perché l'icona non
-        // appare su un host senza bisogno di adb/logcat. Rimetti a false
-        // (o cancella questo blocco e le righe che lo usano in sync())
-        // una volta risolto.
-        private const val DEBUG_TOASTS = true
-        private const val DEBUG_TOAST_INTERVAL_MS = 4000L
-
         private const val KEY_POS_X = "wp_chat_icon_pos_x" // percent (0-100), centro icona, X
         private const val KEY_POS_Y = "wp_chat_icon_pos_y" // percent (0-100), centro icona, Y
         const val CHAT_ICON_SIZE_DP = 40
