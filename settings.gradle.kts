@@ -10,13 +10,13 @@ include(
 //    "AnimeUnity",
 //    "AnimeWorld",
 //    "Arte",
-    "CalcioStreaming",
+//    "CalcioStreaming",
 //    "CB01",
 //    "Cinemacity",
 //    "CorsaroNero",
 //    "DaddyLive",
 //    "GuardaSerie",
-    "GuardaPlay",
+//    "GuardaPlay",
 //    "Huhu",
 //    "IlGenioDelloStreaming",
     "OnlineSerieTV",
@@ -30,6 +30,6 @@ include(
     "ToonItalia",
 //    "Torrentio"
     "WatchParty",
-    "DiscordRPC",
+//    "DiscordRPC",
 //    "YouTube"
 )
