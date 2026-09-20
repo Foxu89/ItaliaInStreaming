@@ -90,8 +90,9 @@ class WatchPartySettingsFragmentNuvio(
             ViewGroup.LayoutParams.WRAP_CONTENT,
         )
         // Sfondo di sistema del dialog (grigio, angoli squadrati) fuori
-        // dai piedi: lo sfondo vero arrotondato lo dà già il layout
-        // (android:background="@drawable/watchparty_panel_background").
+        // dai piedi: lo sfondo vero arrotondato lo dà onCreateView() via
+        // getDrawable("watchparty_panel_background") (non l'XML — vedi lì
+        // il perché).
         dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
     }
 
@@ -102,6 +103,13 @@ class WatchPartySettingsFragmentNuvio(
         android.util.Log.d(TAG, "📄 onCreateView() inizio")
 
         val root = getLayout("watchparty_settings", inflater, container)
+        // Sfondo impostato qui (non nell'XML con @drawable/...): per un
+        // plugin con risorse agganciate dinamicamente, i riferimenti
+        // @drawable/ dentro un layout XML non si risolvono in modo
+        // affidabile — probabile causa del pannello "trasparente/invisibile".
+        // getDrawable() invece è lo stesso meccanismo già usato ovunque nel
+        // resto del plugin, verificato funzionante.
+        root.background = getDrawable("watchparty_panel_background")
 
         val statusCard = root.findView<View>("wp_status_card")
         val status = root.findView<TextView>("wp_status")

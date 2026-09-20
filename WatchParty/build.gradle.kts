@@ -33,7 +33,7 @@ dependencies {
 }
 
 
-version = 13
+version = 14
 
 android {
     defaultConfig {

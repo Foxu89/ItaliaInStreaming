@@ -74,6 +74,10 @@ class WatchPartyAdvancedSettingsFragmentNuvio(
         savedInstanceState: Bundle?
     ): View? = try {
         val root = getLayout("watchparty_settings_advanced", inflater, container)
+        // Vedi WatchPartySettingsFragmentNuvio.kt: sfondo via getDrawable()
+        // qui, non via @drawable/ nell'XML (inaffidabile per risorse
+        // agganciate dinamicamente).
+        root.background = getDrawable("watchparty_panel_background")
 
         val optionsCard = root.findView<View>("wpa_options_card")
         val invisibleButtonSwitch = root.findView<Switch>("wpa_invisible_button")
