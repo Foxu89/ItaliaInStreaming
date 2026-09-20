@@ -23,6 +23,22 @@ import com.lagradost.cloudstream3.plugins.Plugin
 import it.dogior.hadEnough.BuildConfig
 
 /**
+ * Le due icone flottanti indipendenti del plugin, ciascuna con la propria
+ * posizione salvabile via touchpad in Impostazioni avanzate:
+ *  - MAIN: l'icona Watch Party vera e propria (due persone), sempre
+ *    visibile col player aperto, apre il menu creazione/ingresso stanza.
+ *  - CHAT: l'icona fumetto, visibile solo a stanza attiva, apre/chiude il
+ *    pannello chat.
+ * Le chiavi di CHAT sono quelle storiche ("wp_chat_icon_pos_x/y", da
+ * prima che esistesse questo enum): non cambiate, per non perdere la
+ * posizione custom già salvata da chi aggiorna il plugin.
+ */
+enum class OverlayIcon(val keyX: String, val keyY: String, val sizeDp: Int, val drawableName: String) {
+    CHAT("wp_chat_icon_pos_x", "wp_chat_icon_pos_y", WatchPartyOverlay.CHAT_ICON_SIZE_DP, "chat_bubble"),
+    MAIN("wp_main_icon_pos_x", "wp_main_icon_pos_y", WatchPartyOverlay.MAIN_ICON_SIZE_DP, "watchparty_icon"),
+}
+
+/**
  * Aggiunge un piccolo FAB sopra il decorView dell'activity, visibile solo
  * mentre la schermata del player è aperta. Non tocca il layout XML del
  * player (che è interno all'app): si limita ad appoggiarsi sopra, come
@@ -45,39 +61,53 @@ class WatchPartyOverlay(
 ) {
 
     companion object {
-        private const val KEY_POS_X = "wp_chat_icon_pos_x" // percent (0-100), centro icona, X
-        private const val KEY_POS_Y = "wp_chat_icon_pos_y" // percent (0-100), centro icona, Y
         const val CHAT_ICON_SIZE_DP = 40
+        const val MAIN_ICON_SIZE_DP = 56
 
-        /** Posizione salvata (percentuale del centro dell'icona sullo schermo).
-         *  null = nessuna posizione custom, si usa quella di default (bordo
-         *  sinistro, centro verticale — comportamento storico del plugin). */
-        fun savedPositionPercent(): Pair<Float, Float>? {
-            val x = CloudStreamApp.getKey<String>(KEY_POS_X)?.toFloatOrNull()
-            val y = CloudStreamApp.getKey<String>(KEY_POS_Y)?.toFloatOrNull()
+        /** Posizione salvata (percentuale del centro dell'icona sullo schermo)
+         *  per [icon]. null = nessuna posizione custom, si usa quella di
+         *  default (comportamento storico del plugin per ciascuna icona). */
+        fun savedPositionPercent(icon: OverlayIcon): Pair<Float, Float>? {
+            val x = CloudStreamApp.getKey<String>(icon.keyX)?.toFloatOrNull()
+            val y = CloudStreamApp.getKey<String>(icon.keyY)?.toFloatOrNull()
             return if (x != null && y != null) x to y else null
         }
 
-        fun savePositionPercent(xPercent: Float, yPercent: Float) {
-            CloudStreamApp.setKey(KEY_POS_X, xPercent.coerceIn(0f, 100f).toString())
-            CloudStreamApp.setKey(KEY_POS_Y, yPercent.coerceIn(0f, 100f).toString())
+        fun savePositionPercent(icon: OverlayIcon, xPercent: Float, yPercent: Float) {
+            CloudStreamApp.setKey(icon.keyX, xPercent.coerceIn(0f, 100f).toString())
+            CloudStreamApp.setKey(icon.keyY, yPercent.coerceIn(0f, 100f).toString())
         }
 
-        fun resetPositionToDefault() {
-            CloudStreamApp.setKey(KEY_POS_X, "")
-            CloudStreamApp.setKey(KEY_POS_Y, "")
+        fun resetPositionToDefault(icon: OverlayIcon) {
+            CloudStreamApp.setKey(icon.keyX, "")
+            CloudStreamApp.setKey(icon.keyY, "")
         }
 
-        /** Equivalente in percentuale della vecchia posizione fissa (bordo
-         *  sinistro + 8dp, centro verticale): usato sia come fallback quando
-         *  non c'è una posizione custom, sia come punto di partenza
-         *  dell'editor con il touchpad. */
-        fun defaultPositionPercent(decorWidthPx: Int, decorHeightPx: Int, density: Float): Pair<Float, Float> {
-            val marginStartPx = 8 * density
-            val iconSizePx = CHAT_ICON_SIZE_DP * density
-            val cx = marginStartPx + iconSizePx / 2f
-            val xPercent = if (decorWidthPx > 0) (cx / decorWidthPx * 100f) else 5f
-            return xPercent.coerceIn(0f, 100f) to 50f
+        /** Equivalente in percentuale della vecchia posizione fissa di
+         *  ciascuna icona (CHAT: bordo sinistro + 8dp, centro verticale;
+         *  MAIN: bordo in basso a destra, come sempre stata prima che
+         *  esistesse un editor di posizione per lei): usato sia come
+         *  fallback quando non c'è una posizione custom, sia come punto di
+         *  partenza dell'editor con il touchpad. */
+        fun defaultPositionPercent(icon: OverlayIcon, decorWidthPx: Int, decorHeightPx: Int, density: Float): Pair<Float, Float> {
+            val iconSizePx = icon.sizeDp * density
+            return when (icon) {
+                OverlayIcon.CHAT -> {
+                    val marginStartPx = 8 * density
+                    val cx = marginStartPx + iconSizePx / 2f
+                    val xPercent = if (decorWidthPx > 0) (cx / decorWidthPx * 100f) else 5f
+                    xPercent.coerceIn(0f, 100f) to 50f
+                }
+                OverlayIcon.MAIN -> {
+                    val marginEndPx = 20 * density
+                    val marginBottomPx = 90 * density
+                    val cx = decorWidthPx - marginEndPx - iconSizePx / 2f
+                    val cy = decorHeightPx - marginBottomPx - iconSizePx / 2f
+                    val xPercent = if (decorWidthPx > 0) (cx / decorWidthPx * 100f) else 95f
+                    val yPercent = if (decorHeightPx > 0) (cy / decorHeightPx * 100f) else 85f
+                    xPercent.coerceIn(0f, 100f) to yPercent.coerceIn(0f, 100f)
+                }
+            }
         }
     }
 
@@ -112,17 +142,18 @@ class WatchPartyOverlay(
     private var lastChatInvisible: Boolean? = null
     private var lastChatWidth = -1
     private var lastPosKey: String? = null
+    private var lastMainPosKey: String? = null
 
     /** Calcola i LayoutParams del "pomello" chat in base alla posizione
      *  salvata (percentuale del centro), o quella di default se non c'è
      *  nulla di custom. Ancorato TOP|START: i margini sono le coordinate
      *  effettive dell'angolo in alto a sinistra dell'icona. */
-    private fun buildHostParams(activity: Activity, size: Int): FrameLayout.LayoutParams {
+    private fun buildHostParams(activity: Activity, icon: OverlayIcon, size: Int): FrameLayout.LayoutParams {
         val decorView = activity.window?.decorView
         val decorW = decorView?.width?.takeIf { it > 0 } ?: activity.resources.displayMetrics.widthPixels
         val decorH = decorView?.height?.takeIf { it > 0 } ?: activity.resources.displayMetrics.heightPixels
-        val (xPercent, yPercent) = savedPositionPercent()
-            ?: defaultPositionPercent(decorW, decorH, activity.resources.displayMetrics.density)
+        val (xPercent, yPercent) = savedPositionPercent(icon)
+            ?: defaultPositionPercent(icon, decorW, decorH, activity.resources.displayMetrics.density)
         val cx = decorW * xPercent / 100f
         val cy = decorH * yPercent / 100f
         val left = (cx - size / 2f).coerceIn(0f, (decorW - size).coerceAtLeast(0).toFloat())
@@ -221,14 +252,14 @@ class WatchPartyOverlay(
         }
         // posizione icona: cambia anche a icona già costruita (salvata
         // dall'editor col touchpad mentre la stanza è già attiva)
-        val pos = savedPositionPercent()
+        val pos = savedPositionPercent(OverlayIcon.CHAT)
         val posKey = pos?.let { "${it.first},${it.second}" } ?: "default"
         if (posKey != lastPosKey) {
             lastPosKey = posKey
             val host = chatArrowHost ?: return
             val activity = CommonActivity.activity ?: return
             val size = dp(activity, CHAT_ICON_SIZE_DP)
-            host.layoutParams = buildHostParams(activity, size)
+            host.layoutParams = buildHostParams(activity, OverlayIcon.CHAT, size)
             host.requestLayout()
         }
     }
@@ -330,19 +361,13 @@ class WatchPartyOverlay(
             val id = res.getIdentifier("watchparty_icon", "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
             if (id != 0) res.getDrawable(id, null) else null
         }.getOrNull()
-        val button = createFabButton(activity).apply {
+        val size = dp(activity, OverlayIcon.MAIN.sizeDp)
+        val button = createFabButton(activity, sizeDp = OverlayIcon.MAIN.sizeDp).apply {
             if (iconDrawable != null) setImageDrawable(iconDrawable)
             else setImageResource(android.R.drawable.ic_menu_share)
             setOnClickListener { onClick() }
         }
-        val params = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply {
-            gravity = Gravity.BOTTOM or Gravity.END
-            marginEnd = dp(activity, 20)
-            bottomMargin = dp(activity, 90) // sopra la barra di controllo del player
-        }
+        val params = buildHostParams(activity, OverlayIcon.MAIN, size)
         runCatching { decor.addView(button, params) }.onSuccess {
             fab = button
             attachedActivity = activity
@@ -356,6 +381,18 @@ class WatchPartyOverlay(
             android.util.Log.d("WatchParty", "🙈 WatchPartyOverlay: pulsante impostato INVISIBILE (wp_button_invisible=true) — resta cliccabile ma non si vede")
         }
         button.alpha = if (invisible) 0f else 1f
+
+        // posizione icona: cambia anche a icona già costruita (salvata
+        // dall'editor col touchpad mentre il FAB è già visibile)
+        val activity = CommonActivity.activity ?: return
+        val pos = savedPositionPercent(OverlayIcon.MAIN)
+        val posKey = pos?.let { "${it.first},${it.second}" } ?: "default"
+        if (posKey != lastMainPosKey) {
+            lastMainPosKey = posKey
+            val size = dp(activity, OverlayIcon.MAIN.sizeDp)
+            button.layoutParams = buildHostParams(activity, OverlayIcon.MAIN, size)
+            button.requestLayout()
+        }
     }
 
     private fun removeFab() {
@@ -364,6 +401,7 @@ class WatchPartyOverlay(
         runCatching { parent?.removeView(button) }
         fab = null
         attachedActivity = null
+        lastMainPosKey = null
     }
 
     // ---------------------------------------------------------------------
@@ -415,7 +453,7 @@ class WatchPartyOverlay(
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(activity, 9), dp(activity, 9), dp(activity, 12), dp(activity, 9))
         }
-        val hostParams = buildHostParams(activity, size)
+        val hostParams = buildHostParams(activity, OverlayIcon.CHAT, size)
         // sfondo circolare semitrasparente
         host.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL

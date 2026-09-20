@@ -4,6 +4,13 @@ import org.jetbrains.kotlin.konan.properties.Properties
 
 plugins {
     id("org.jetbrains.kotlin.plugin.serialization") version "2.4.0"
+    // Necessario per compilare la sintassi @Composable in
+    // WatchPartyComposeSwitch.kt (i toggle Material3 di CloudStream).
+    // Stessa versione del plugin serialization qui sopra: i plugin
+    // compilatore Kotlin di JetBrains condividono il numero di versione
+    // con la versione di Kotlin del progetto, non sono versionati a parte
+    // come una libreria qualunque.
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.0"
 }
 
 dependencies {
@@ -30,10 +37,22 @@ dependencies {
     // qualche motivo finisse comunque nel dex del plugin non farebbe danno,
     // ma non è necessario.
     compileOnly("com.google.android.material:material:1.4.0")
+    // Solo per compilare contro androidx.compose.material3.Switch e
+    // ComposeView (usati solo su CloudStream, che porta con sé Compose
+    // Multiplatform — vedi WatchPartyComposeSwitch.kt). CloudStream
+    // pubblica queste classi sotto org.jetbrains.compose.* su Maven, ma
+    // per il target Android il codice compilato usa lo stesso namespace
+    // androidx.compose.* delle librerie AndroidX Compose "vere" (Compose
+    // Multiplatform per Android si appoggia a quelle, non le reimplementa):
+    // ecco perché qui possiamo usare le coordinate AndroidX standard pur
+    // sapendo che l'host userà la sua build Compose Multiplatform.
+    compileOnly("androidx.compose.material3:material3:1.2.1")
+    compileOnly("androidx.compose.ui:ui:1.6.7")
+    compileOnly("androidx.compose.runtime:runtime:1.6.7")
 }
 
 
-version = 14
+version = 15
 
 android {
     defaultConfig {

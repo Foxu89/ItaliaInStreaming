@@ -14,7 +14,6 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.Switch
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -33,9 +32,15 @@ private const val TAG = "WatchParty"
  *
  *  [parentSettingsFragment] è passato solo per poter attenuare (dim) anche
  *  IL FOGLIO SOTTOSTANTE (WatchPartySettingsFragment) durante l'editor con
- *  touchpad della posizione icona chat: sono due BottomSheetDialogFragment
+ *  touchpad della posizione icona: sono due BottomSheetDialogFragment
  *  distinti, quindi due Window separate, ed entrambe devono farsi
- *  semi-trasparenti insieme per vedere l'icona vera sotto. */
+ *  semi-trasparenti insieme per vedere l'icona vera sotto.
+ *
+ *  Ci sono DUE icone indipendenti, ciascuna col proprio touchpad di
+ *  posizione (vedi OverlayIcon in WatchPartyOverlay.kt): l'icona Watch
+ *  Party (apre il menu) e l'icona chat (apre/chiude il pannello chat,
+ *  visibile solo a stanza attiva). Tutta la logica del touchpad qui sotto
+ *  è parametrizzata su quale delle due si sta spostando. */
 class WatchPartyAdvancedSettingsFragmentCloudStream(
     private val plugin: Plugin,
     private val parentSettingsFragment: WatchPartySettingsFragmentCloudStream? = null,
@@ -75,24 +80,50 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
     ): View? = try {
         val root = getLayout("watchparty_settings_advanced", inflater, container)
 
-        val optionsCard = root.findView<View>("wpa_options_card")
-        val invisibleButtonSwitch = root.findView<Switch>("wpa_invisible_button")
-        val invisibleChatSwitch = root.findView<Switch>("wpa_invisible_chat")
-        val themeCard = root.findView<LinearLayout>("wpa_theme_card")
-        val glowCard = root.findView<View>("wpa_glow_card")
-        val glowSwitch = root.findView<Switch>("wpa_glow")
+        // --- Icona Watch Party: invisibile + posizione ---
+        val mainIconCard = root.findView<View>("wpa_main_icon_card")
+        val invisibleButtonHost = root.findView<FrameLayout>("wpa_invisible_button_host")
+        mainIconCard.background = getDrawable("outline")
 
-        optionsCard.background = getDrawable("outline")
-        themeCard.background = getDrawable("outline")
-        glowCard.background = getDrawable("outline")
-
-        invisibleButtonSwitch.isChecked = CloudStreamApp.getKey<String>("wp_button_invisible") == "true"
-        invisibleButtonSwitch.setOnCheckedChangeListener { _, checked ->
+        mountToggle(
+            invisibleButtonHost,
+            initialChecked = CloudStreamApp.getKey<String>("wp_button_invisible") == "true",
+        ) { checked ->
             CloudStreamApp.setKey("wp_button_invisible", if (checked) "true" else "false")
         }
 
-        invisibleChatSwitch.isChecked = CloudStreamApp.getKey<String>("wp_chat_invisible") == "true"
-        invisibleChatSwitch.setOnCheckedChangeListener { _, checked ->
+        val positionPadMain = root.findView<FrameLayout>("wpa_position_pad_main")
+        val positionHintMain = root.findView<TextView>("wpa_position_hint_main")
+        val positionStatusMain = root.findView<TextView>("wpa_position_status_main")
+        val positionResetMain = root.findView<TextView>("wpa_position_reset_main")
+        positionPadMain.background = getDrawable("outline_blue")
+        positionResetMain.background = getDrawable("outline")
+
+        fun refreshPositionStatus(icon: OverlayIcon, status: TextView) {
+            status.text = if (WatchPartyOverlay.savedPositionPercent(icon) != null)
+                "Custom position saved" else "Using the default position"
+        }
+        refreshPositionStatus(OverlayIcon.MAIN, positionStatusMain)
+        positionResetMain.setOnClickListener {
+            WatchPartyOverlay.resetPositionToDefault(OverlayIcon.MAIN)
+            refreshPositionStatus(OverlayIcon.MAIN, positionStatusMain)
+            showToast("Position reset to default")
+        }
+        setupPositionPad(OverlayIcon.MAIN, positionPadMain, positionHintMain) {
+            refreshPositionStatus(OverlayIcon.MAIN, positionStatusMain)
+        }
+
+        // --- Chat: invisibile, larghezza, tema, glow, posizione ---
+        val chatCard = root.findView<View>("wpa_chat_card")
+        val invisibleChatHost = root.findView<FrameLayout>("wpa_invisible_chat_host")
+        val themeCard = root.findView<LinearLayout>("wpa_theme_card")
+        val glowHost = root.findView<FrameLayout>("wpa_glow_host")
+        chatCard.background = getDrawable("outline")
+
+        mountToggle(
+            invisibleChatHost,
+            initialChecked = CloudStreamApp.getKey<String>("wp_chat_invisible") == "true",
+        ) { checked ->
             CloudStreamApp.setKey("wp_chat_invisible", if (checked) "true" else "false")
         }
 
@@ -121,8 +152,7 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         chatWidthInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveChatWidth() }
 
         glow = CloudStreamApp.getKey<String>("wp_chat_glow") == "true"
-        glowSwitch.isChecked = glow
-        glowSwitch.setOnCheckedChangeListener { _, checked ->
+        mountToggle(glowHost, initialChecked = glow) { checked ->
             CloudStreamApp.setKey("wp_chat_glow", if (checked) "true" else "false")
             glow = checked
             previewRefreshers.forEach { it() }
@@ -141,19 +171,15 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         positionPad.background = getDrawable("outline_blue")
         positionReset.background = getDrawable("outline")
 
-        fun refreshPositionStatus() {
-            positionStatus.text = if (WatchPartyOverlay.savedPositionPercent() != null)
-                "Custom position saved" else "Using the default position"
-        }
-        refreshPositionStatus()
-
+        refreshPositionStatus(OverlayIcon.CHAT, positionStatus)
         positionReset.setOnClickListener {
-            WatchPartyOverlay.resetPositionToDefault()
-            refreshPositionStatus()
+            WatchPartyOverlay.resetPositionToDefault(OverlayIcon.CHAT)
+            refreshPositionStatus(OverlayIcon.CHAT, positionStatus)
             showToast("Position reset to default")
         }
-
-        setupPositionPad(positionPad, positionHint) { refreshPositionStatus() }
+        setupPositionPad(OverlayIcon.CHAT, positionPad, positionHint) {
+            refreshPositionStatus(OverlayIcon.CHAT, positionStatus)
+        }
 
         root
     } catch (e: Exception) {
@@ -162,12 +188,12 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
     }
 
     // -----------------------------------------------------------------
-    // Touchpad relativo per la posizione dell'icona chat
+    // Touchpad relativo per la posizione delle icone (chat e Watch Party)
     // -----------------------------------------------------------------
 
     private val positionHandler = Handler(Looper.getMainLooper())
-    private var positionPreviewHost: FrameLayout? = null
-    private var positionMoveActive = false
+    private val positionPreviewHosts = mutableMapOf<OverlayIcon, FrameLayout>()
+    private val positionMoveActiveMap = mutableMapOf<OverlayIcon, Boolean>()
 
     /** Attenua/ripristina insieme sia questo foglio (Impostazioni avanzate)
      *  sia quello sottostante (Watch Party), animando l'alpha dell'intera
@@ -183,19 +209,20 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
     /** Crea un'icona "gemella" di quella vera (stesso drawable, stessa
      *  dimensione, stesso sfondo circolare) sopra il decorView
      *  dell'Activity, nella posizione attualmente salvata (o quella di
-     *  default). Non riusiamo direttamente WatchPartyOverlay.chatArrowHost
-     *  perché quello esiste solo a stanza attiva: l'editor deve funzionare
-     *  anche fuori da una stanza, quindi lavoriamo su una copia visiva
+     *  default) per [icon]. Non riusiamo direttamente le view vere del
+     *  FAB/della chat perché quelle esistono solo in certe condizioni (il
+     *  FAB solo col player aperto, la chat solo a stanza attiva): l'editor
+     *  deve funzionare sempre, quindi lavoriamo su una copia visiva
      *  identica e scriviamo la posizione finale al rilascio. */
-    private fun showPositionPreview(): FrameLayout? {
+    private fun showPositionPreview(icon: OverlayIcon): FrameLayout? {
         val activity = CommonActivity.activity ?: return null
         val decor = activity.window?.decorView as? ViewGroup ?: return null
         val density = activity.resources.displayMetrics.density
-        val size = (WatchPartyOverlay.CHAT_ICON_SIZE_DP * density).toInt()
+        val size = (icon.sizeDp * density).toInt()
         val decorW = decor.width.takeIf { it > 0 } ?: activity.resources.displayMetrics.widthPixels
         val decorH = decor.height.takeIf { it > 0 } ?: activity.resources.displayMetrics.heightPixels
-        val (xPercent, yPercent) = WatchPartyOverlay.savedPositionPercent()
-            ?: WatchPartyOverlay.defaultPositionPercent(decorW, decorH, density)
+        val (xPercent, yPercent) = WatchPartyOverlay.savedPositionPercent(icon)
+            ?: WatchPartyOverlay.defaultPositionPercent(icon, decorW, decorH, density)
 
         val host = FrameLayout(activity).apply {
             background = GradientDrawable().apply {
@@ -203,12 +230,12 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
                 setColor(0x99000000.toInt())
             }
         }
-        val icon = ImageView(activity).apply {
-            setImageDrawable(getDrawable("chat_bubble") ?: getDrawable("watchparty_icon"))
+        val iconView = ImageView(activity).apply {
+            setImageDrawable(getDrawable(icon.drawableName) ?: getDrawable("watchparty_icon"))
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(9), dp(9), dp(12), dp(9))
         }
-        host.addView(icon, FrameLayout.LayoutParams(size, size))
+        host.addView(iconView, FrameLayout.LayoutParams(size, size))
 
         val cx = decorW * xPercent / 100f
         val cy = decorH * yPercent / 100f
@@ -221,11 +248,12 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         return runCatching { decor.addView(host, params) }.map { host }.getOrNull()
     }
 
-    /** Applica uno spostamento RELATIVO (delta) al centro dell'icona anteprima,
-     *  clampato dentro lo schermo. Questo è il cuore del comportamento "trackpad":
-     *  non conta la posizione assoluta del dito, solo quanto si è mosso. */
-    private fun movePositionPreviewBy(dx: Float, dy: Float) {
-        val host = positionPreviewHost ?: return
+    /** Applica uno spostamento RELATIVO (delta) al centro dell'icona anteprima
+     *  di [icon], clampato dentro lo schermo. Questo è il cuore del
+     *  comportamento "trackpad": non conta la posizione assoluta del dito,
+     *  solo quanto si è mosso. */
+    private fun movePositionPreviewBy(icon: OverlayIcon, dx: Float, dy: Float) {
+        val host = positionPreviewHosts[icon] ?: return
         val activity = CommonActivity.activity ?: return
         val decor = activity.window?.decorView as? ViewGroup ?: return
         val params = host.layoutParams as? FrameLayout.LayoutParams ?: return
@@ -244,10 +272,11 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         host.layoutParams = params
     }
 
-    /** Salva la posizione finale (in percentuale, come richiesto — non pixel
-     *  fissi, per portabilità tra dispositivi) e rimuove l'anteprima. */
-    private fun savePositionPreviewAndRemove() {
-        val host = positionPreviewHost ?: return
+    /** Salva la posizione finale di [icon] (in percentuale, come richiesto —
+     *  non pixel fissi, per portabilità tra dispositivi) e rimuove
+     *  l'anteprima. */
+    private fun savePositionPreviewAndRemove(icon: OverlayIcon) {
+        val host = positionPreviewHosts[icon] ?: return
         val activity = CommonActivity.activity
         val decor = activity?.window?.decorView as? ViewGroup
         val tag = host.tag as? FloatArray
@@ -256,15 +285,15 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
             val decorH = decor?.height?.takeIf { it > 0 } ?: activity.resources.displayMetrics.heightPixels
             val xPercent = (tag[0] / decorW * 100f).coerceIn(0f, 100f)
             val yPercent = (tag[1] / decorH * 100f).coerceIn(0f, 100f)
-            WatchPartyOverlay.savePositionPercent(xPercent, yPercent)
+            WatchPartyOverlay.savePositionPercent(icon, xPercent, yPercent)
         }
         (host.parent as? ViewGroup)?.removeView(host)
-        positionPreviewHost = null
+        positionPreviewHosts.remove(icon)
     }
 
-    private fun discardPositionPreview() {
-        positionPreviewHost?.let { (it.parent as? ViewGroup)?.removeView(it) }
-        positionPreviewHost = null
+    private fun discardPositionPreview(icon: OverlayIcon) {
+        positionPreviewHosts[icon]?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        positionPreviewHosts.remove(icon)
     }
 
     /** Sensibilità del movimento relativo: quanto si sposta l'icona vera per
@@ -273,7 +302,7 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
     private val positionSensitivity = 2.4f
 
     @Suppress("ClickableViewAccessibility")
-    private fun setupPositionPad(pad: View, hint: TextView, onCommitted: () -> Unit) {
+    private fun setupPositionPad(icon: OverlayIcon, pad: View, hint: TextView, onCommitted: () -> Unit) {
         val touchSlopPx = dp(16)
         var downX = 0f
         var downY = 0f
@@ -281,25 +310,25 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         var lastY = 0f
 
         val activateRunnable = Runnable {
-            positionMoveActive = true
+            positionMoveActiveMap[icon] = true
             pad.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             hint.visibility = View.INVISIBLE
             setSheetsDimmed(true)
-            positionPreviewHost = showPositionPreview()
+            showPositionPreview(icon)?.let { positionPreviewHosts[icon] = it }
         }
 
         pad.setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     v.parent?.requestDisallowInterceptTouchEvent(true)
-                    positionMoveActive = false
+                    positionMoveActiveMap[icon] = false
                     downX = event.rawX; downY = event.rawY
                     lastX = event.rawX; lastY = event.rawY
                     positionHandler.postDelayed(activateRunnable, 2000L)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (!positionMoveActive) {
+                    if (positionMoveActiveMap[icon] != true) {
                         // movimento prima dei 2s = l'utente vuole scrollare, non
                         // attivare la modalità sposta: annulliamo il timer
                         val moved = hypot((event.rawX - downX).toDouble(), (event.rawY - downY).toDouble())
@@ -309,17 +338,17 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
                     val dx = (event.rawX - lastX) * positionSensitivity
                     val dy = (event.rawY - lastY) * positionSensitivity
                     lastX = event.rawX; lastY = event.rawY
-                    movePositionPreviewBy(dx, dy)
+                    movePositionPreviewBy(icon, dx, dy)
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     positionHandler.removeCallbacks(activateRunnable)
                     v.parent?.requestDisallowInterceptTouchEvent(false)
-                    if (positionMoveActive) {
-                        positionMoveActive = false
+                    if (positionMoveActiveMap[icon] == true) {
+                        positionMoveActiveMap[icon] = false
                         hint.visibility = View.VISIBLE
                         setSheetsDimmed(false)
-                        savePositionPreviewAndRemove()
+                        savePositionPreviewAndRemove(icon)
                         onCommitted()
                     }
                     true
@@ -332,12 +361,15 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
     override fun onDestroyView() {
         // rete di sicurezza: se il fragment viene distrutto a metà di un drag
         // (es. utente esce con back/gesture di sistema), non lasciamo le
-        // window a metà trasparenza né l'anteprima orfana sullo schermo.
+        // window a metà trasparenza né l'anteprima orfana sullo schermo,
+        // per NESSUNA delle due icone.
         positionHandler.removeCallbacksAndMessages(null)
-        if (positionMoveActive) {
-            positionMoveActive = false
-            setSheetsDimmed(false)
-            discardPositionPreview()
+        OverlayIcon.entries.forEach { icon ->
+            if (positionMoveActiveMap[icon] == true) {
+                positionMoveActiveMap[icon] = false
+                setSheetsDimmed(false)
+                discardPositionPreview(icon)
+            }
         }
         super.onDestroyView()
     }
