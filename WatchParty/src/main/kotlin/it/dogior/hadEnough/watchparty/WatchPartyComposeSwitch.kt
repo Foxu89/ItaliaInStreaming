@@ -1,26 +1,57 @@
 package it.dogior.hadEnough.watchparty
 
+import android.content.Context
 import android.util.Log
-import android.view.View
+import android.util.TypedValue
 import android.widget.FrameLayout
-import android.widget.Switch
+import androidx.appcompat.widget.SwitchCompat
 
 private const val TAG = "WatchParty"
 
 /**
+ * Colore "accento" del tema reale dell'app (quello che CloudStream/Nuvio
+ * usano per interruttori/pulsanti attivi), letto dal Context invece di
+ * essere hardcoded. Senza questo, uno Switch costruito a mano (Compose o
+ * SwitchCompat che sia) non eredita automaticamente i colori del tema
+ * come faceva quello scritto nell'XML — da qui il colore sbagliato che
+ * si vedeva prima di questo fix.
+ *
+ * Prova prima colorAccent di AppCompat (quello che il tema di CloudStream
+ * imposta davvero), poi quello di sistema, poi un blu fisso come ultima
+ * rete di sicurezza — mai un crash per questo.
+ */
+private fun themeAccentColor(context: Context): Int {
+    val typedValue = TypedValue()
+    val fromAppCompat = runCatching {
+        val a = context.theme.obtainStyledAttributes(intArrayOf(androidx.appcompat.R.attr.colorAccent))
+        val color = a.getColor(0, 0)
+        a.recycle()
+        color.takeIf { it != 0 }
+    }.getOrNull()
+    if (fromAppCompat != null) return fromAppCompat
+
+    val fromPlatform = runCatching {
+        if (context.theme.resolveAttribute(android.R.attr.colorAccent, typedValue, true)) typedValue.data else null
+    }.getOrNull()
+    if (fromPlatform != null) return fromPlatform
+
+    return 0xFF2E7DFF.toInt() // stesso blu di riserva già usato altrove nel plugin
+}
+
+/**
  * Monta un interruttore dentro [host] (un FrameLayout vuoto nell'XML,
  * "wpa_xxx_host"): un vero Material3 Compose Switch se siamo su
- * CloudStream e Compose risolve, altrimenti un android.widget.Switch
- * classico (identico a quello che c'era prima).
+ * CloudStream e Compose risolve, altrimenti un SwitchCompat classico
+ * (stesso identico widget/colori di quando era scritto nell'XML — NON
+ * android.widget.Switch grezzo: quello NON si tinge come l'originale,
+ * perché l'"upgrade" automatico a SwitchCompat lo fa AppCompat solo
+ * quando la view è inflazionata da XML, non quando è costruita a mano).
+ * Entrambi i rami prendono il colore vero dal tema con themeAccentColor(),
+ * invece di un colore fisso scollegato dal tema dell'app.
  *
- * NOTA IMPORTANTE — questa è la parte meno testabile di tutto il lavoro
- * fatto finora: Compose-in-Fragment è un pattern diffuso e generalmente
- * affidabile, ma qui si aggiunge la variabile in più di girare dentro un
- * plugin con resources agganciate dinamicamente e un Context "identity"
- * verso CloudStream. Va verificato su un device vero prima di fidarsene
- * quanto il resto. Se qualsiasi cosa va storta, cade IMMEDIATAMENTE sullo
- * Switch nativo — mai un crash, nella peggiore delle ipotesi l'interruttore
- * torna quello di prima.
+ * NOTA — il ramo Compose resta la parte meno testabile di tutto il lavoro
+ * fatto finora (vedi NUVIO_COMPATIBILITY_NOTES.md): se qualsiasi cosa va
+ * storta, cade IMMEDIATAMENTE sul fallback — mai un crash.
  *
  * [initialChecked]/[onCheckedChange] hanno la stessa semantica di uno
  * Switch.setChecked/setOnCheckedChangeListener normale: il chiamante non
@@ -28,9 +59,10 @@ private const val TAG = "WatchParty"
  */
 fun mountToggle(host: FrameLayout, initialChecked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     host.removeAllViews()
+    val accent = themeAccentColor(host.context)
 
     val mountedCompose = if (WatchPartyPlayback.isCloudStreamHost) {
-        runCatching { mountComposeSwitch(host, initialChecked, onCheckedChange) }
+        runCatching { mountComposeSwitch(host, initialChecked, accent, onCheckedChange) }
             .onFailure { Log.w(TAG, "🧵 Compose Switch non montato, uso quello nativo", it) }
             .getOrDefault(false)
     } else {
@@ -38,7 +70,7 @@ fun mountToggle(host: FrameLayout, initialChecked: Boolean, onCheckedChange: (Bo
     }
 
     if (!mountedCompose) {
-        val switchView = Switch(host.context).apply {
+        val switchView = SwitchCompat(host.context).apply {
             showText = false
             isChecked = initialChecked
             setOnCheckedChangeListener { _, checked -> onCheckedChange(checked) }
@@ -59,9 +91,15 @@ fun mountToggle(host: FrameLayout, initialChecked: Boolean, onCheckedChange: (Bo
  * quelle classi non esistono lì (stessa protezione già usata per
  * FloatingActionButton/MaterialAlertDialogBuilder/IPlayer).
  */
-private fun mountComposeSwitch(host: FrameLayout, initialChecked: Boolean, onCheckedChange: (Boolean) -> Unit): Boolean {
+private fun mountComposeSwitch(
+    host: FrameLayout,
+    initialChecked: Boolean,
+    accentColorInt: Int,
+    onCheckedChange: (Boolean) -> Unit,
+): Boolean {
     val composeView = androidx.compose.ui.platform.ComposeView(host.context)
     val state = androidx.compose.runtime.mutableStateOf(initialChecked)
+    val accent = androidx.compose.ui.graphics.Color(accentColorInt)
     composeView.setContent {
         androidx.compose.material3.MaterialTheme {
             androidx.compose.material3.Switch(
@@ -70,6 +108,12 @@ private fun mountComposeSwitch(host: FrameLayout, initialChecked: Boolean, onChe
                     state.value = checked
                     onCheckedChange(checked)
                 },
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedThumbColor = accent,
+                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                    checkedBorderColor = accent,
+                    checkedIconColor = accent,
+                ),
             )
         }
     }
