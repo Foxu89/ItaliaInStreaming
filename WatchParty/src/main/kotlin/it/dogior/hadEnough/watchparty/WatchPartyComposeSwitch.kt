@@ -100,6 +100,9 @@ private fun mountComposeSwitch(
     val composeView = androidx.compose.ui.platform.ComposeView(host.context)
     val state = androidx.compose.runtime.mutableStateOf(initialChecked)
     val accent = androidx.compose.ui.graphics.Color(accentColorInt)
+    val white = androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+    val darkTrack = androidx.compose.ui.graphics.Color(0xFF35343A)
+    val lightGreyBorderAndThumb = androidx.compose.ui.graphics.Color(0xFF928F98)
     composeView.setContent {
         androidx.compose.material3.MaterialTheme {
             androidx.compose.material3.Switch(
@@ -109,10 +112,14 @@ private fun mountComposeSwitch(
                     onCheckedChange(checked)
                 },
                 colors = androidx.compose.material3.SwitchDefaults.colors(
-                    checkedThumbColor = accent,
-                    checkedTrackColor = accent.copy(alpha = 0.5f),
+                    // acceso: contorno e pista nel colore del tema, pallino bianco puro
+                    checkedThumbColor = white,
+                    checkedTrackColor = accent,
                     checkedBorderColor = accent,
-                    checkedIconColor = accent,
+                    // spento: pista #35343A, contorno e pallino #928F98 (valori estratti dal tema reale)
+                    uncheckedThumbColor = lightGreyBorderAndThumb,
+                    uncheckedTrackColor = darkTrack,
+                    uncheckedBorderColor = lightGreyBorderAndThumb,
                 ),
             )
         }
