@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
@@ -149,7 +150,7 @@ class WatchPartySettingsFragmentCloudStream(
                 setPadding(pad, pad / 2, pad, 0)
             }
 
-            fun permissionRow(title: String, checked: Boolean): android.widget.Switch {
+            fun permissionRow(title: String, checked: Boolean): () -> Boolean {
                 val row = android.widget.LinearLayout(ctx).apply {
                     orientation = android.widget.LinearLayout.HORIZONTAL
                     gravity = android.view.Gravity.CENTER_VERTICAL
@@ -160,17 +161,19 @@ class WatchPartySettingsFragmentCloudStream(
                     textSize = 14f
                     layoutParams = android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 }
-                val switch = android.widget.Switch(ctx).apply { isChecked = checked }
+                val toggleHost = FrameLayout(ctx)
+                var currentChecked = checked
+                mountToggle(toggleHost, checked) { newChecked -> currentChecked = newChecked }
                 row.addView(label)
-                row.addView(switch)
+                row.addView(toggleHost)
                 container.addView(row)
-                return switch
+                return { currentChecked }
             }
 
             val current = manager.guestPermissions
-            val playPauseSwitch = permissionRow("Can play/pause", current.canPlayPause)
-            val seekSwitch = permissionRow("Can seek", current.canSeek)
-            val nextEpisodeSwitch = permissionRow("Can change episode", current.canNextEpisode)
+            val playPauseChecked = permissionRow("Can play/pause", current.canPlayPause)
+            val seekChecked = permissionRow("Can seek", current.canSeek)
+            val nextEpisodeChecked = permissionRow("Can change episode", current.canNextEpisode)
 
             com.google.android.material.dialog.MaterialAlertDialogBuilder(ctx)
                 .setTitle("Permissions for guests")
@@ -178,9 +181,9 @@ class WatchPartySettingsFragmentCloudStream(
                 .setPositiveButton("Save") { _, _ ->
                     manager.sendPermissionsToGuest(
                         ParticipantPermissions(
-                            canPlayPause = playPauseSwitch.isChecked,
-                            canSeek = seekSwitch.isChecked,
-                            canNextEpisode = nextEpisodeSwitch.isChecked,
+                            canPlayPause = playPauseChecked(),
+                            canSeek = seekChecked(),
+                            canNextEpisode = nextEpisodeChecked(),
                         )
                     )
                     showToast("Permissions updated")

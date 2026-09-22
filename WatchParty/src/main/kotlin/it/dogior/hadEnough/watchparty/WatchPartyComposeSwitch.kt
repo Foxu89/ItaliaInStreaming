@@ -20,7 +20,7 @@ private const val TAG = "WatchParty"
  * imposta davvero), poi quello di sistema, poi un blu fisso come ultima
  * rete di sicurezza — mai un crash per questo.
  */
-private fun themeAccentColor(context: Context): Int {
+fun themeAccentColor(context: Context): Int {
     val typedValue = TypedValue()
     val fromAppCompat = runCatching {
         val a = context.theme.obtainStyledAttributes(intArrayOf(androidx.appcompat.R.attr.colorAccent))

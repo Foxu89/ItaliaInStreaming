@@ -2,6 +2,7 @@ package it.dogior.hadEnough.watchparty
 
 import android.os.Handler
 import android.os.Looper
+import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import it.dogior.hadEnough.BuildConfig
 import kotlinx.coroutines.CoroutineScope
@@ -66,7 +67,14 @@ class WatchPartyManager {
 
     companion object {
         const val MAX_PARTICIPANTS = 5
-        private const val POLL_INTERVAL_MS = 200L
+        /**
+         * Prima era una costante fissa (200ms). Ora leggibile/scrivibile da
+         * Impostazioni avanzate ("Sync polling"): letta fresca ad ogni
+         * ciclo di startPolling(), quindi un cambio nelle impostazioni ha
+         * effetto subito, senza dover riavviare la stanza.
+         */
+        fun pollIntervalMs(): Long =
+            CloudStreamApp.getKey<String>("wp_poll_interval_ms")?.toLongOrNull()?.coerceIn(50L, 400L) ?: 200L
         // Basta coprire il primo tick dopo aver applicato un comando remoto:
         // da lì in poi lastKnownPosition riflette già il nuovo valore, quindi
         // non serve una finestra lunga (era 900ms, bloccava click legittimi).
@@ -348,7 +356,7 @@ class WatchPartyManager {
         pollJob?.cancel()
         pollJob = scope.launch {
             while (isActive) {
-                delay(POLL_INTERVAL_MS)
+                delay(pollIntervalMs())
                 withContext(Dispatchers.Main) { pollLocalPlayer() }
             }
         }
@@ -388,7 +396,7 @@ class WatchPartyManager {
         // seek: salto di posizione più grande di quanto ci si aspetterebbe dal solo
         // scorrere del tempo tra un tick e l'altro. Ogni tick è valutato in modo
         // indipendente: click ravvicinati ma su tick diversi vengono inviati tutti.
-        val expectedDrift = POLL_INTERVAL_MS + 400L
+        val expectedDrift = pollIntervalMs() + 400L
         if (abs(position - prevPosition) > expectedDrift.coerceAtLeast(SEEK_JUMP_THRESHOLD_MS)) {
             if (role == Role.GUEST && !myPermissions.canSeek) {
                 revertUnauthorizedLocalChange(prevPosition, prevPlaying)

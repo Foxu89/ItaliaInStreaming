@@ -185,6 +185,45 @@ class WatchPartyAdvancedSettingsFragmentNuvio(
             refreshPositionStatus(OverlayIcon.CHAT, positionStatus)
         }
 
+        // --- Sync polling ---
+        val pollingCard = root.findView<View>("wpa_polling_card")
+        val pollingValue = root.findView<TextView>("wpa_polling_value")
+        val pollingInfo = root.findView<TextView>("wpa_polling_info")
+        val pollingSliderHost = root.findView<FrameLayout>("wpa_polling_slider_host")
+        pollingCard.background = getDrawable("outline")
+        pollingInfo.background = getDrawable("outline")
+
+        val pollingSteps = listOf(50, 100, 150, 200, 250, 300, 350, 400)
+        val currentPolling = WatchPartyManager.pollIntervalMs().toInt()
+        fun pollingLabel(ms: Int) = if (ms == 200) "$ms ms (default)" else "$ms ms"
+        pollingValue.text = pollingLabel(currentPolling)
+        mountSlider(pollingSliderHost, pollingSteps, currentPolling) { ms ->
+            CloudStreamApp.setKey("wp_poll_interval_ms", ms.toString())
+            pollingValue.text = pollingLabel(ms)
+        }
+        pollingInfo.setOnClickListener {
+            newAlertDialogBuilder(requireContext())
+                .setTitle("What is this?")
+                .setMessage(
+                    "WatchParty doesn't hook directly into the player: it checks its " +
+                        "position and play/pause state on a timer (\"polling\"), this many " +
+                        "milliseconds apart. This setting controls that timer.\n\n" +
+                        "Lower (e.g. 50ms) = the app notices a seek or a play/pause almost " +
+                        "instantly, sync feels tighter. But it means doing that check 4x more " +
+                        "often than the default — on an older or low-end device this can add " +
+                        "up and cause stutter in the player itself, not just in WatchParty.\n\n" +
+                        "Higher (e.g. 400ms) = much lighter on the device, but you and your " +
+                        "friends may drift out of sync for up to that long before it's " +
+                        "corrected.\n\n" +
+                        "200ms (the default) is a middle ground that works well on most " +
+                        "phones. Only lower it if your device is fast and you want tighter " +
+                        "sync; only raise it if you notice WatchParty itself causing lag."
+                )
+                .setPositiveButton("Got it", null)
+                .show()
+                .also { styleAsWatchPartyPanel(it, getDrawable("watchparty_panel_background")) }
+        }
+
         root
     } catch (e: Exception) {
         android.util.Log.e(TAG, "💥 ECCEZIONE in WatchPartyAdvancedSettingsFragment", e)
@@ -315,6 +354,12 @@ class WatchPartyAdvancedSettingsFragmentNuvio(
 
         val activateRunnable = Runnable {
             positionMoveActiveMap[icon] = true
+            // Solo QUI, quando la modalità sposta si attiva sul serio,
+            // blocchiamo lo scroll del foglio sottostante: prima di questo
+            // momento il tocco deve poter scorrere le impostazioni
+            // normalmente, altrimenti basta sfiorare il pad per bloccare
+            // lo scroll dell'intera pagina.
+            pad.parent?.requestDisallowInterceptTouchEvent(true)
             pad.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             hint.visibility = View.INVISIBLE
             setSheetsDimmed(true)
@@ -324,11 +369,15 @@ class WatchPartyAdvancedSettingsFragmentNuvio(
         pad.setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    v.parent?.requestDisallowInterceptTouchEvent(true)
                     positionMoveActiveMap[icon] = false
                     downX = event.rawX; downY = event.rawY
                     lastX = event.rawX; lastY = event.rawY
                     positionHandler.postDelayed(activateRunnable, 2000L)
+                    // NON blocca lo scroll qui: se il dito continua dritto
+                    // per scorrere, ci arriva un ACTION_CANCEL dal
+                    // NestedScrollView che intercetta da solo, e resettiamo
+                    // il timer lì sotto — esattamente come un tocco normale
+                    // su qualunque altra riga scrollabile della pagina.
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
