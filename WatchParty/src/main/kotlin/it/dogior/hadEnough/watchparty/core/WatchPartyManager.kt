@@ -168,19 +168,33 @@ class WatchPartyManager {
     val isConnected: Boolean get() = socket?.isOpen == true
 
     /**
-     * Nome del profilo CloudStream locale attivo, o "Guest" se non trovato.
+     * Nome del profilo locale attivo, o "Guest" se non trovato.
      *
-     * com.lagradost.cloudstream3.utils.DataStoreHelper non esiste a runtime
-     * su host che non portano con sé le classi complete di CloudStream (es.
-     * Nuvio Enhanced, che vendorizza solo un sottoinsieme minimo): senza
-     * runCatching questa chiamata lancerebbe NoClassDefFoundError non
-     * gestito, a differenza di PlayerAccess.kt che è già protetto per lo
-     * stesso motivo.
+     * Su CloudStream: com.lagradost.cloudstream3.utils.DataStoreHelper.
+     * DataStoreHelper non esiste a runtime su host che non portano con sé
+     * le classi complete di CloudStream (es. Nuvio Enhanced, che
+     * vendorizza solo un sottoinsieme minimo): senza runCatching questa
+     * chiamata lancerebbe NoClassDefFoundError non gestito, a differenza
+     * di PlayerAccess.kt che è già protetto per lo stesso motivo.
+     *
+     * Su Nuvio: DataStoreHelper non risolve mai (fallisce silenziosamente
+     * sopra), quindi si prova il profilo Nuvio via NuvioProfileName
+     * (stessa idea, letta via reflection dal ProfileRepository di Nuvio).
+     * Su CloudStream, dove Nuvio non esiste, NuvioProfileName fallisce
+     * altrettanto silenziosamente e non viene comunque quasi mai raggiunta
+     * perché DataStoreHelper trova già un nome.
      */
-    fun localDisplayName(): String = runCatching {
-        val account = DataStoreHelper.accounts.find { it.keyIndex == DataStoreHelper.selectedKeyIndex }
-        account?.name?.takeIf { it.isNotBlank() }
-    }.getOrNull() ?: "Guest"
+    fun localDisplayName(): String {
+        val cloudStreamName = runCatching {
+            val account = DataStoreHelper.accounts.find { it.keyIndex == DataStoreHelper.selectedKeyIndex }
+            account?.name?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+        if (cloudStreamName != null) return cloudStreamName
+
+        NuvioProfileName.currentName()?.let { return it }
+
+        return "Guest"
+    }
 
     private var socket: WatchPartySocket? = null
     private var relayUrl: String = DEFAULT_RELAY_URL

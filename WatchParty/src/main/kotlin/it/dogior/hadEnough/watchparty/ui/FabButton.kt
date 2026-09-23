@@ -35,7 +35,7 @@ import android.widget.ImageView
  */
 typealias FabButton = ImageButton
 
-fun createFabButton(activity: Activity, sizeDp: Int = 56, backgroundColor: Int = 0xFF2E7DFF.toInt()): FabButton {
+fun createFabButton(activity: Activity, sizeDp: Int = 56, backgroundColor: Int = 0x99000000.toInt()): FabButton {
     if (WatchPartyPlayback.isCloudStreamHost) {
         runCatching { createMaterialFab(activity, backgroundColor) }.getOrNull()?.let { return it }
         // Se anche su CloudStream qualcosa va storto (versione insolita
