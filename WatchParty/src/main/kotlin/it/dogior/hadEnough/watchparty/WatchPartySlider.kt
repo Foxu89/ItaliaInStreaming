@@ -65,13 +65,19 @@ private fun mountComposeSlider(
     val composeView = androidx.compose.ui.platform.ComposeView(host.context)
     val state = androidx.compose.runtime.mutableStateOf(initialIndex.toFloat())
     val accent = androidx.compose.ui.graphics.Color(accentColorInt)
+    // Colore fisso richiesto per: pista non selezionata + pallini degli scatti
+    // sulla parte selezionata (invertito rispetto ai pallini sulla parte non
+    // selezionata, che restano nel colore tema come la pista attiva).
+    val fixedTone = androidx.compose.ui.graphics.Color(0xFF494458)
     composeView.setContent {
         androidx.compose.material3.MaterialTheme {
             androidx.compose.material3.Slider(
                 value = state.value,
-                onValueChange = { state.value = it },
-                onValueChangeFinished = {
-                    val idx = state.value.toInt().coerceIn(0, steps.size - 1)
+                onValueChange = { newValue ->
+                    // Aggiornato in tempo reale (anche col dito ancora sopra),
+                    // non solo al rilascio: stesso comportamento di Nuvio.
+                    state.value = newValue
+                    val idx = newValue.toInt().coerceIn(0, steps.size - 1)
                     onValueChange(steps[idx])
                 },
                 valueRange = 0f..(steps.size - 1).toFloat(),
@@ -79,6 +85,9 @@ private fun mountComposeSlider(
                 colors = androidx.compose.material3.SliderDefaults.colors(
                     thumbColor = accent,
                     activeTrackColor = accent,
+                    inactiveTrackColor = fixedTone,
+                    activeTickColor = fixedTone,
+                    inactiveTickColor = accent,
                 ),
             )
         }

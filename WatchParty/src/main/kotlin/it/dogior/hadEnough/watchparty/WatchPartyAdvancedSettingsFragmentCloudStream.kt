@@ -188,10 +188,11 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         val pollingSliderHost = root.findView<FrameLayout>("wpa_polling_slider_host")
         pollingCard.background = getDrawable("outline")
         pollingInfo.background = getDrawable("outline")
+        pollingValue.background = getDrawable("outline")
 
         val pollingSteps = listOf(50, 100, 150, 200, 250, 300, 350, 400)
         val currentPolling = WatchPartyManager.pollIntervalMs().toInt()
-        fun pollingLabel(ms: Int) = if (ms == 200) "$ms ms (default)" else "$ms ms"
+        fun pollingLabel(ms: Int) = "$ms ms"
         pollingValue.text = pollingLabel(currentPolling)
         mountSlider(pollingSliderHost, pollingSteps, currentPolling) { ms ->
             CloudStreamApp.setKey("wp_poll_interval_ms", ms.toString())
