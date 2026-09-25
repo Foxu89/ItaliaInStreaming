@@ -86,7 +86,7 @@ object WatchPartyConsent {
             // mancante a runtime, es. libreria non presente sull'host) è un
             // Error, non un'Exception — un catch (e: Exception) qui non lo
             // avrebbe intercettato, lasciando il popup crashare comunque.
-            Log.e(TAG, "💥 WatchPartyConsent: ECCEZIONE mentre costruivo il popup", e)
+            Log.e(TAG, "Eccezione mentre costruivo il popup di consenso", e)
             shownThisSession = false // ritenta al prossimo giro se qualcosa è andato storto
         }
     }

@@ -42,12 +42,12 @@ class WatchPartySettingsFragmentCloudStream(
     /** Stesso pattern di StreamITA: risoluzione a runtime dei drawable del plugin per nome. */
     private fun getDrawable(name: String): Drawable? {
         val res = plugin.resources ?: run {
-            android.util.Log.e(TAG, "❌ getDrawable('$name'): plugin.resources è null")
+            android.util.Log.e(TAG, "getDrawable('$name'): plugin.resources è null")
             return null
         }
         val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
         if (id == 0) {
-            android.util.Log.e(TAG, "❌ getDrawable('$name'): risorsa non trovata (id=0) — controlla che il file esista in res/drawable/$name.xml")
+            android.util.Log.e(TAG, "getDrawable('$name'): risorsa non trovata (id=0)")
             return null
         }
         return ResourcesCompat.getDrawable(res, id, null)
@@ -73,7 +73,7 @@ class WatchPartySettingsFragmentCloudStream(
      * costruiamo comunque il colore giusto via codice invece di lasciare il tema di
      * default dell'app (che è blu — era la causa del pulsante "Esci" apparso blu). */
     private fun coloredFallback(fill: Int, stroke: Int): Drawable {
-        android.util.Log.e(TAG, "⚠️ Uso il fallback colorato via codice (il drawable del plugin non si è caricato)")
+        android.util.Log.e(TAG, "Uso il fallback colorato via codice (il drawable del plugin non si è caricato)")
         return android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
             cornerRadius = 8 * resources.displayMetrics.density
@@ -407,7 +407,7 @@ class WatchPartySettingsFragmentCloudStream(
 
         root
     } catch (e: Exception) {
-        android.util.Log.e(TAG, "💥 ECCEZIONE in onCreateView()", e)
+        android.util.Log.e(TAG, "Eccezione in onCreateView()", e)
         null
     }
 }

@@ -27,19 +27,15 @@ interface WatchPartyPlaybackBridge {
 
     /**
      * Cambia episodio sul player locale. [localUserAction] distingue un tap
-     * dell'utente su questo dispositivo (PlayerEventSource.UI nell'originale)
-     * da un comando arrivato dalla stanza (PlayerEventSource.Sync) — la
-     * stessa distinzione che il plugin faceva già prima di questo bridge.
-     * Ritorna false se l'host non supporta questo comando (es. Nuvio, che
-     * non espone un "prossimo episodio" tramite l'unico canale pubblico
-     * disponibile, la MediaSession): il chiamante deve degradare senza
-     * errori visibili all'utente.
+     * dell'utente da un comando arrivato dalla stanza. Ritorna false se
+     * l'host non supporta il comando (es. Nuvio, che non espone un
+     * "prossimo episodio" sull'unico canale pubblico disponibile): il
+     * chiamante deve degradare senza errori visibili.
      */
     fun nextEpisode(localUserAction: Boolean): Boolean
 
-    /** Stringa breve di diagnostica per capire perché isPlayerScreenActive()
-     *  ritorna true/false, da mostrare in un Toast quando non si ha accesso
-     *  al logcat. Non usata in produzione, solo per debug. */
+    /** Diagnostica breve del perché isPlayerScreenActive() ritorna true/false,
+     *  per un Toast quando non si ha accesso al logcat. Solo per debug. */
     fun debugSnapshot(): String
 }
 
@@ -52,22 +48,18 @@ object WatchPartyPlayback : WatchPartyPlaybackBridge {
 
     private val delegate: WatchPartyPlaybackBridge by lazy { detectHostBridge() }
 
-    /**
-     * True se l'host rilevato è CloudStream (o un fork che ne porta le
-     * classi ui.player.*), false altrimenti (presumibilmente Nuvio
-     * Enhanced). Usata da WatchPartyPlugin per decidere se registrare il
-     * provider "finto" richiesto solo dal loader di Nuvio.
-     */
+    /** True se l'host rilevato è CloudStream (o un fork con le sue classi
+     *  ui.player.*), false altrimenti (presumibilmente Nuvio Enhanced).
+     *  Usata da WatchPartyPlugin per decidere se registrare il provider
+     *  "finto" richiesto solo dal loader di Nuvio. */
     val isCloudStreamHost: Boolean get() = delegate is CloudStreamPlaybackBridge
 
     /**
-     * Rilevamento: se le classi UI-player di CloudStream (com.lagradost.
-     * cloudstream3.ui.player.*) sono risolvibili a runtime, siamo dentro
-     * l'app CloudStream vera (o un fork che le porta con sé) e usiamo il
-     * bridge originale via PlayerAccess/IPlayer. Se NON lo sono (es. Nuvio
-     * Enhanced, che non le include: vedi CLOUDSTREAM_CROSS_PLATFORM_
-     * COMPATIBILITY.md e il runtime-api aar del suo repository), usiamo il
-     * bridge basato su MediaSession/notifica.
+     * Se le classi UI-player di CloudStream sono risolvibili a runtime,
+     * siamo dentro CloudStream vero (o un fork che le porta con sé) e
+     * usiamo il bridge originale via PlayerAccess/IPlayer. Altrimenti
+     * (es. Nuvio Enhanced, che non le include) usiamo il bridge basato
+     * su MediaSession/notifica.
      */
     private fun detectHostBridge(): WatchPartyPlaybackBridge {
         val isRealCloudStreamPlayer = runCatching {

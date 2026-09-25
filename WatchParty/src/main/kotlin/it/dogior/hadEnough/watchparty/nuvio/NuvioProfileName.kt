@@ -39,6 +39,6 @@ object NuvioProfileName {
         val name = activeProfile.javaClass.getMethod("getName").invoke(activeProfile) as? String
         name?.takeIf { it.isNotBlank() }
     }.onFailure {
-        Log.w(TAG, "🪪 Nome profilo Nuvio non risolto via reflection, uso il fallback", it)
+        Log.w(TAG, "Nome profilo Nuvio non risolto via reflection, uso il fallback", it)
     }.getOrNull()
 }

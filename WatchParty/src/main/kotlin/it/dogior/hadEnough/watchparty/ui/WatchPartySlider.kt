@@ -25,7 +25,7 @@ fun mountSlider(host: FrameLayout, steps: List<Int>, initialValue: Int, onValueC
 
     val mountedCompose = if (WatchPartyPlayback.isCloudStreamHost) {
         runCatching { mountComposeSlider(host, steps, closestIndex, accentColorInt, onValueChange) }
-            .onFailure { Log.w(TAG, "🧵 Compose Slider non montato, uso quello nativo", it) }
+            .onFailure { Log.w(TAG, "Compose Slider non montato, uso quello nativo", it) }
             .getOrDefault(false)
     } else {
         false

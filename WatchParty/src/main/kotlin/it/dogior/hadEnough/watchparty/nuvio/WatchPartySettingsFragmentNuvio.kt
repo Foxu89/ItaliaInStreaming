@@ -41,12 +41,12 @@ class WatchPartySettingsFragmentNuvio(
     /** Stesso pattern di StreamITA: risoluzione a runtime dei drawable del plugin per nome. */
     private fun getDrawable(name: String): Drawable? {
         val res = plugin.resources ?: run {
-            android.util.Log.e(TAG, "❌ getDrawable('$name'): plugin.resources è null")
+            android.util.Log.e(TAG, "getDrawable('$name'): plugin.resources è null")
             return null
         }
         val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
         if (id == 0) {
-            android.util.Log.e(TAG, "❌ getDrawable('$name'): risorsa non trovata (id=0) — controlla che il file esista in res/drawable/$name.xml")
+            android.util.Log.e(TAG, "getDrawable('$name'): risorsa non trovata (id=0)")
             return null
         }
         return ResourcesCompat.getDrawable(res, id, null)
@@ -68,11 +68,10 @@ class WatchPartySettingsFragmentNuvio(
         background = getDrawable("outline_danger") ?: coloredFallback(0x14FF6B6B, 0x99FF7F7F.toInt())
     }
 
-    /** Rete di sicurezza: se il drawable del plugin non si carica per qualche motivo,
-     * costruiamo comunque il colore giusto via codice invece di lasciare il tema di
-     * default dell'app (che è blu — era la causa del pulsante "Esci" apparso blu). */
+    /** Rete di sicurezza: se il drawable del plugin non si carica, costruiamo
+     *  comunque il colore giusto via codice invece del blu di default dell'app. */
     private fun coloredFallback(fill: Int, stroke: Int): Drawable {
-        android.util.Log.e(TAG, "⚠️ Uso il fallback colorato via codice (il drawable del plugin non si è caricato)")
+        android.util.Log.e(TAG, "Uso il fallback colorato via codice (il drawable del plugin non si è caricato)")
         return android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
             cornerRadius = 8 * resources.displayMetrics.density
@@ -83,17 +82,14 @@ class WatchPartySettingsFragmentNuvio(
 
     override fun onStart() {
         super.onStart()
-        // Niente più BottomSheetBehavior (era Material): allarghiamo il
-        // dialog standard a piena larghezza per restare visivamente vicini
-        // al vecchio bottom sheet, senza dipendenze esterne.
+        // niente più BottomSheetBehavior (era Material): dialog standard a
+        // piena larghezza per restare vicini al vecchio bottom sheet
         dialog?.window?.setLayout(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
         )
-        // Sfondo di sistema del dialog (grigio, angoli squadrati) fuori
-        // dai piedi: lo sfondo vero arrotondato lo dà onCreateView() via
-        // getDrawable("watchparty_panel_background") (non l'XML — vedi lì
-        // il perché).
+        // sfondo di sistema fuori dai piedi: quello vero arrotondato lo dà
+        // onCreateView() via getDrawable() (non l'XML, vedi lì il perché)
         dialog?.window?.setBackgroundDrawableResource(android.R.color.transparent)
     }
 
@@ -102,12 +98,9 @@ class WatchPartySettingsFragmentNuvio(
         savedInstanceState: Bundle?
     ): View? = try {
         val root = getLayout("watchparty_settings", inflater, container)
-        // Sfondo impostato qui (non nell'XML con @drawable/...): per un
-        // plugin con risorse agganciate dinamicamente, i riferimenti
-        // @drawable/ dentro un layout XML non si risolvono in modo
-        // affidabile — probabile causa del pannello "trasparente/invisibile".
-        // getDrawable() invece è lo stesso meccanismo già usato ovunque nel
-        // resto del plugin, verificato funzionante.
+        // sfondo qui, non nell'XML con @drawable/...: per un plugin con
+        // risorse agganciate dinamicamente quei riferimenti non si risolvono
+        // in modo affidabile (causa del pannello trasparente/invisibile)
         root.background = getDrawable("watchparty_panel_background")
 
         val statusCard = root.findView<View>("wp_status_card")
@@ -424,7 +417,7 @@ class WatchPartySettingsFragmentNuvio(
 
         root
     } catch (e: Exception) {
-        android.util.Log.e(TAG, "💥 ECCEZIONE in onCreateView()", e)
+        android.util.Log.e(TAG, "Eccezione in onCreateView()", e)
         null
     }
 }

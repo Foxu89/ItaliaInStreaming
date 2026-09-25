@@ -30,17 +30,13 @@ private const val TAG = "WatchParty"
 
 /** Pagina dedicata aperta dalla riga "Impostazioni" del foglio principale.
  *
- *  [parentSettingsFragment] è passato solo per poter attenuare (dim) anche
- *  IL FOGLIO SOTTOSTANTE (WatchPartySettingsFragment) durante l'editor con
- *  touchpad della posizione icona: sono due BottomSheetDialogFragment
- *  distinti, quindi due Window separate, ed entrambe devono farsi
- *  semi-trasparenti insieme per vedere l'icona vera sotto.
+ *  [parentSettingsFragment] serve solo per attenuare insieme anche il
+ *  foglio sottostante durante l'editor col touchpad (due BottomSheet
+ *  separati, due Window, devono diventare trasparenti insieme).
  *
- *  Ci sono DUE icone indipendenti, ciascuna col proprio touchpad di
- *  posizione (vedi OverlayIcon in WatchPartyOverlay.kt): l'icona Watch
- *  Party (apre il menu) e l'icona chat (apre/chiude il pannello chat,
- *  visibile solo a stanza attiva). Tutta la logica del touchpad qui sotto
- *  è parametrizzata su quale delle due si sta spostando. */
+ *  Ci sono DUE icone indipendenti con proprio touchpad (vedi OverlayIcon
+ *  in WatchPartyOverlay.kt): tutta la logica qui sotto è parametrizzata
+ *  su quale delle due si sta spostando. */
 class WatchPartyAdvancedSettingsFragmentCloudStream(
     private val plugin: Plugin,
     private val parentSettingsFragment: WatchPartySettingsFragmentCloudStream? = null,
@@ -127,9 +123,8 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
             CloudStreamApp.setKey("wp_chat_invisible", if (checked) "true" else "false")
         }
 
-        // larghezza pannello chat in % (default 42, clamp 20-85). Salvata su
-        // invio della tastiera o quando il campo perde il focus: mentre si
-        // digita non forziamo nulla, così "5" non diventa "50" da sola.
+        // larghezza pannello chat in % (default 42, clamp 20-85). Salvata su invio
+        // tastiera o perdita del focus, non mentre si digita (altrimenti "5" -> "50")
         val chatWidthInput = root.findView<EditText>("wpa_chat_width")
         chatWidthInput.background = getDrawable("outline")
         val savedWidth = CloudStreamApp.getKey<String>("wp_chat_width")?.toIntOrNull()?.coerceIn(20, 85) ?: 42
@@ -142,12 +137,7 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         }
         chatWidthInput.setOnEditorActionListener { _, _, _ ->
             saveChatWidth()
-            // false = lascia che sia il sistema a fare l'azione di default per
-            // "Fine"/spunta, che include la chiusura della tastiera (esattamente
-            // come il campo PIN, che non ha nemmeno bisogno di un listener suo).
-            // Con "true" qui, la tastiera restava aperta perché dicevamo ad
-            // Android "ho già gestito tutto io".
-            false
+            false // lascia che sia il sistema a chiudere la tastiera
         }
         chatWidthInput.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) saveChatWidth() }
 
@@ -223,7 +213,7 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
 
         root
     } catch (e: Exception) {
-        android.util.Log.e(TAG, "💥 ECCEZIONE in WatchPartyAdvancedSettingsFragment", e)
+        android.util.Log.e(TAG, "Eccezione in WatchPartyAdvancedSettingsFragment", e)
         null
     }
 
@@ -235,25 +225,21 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
     private val positionPreviewHosts = mutableMapOf<OverlayIcon, FrameLayout>()
     private val positionMoveActiveMap = mutableMapOf<OverlayIcon, Boolean>()
 
-    /** Attenua/ripristina insieme sia questo foglio (Impostazioni avanzate)
-     *  sia quello sottostante (Watch Party), animando l'alpha dell'intera
-     *  Window di ciascun Dialog: così sparisce anche lo scrim scuro di
-     *  entrambi i BottomSheetDialog e si vede l'icona vera sotto. Il
-     *  touchpad resta comunque cliccabile: l'alpha non disabilita il touch. */
+    /** Attenua/ripristina insieme questo foglio e quello sottostante,
+     *  animando l'alpha della Window di ciascun Dialog: sparisce anche lo
+     *  scrim scuro e si vede l'icona vera sotto. Il touchpad resta comunque
+     *  cliccabile, l'alpha non disabilita il touch. */
     private fun setSheetsDimmed(dimmed: Boolean) {
         val target = if (dimmed) 0.14f else 1f
         dialog?.window?.decorView?.animate()?.alpha(target)?.setDuration(180)?.start()
         parentSettingsFragment?.dialog?.window?.decorView?.animate()?.alpha(target)?.setDuration(180)?.start()
     }
 
-    /** Crea un'icona "gemella" di quella vera (stesso drawable, stessa
-     *  dimensione, stesso sfondo circolare) sopra il decorView
-     *  dell'Activity, nella posizione attualmente salvata (o quella di
-     *  default) per [icon]. Non riusiamo direttamente le view vere del
-     *  FAB/della chat perché quelle esistono solo in certe condizioni (il
-     *  FAB solo col player aperto, la chat solo a stanza attiva): l'editor
-     *  deve funzionare sempre, quindi lavoriamo su una copia visiva
-     *  identica e scriviamo la posizione finale al rilascio. */
+    /** Crea un'icona "gemella" sopra il decorView, nella posizione salvata (o
+     *  quella di default) per [icon]. Non riusiamo le view vere del FAB/chat
+     *  perché esistono solo in certe condizioni: l'editor deve funzionare
+     *  sempre, quindi lavoriamo su una copia visiva e scriviamo la posizione
+     *  finale al rilascio. */
     private fun showPositionPreview(icon: OverlayIcon): FrameLayout? {
         val activity = CommonActivity.activity ?: return null
         val decor = activity.window?.decorView as? ViewGroup ?: return null
@@ -288,10 +274,9 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         return runCatching { decor.addView(host, params) }.map { host }.getOrNull()
     }
 
-    /** Applica uno spostamento RELATIVO (delta) al centro dell'icona anteprima
-     *  di [icon], clampato dentro lo schermo. Questo è il cuore del
-     *  comportamento "trackpad": non conta la posizione assoluta del dito,
-     *  solo quanto si è mosso. */
+    /** Applica uno spostamento RELATIVO (delta) al centro dell'icona anteprima:
+     *  è il cuore del comportamento "trackpad", non conta la posizione
+     *  assoluta del dito, solo quanto si è mosso. */
     private fun movePositionPreviewBy(icon: OverlayIcon, dx: Float, dy: Float) {
         val host = positionPreviewHosts[icon] ?: return
         val activity = CommonActivity.activity ?: return
@@ -312,9 +297,8 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         host.layoutParams = params
     }
 
-    /** Salva la posizione finale di [icon] (in percentuale, come richiesto —
-     *  non pixel fissi, per portabilità tra dispositivi) e rimuove
-     *  l'anteprima. */
+    /** Salva la posizione finale in percentuale (non pixel, per portabilità
+     *  tra dispositivi) e rimuove l'anteprima. */
     private fun savePositionPreviewAndRemove(icon: OverlayIcon) {
         val host = positionPreviewHosts[icon] ?: return
         val activity = CommonActivity.activity
@@ -336,9 +320,8 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
         positionPreviewHosts.remove(icon)
     }
 
-    /** Sensibilità del movimento relativo: quanto si sposta l'icona vera per
-     *  ogni pixel di dito sul touchpad. >1 perché il rettangolo è piccolo e
-     *  lo schermo è grande — valore di taratura, non un vincolo tecnico. */
+    /** Sensibilità del movimento relativo: quanto si sposta l'icona per ogni
+     *  pixel di dito sul touchpad. Valore di taratura, non un vincolo tecnico. */
     private val positionSensitivity = 2.4f
 
     @Suppress("ClickableViewAccessibility")
@@ -351,11 +334,8 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
 
         val activateRunnable = Runnable {
             positionMoveActiveMap[icon] = true
-            // Solo QUI, quando la modalità sposta si attiva sul serio,
-            // blocchiamo lo scroll del foglio sottostante: prima di questo
-            // momento il tocco deve poter scorrere le impostazioni
-            // normalmente, altrimenti basta sfiorare il pad per bloccare
-            // lo scroll dell'intera pagina.
+            // solo qui, quando la modalità sposta si attiva sul serio, blocchiamo
+            // lo scroll: prima il tocco deve poter scorrere le impostazioni normalmente
             pad.parent?.requestDisallowInterceptTouchEvent(true)
             pad.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             hint.visibility = View.INVISIBLE
@@ -370,11 +350,8 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
                     downX = event.rawX; downY = event.rawY
                     lastX = event.rawX; lastY = event.rawY
                     positionHandler.postDelayed(activateRunnable, 2000L)
-                    // NON blocca lo scroll qui: se il dito continua dritto
-                    // per scorrere, ci arriva un ACTION_CANCEL dal
-                    // NestedScrollView che intercetta da solo, e resettiamo
-                    // il timer lì sotto — esattamente come un tocco normale
-                    // su qualunque altra riga scrollabile della pagina.
+                    // niente blocco scroll qui: se il dito scorre dritto arriva un
+                    // ACTION_CANCEL dal NestedScrollView e resettiamo il timer sotto
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -409,10 +386,8 @@ class WatchPartyAdvancedSettingsFragmentCloudStream(
     }
 
     override fun onDestroyView() {
-        // rete di sicurezza: se il fragment viene distrutto a metà di un drag
-        // (es. utente esce con back/gesture di sistema), non lasciamo le
-        // window a metà trasparenza né l'anteprima orfana sullo schermo,
-        // per NESSUNA delle due icone.
+        // rete di sicurezza: se il fragment viene distrutto a metà drag,
+        // non lasciamo window semi-trasparenti o anteprime orfane
         positionHandler.removeCallbacksAndMessages(null)
         OverlayIcon.entries.forEach { icon ->
             if (positionMoveActiveMap[icon] == true) {

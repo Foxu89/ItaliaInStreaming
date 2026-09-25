@@ -23,15 +23,10 @@ import com.lagradost.cloudstream3.plugins.Plugin
 import it.dogior.hadEnough.BuildConfig
 
 /**
- * Le due icone flottanti indipendenti del plugin, ciascuna con la propria
- * posizione salvabile via touchpad in Impostazioni avanzate:
- *  - MAIN: l'icona Watch Party vera e propria (due persone), sempre
- *    visibile col player aperto, apre il menu creazione/ingresso stanza.
- *  - CHAT: l'icona fumetto, visibile solo a stanza attiva, apre/chiude il
- *    pannello chat.
- * Le chiavi di CHAT sono quelle storiche ("wp_chat_icon_pos_x/y", da
- * prima che esistesse questo enum): non cambiate, per non perdere la
- * posizione custom già salvata da chi aggiorna il plugin.
+ * Le due icone flottanti indipendenti: MAIN (due persone, apre il menu
+ * stanza) e CHAT (fumetto, solo a stanza attiva, apre/chiude la chat).
+ * Le chiavi di CHAT sono quelle storiche, non cambiate per non perdere le
+ * posizioni custom già salvate da chi aggiorna il plugin.
  */
 enum class OverlayIcon(val keyX: String, val keyY: String, val sizeDp: Int, val drawableName: String) {
     CHAT("wp_chat_icon_pos_x", "wp_chat_icon_pos_y", WatchPartyOverlay.CHAT_ICON_SIZE_DP, "chat_bubble"),
@@ -41,18 +36,14 @@ enum class OverlayIcon(val keyX: String, val keyY: String, val sizeDp: Int, val 
 /**
  * Aggiunge un piccolo FAB sopra il decorView dell'activity, visibile solo
  * mentre la schermata del player è aperta. Non tocca il layout XML del
- * player (che è interno all'app): si limita ad appoggiarsi sopra, come
- * farebbe una libreria di overlay/tutorial.
+ * player: si limita ad appoggiarsi sopra.
  *
- * Il controllo "sono nella schermata player?" avviene via polling
- * (WatchPartyPlayback.isPlayerScreenActive, che sceglie da solo
- * l'implementazione giusta per l'host in cui gira) perché non esiste un
- * evento pubblico per l'apertura/chiusura del player. Lo stesso polling rileva anche
- * quando l'utente ESCE dal player con una stanza attiva, per chiuderla.
+ * "Sono nella schermata player?" è rilevato via polling
+ * (WatchPartyPlayback.isPlayerScreenActive), non esiste un evento
+ * pubblico per l'apertura/chiusura del player.
  *
- * Quando una stanza è attiva mostra anche una freccia a sinistra (centro
- * verticale) che apre un pannello di chat laterale fino a ~metà schermo.
- * Un pallino rosso sulla freccia avvisa di messaggi non letti.
+ * A stanza attiva mostra anche una freccia a sinistra che apre un
+ * pannello chat laterale; un pallino rosso segnala i non letti.
  */
 class WatchPartyOverlay(
     private val plugin: Plugin,
@@ -83,12 +74,9 @@ class WatchPartyOverlay(
             CloudStreamApp.setKey(icon.keyY, "")
         }
 
-        /** Equivalente in percentuale della vecchia posizione fissa di
-         *  ciascuna icona (CHAT: bordo sinistro + 8dp, centro verticale;
-         *  MAIN: bordo in basso a destra, come sempre stata prima che
-         *  esistesse un editor di posizione per lei): usato sia come
-         *  fallback quando non c'è una posizione custom, sia come punto di
-         *  partenza dell'editor con il touchpad. */
+        /** Posizione fissa storica di ciascuna icona (prima che esistesse
+         *  l'editor col touchpad), in percentuale: fallback se non c'è una
+         *  posizione custom, e punto di partenza dell'editor. */
         fun defaultPositionPercent(icon: OverlayIcon, decorWidthPx: Int, decorHeightPx: Int, density: Float): Pair<Float, Float> {
             val iconSizePx = icon.sizeDp * density
             return when (icon) {
@@ -374,8 +362,6 @@ class WatchPartyOverlay(
 
     private fun updateVisibility(button: FabButton) {
         val invisible = isButtonInvisible()
-        if (invisible) {
-        }
         button.alpha = if (invisible) 0f else 1f
 
         // posizione icona: cambia anche a icona già costruita (salvata
