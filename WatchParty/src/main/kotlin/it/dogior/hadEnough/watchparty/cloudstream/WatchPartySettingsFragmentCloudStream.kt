@@ -94,8 +94,6 @@ class WatchPartySettingsFragmentCloudStream(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? = try {
-        android.util.Log.d(TAG, "📄 onCreateView() inizio")
-
         val root = getLayout("watchparty_settings", inflater, container)
 
         val statusCard = root.findView<View>("wp_status_card")
@@ -407,7 +405,6 @@ class WatchPartySettingsFragmentCloudStream(
         val innerContainer = (root as? ViewGroup)?.getChildAt(0) as? ViewGroup
         innerContainer?.addView(consentLabel)
 
-        android.util.Log.d(TAG, "🏁 onCreateView() completato")
         root
     } catch (e: Exception) {
         android.util.Log.e(TAG, "💥 ECCEZIONE in onCreateView()", e)

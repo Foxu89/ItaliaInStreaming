@@ -101,8 +101,6 @@ class WatchPartySettingsFragmentNuvio(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? = try {
-        android.util.Log.d(TAG, "📄 onCreateView() inizio")
-
         val root = getLayout("watchparty_settings", inflater, container)
         // Sfondo impostato qui (non nell'XML con @drawable/...): per un
         // plugin con risorse agganciate dinamicamente, i riferimenti
@@ -424,7 +422,6 @@ class WatchPartySettingsFragmentNuvio(
         val innerContainer = (root as? ViewGroup)?.getChildAt(0) as? ViewGroup
         innerContainer?.addView(consentLabel)
 
-        android.util.Log.d(TAG, "🏁 onCreateView() completato")
         root
     } catch (e: Exception) {
         android.util.Log.e(TAG, "💥 ECCEZIONE in onCreateView()", e)

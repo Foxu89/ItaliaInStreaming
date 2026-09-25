@@ -318,7 +318,6 @@ class WatchPartyOverlay(
 
         // l'utente ha appena chiuso il player mentre la stanza era attiva: la chiudiamo
         if (wasPlayerActive && !shouldShow && manager.role != WatchPartyManager.Role.IDLE) {
-            android.util.Log.d("WatchParty", "🚪 Player chiuso con stanza attiva, esco dalla stanza")
             manager.leaveRoom()
         }
         wasPlayerActive = shouldShow
@@ -326,11 +325,9 @@ class WatchPartyOverlay(
         val inRoom = manager.role != WatchPartyManager.Role.IDLE
 
         if (shouldShow && (fab == null || attachedActivity !== activity)) {
-            android.util.Log.d("WatchParty", "➕ WatchPartyOverlay: schermata player rilevata, aggiungo il FAB")
             removeFab()
             addFab(activity)
         } else if (!shouldShow && fab != null) {
-            android.util.Log.d("WatchParty", "➖ WatchPartyOverlay: schermata player chiusa, rimuovo il FAB")
             removeFab()
             removeSpinner()
         } else if (fab != null) {
@@ -378,7 +375,6 @@ class WatchPartyOverlay(
     private fun updateVisibility(button: FabButton) {
         val invisible = isButtonInvisible()
         if (invisible) {
-            android.util.Log.d("WatchParty", "🙈 WatchPartyOverlay: pulsante impostato INVISIBILE (wp_button_invisible=true) — resta cliccabile ma non si vede")
         }
         button.alpha = if (invisible) 0f else 1f
 

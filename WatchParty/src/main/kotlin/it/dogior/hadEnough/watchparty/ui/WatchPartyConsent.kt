@@ -55,7 +55,6 @@ object WatchPartyConsent {
     }
 
     private fun setAccepted() {
-        Log.d(TAG, "✅ WatchPartyConsent: utente ha accettato, salvo la preferenza")
         setKey(KEY_ACCEPTED, true)
         setKey(KEY_ACCEPTED_AT, System.currentTimeMillis())
         running = false
@@ -64,30 +63,19 @@ object WatchPartyConsent {
 
     /** Chiamata una volta sola da WatchPartyPlugin.load(). */
     fun attach() {
-        Log.d(TAG, "🚀 WatchPartyConsent.attach() chiamata da load() del plugin")
-        if (hasAccepted()) {
-            Log.d(TAG, "⏭️ WatchPartyConsent: già accettato in passato (${acceptedAtLabel()}), popup non necessario")
-            return
-        }
+        if (hasAccepted()) return
         if (running) return
         running = true
-        Log.d(TAG, "⏱️ WatchPartyConsent: avvio il controllo periodico (ogni 1s) per mostrare il popup")
         handler.post(tick)
     }
 
     private fun showIfNeeded() {
         if (hasAccepted() || shownThisSession) {
-            Log.d(TAG, "⏹️ WatchPartyConsent: fermo il controllo (accettato=${hasAccepted()}, mostrato=$shownThisSession)")
             running = false
             handler.removeCallbacks(tick)
             return
         }
-        val activity = CommonActivity.activity
-        if (activity == null) {
-            Log.d(TAG, "⌛ WatchPartyConsent: CommonActivity.activity è ancora null, riprovo tra 1s")
-            return
-        }
-        Log.d(TAG, "🎬 WatchPartyConsent: activity trovata (${activity::class.java.simpleName}), mostro il popup ORA")
+        val activity = CommonActivity.activity ?: return
         shownThisSession = true
         running = false
         handler.removeCallbacks(tick)
@@ -154,21 +142,17 @@ object WatchPartyConsent {
         )
 
         dialog.setOnShowListener {
-            Log.d(TAG, "👀 WatchPartyConsent: popup effettivamente visibile a schermo (onShow)")
             val acceptBtn = dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
             acceptBtn.isEnabled = false
             checkBox.setOnCheckedChangeListener { _, checked ->
-                Log.d(TAG, "☑️ WatchPartyConsent: checkbox = $checked")
                 acceptBtn.isEnabled = checked
             }
             acceptBtn.setOnClickListener {
-                Log.d(TAG, "🖱️ WatchPartyConsent: pulsante Accetto premuto")
                 setAccepted()
                 dialog.dismiss()
             }
         }
 
         dialog.show()
-        Log.d(TAG, "📤 WatchPartyConsent: dialog.show() chiamato")
     }
 }

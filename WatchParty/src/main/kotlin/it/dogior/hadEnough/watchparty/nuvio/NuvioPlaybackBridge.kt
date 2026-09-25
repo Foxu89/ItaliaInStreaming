@@ -6,7 +6,6 @@ import android.content.Context
 import android.media.session.MediaController
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
-import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -14,8 +13,6 @@ import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import com.lagradost.cloudstream3.CommonActivity
 import java.lang.ref.WeakReference
-
-private const val TAG = "WatchParty"
 
 /**
  * Bridge per Nuvio Enhanced (build "Android Full").
@@ -63,9 +60,6 @@ class NuvioPlaybackBridge : WatchPartyPlaybackBridge {
         val decor = activity.window?.decorView as? ViewGroup ?: return null
         val found = runCatching { searchPlayerView(decor) }.getOrNull()
         cachedPlayerViewRef = found?.let { WeakReference(it) }
-        if (found != null) {
-            Log.d(TAG, "🎬 NuvioPlaybackBridge: PlayerView trovata nell'albero delle view")
-        }
         return found
     }
 

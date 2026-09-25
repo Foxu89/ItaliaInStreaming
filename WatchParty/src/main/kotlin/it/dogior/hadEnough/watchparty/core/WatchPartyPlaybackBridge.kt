@@ -1,9 +1,5 @@
 package it.dogior.hadEnough.watchparty
 
-import android.util.Log
-
-private const val TAG = "WatchParty"
-
 /**
  * Astrazione del player usata da WatchPartyManager/Overlay/SettingsFragment.
  *
@@ -80,10 +76,8 @@ object WatchPartyPlayback : WatchPartyPlaybackBridge {
         }.getOrDefault(false)
 
         return if (isRealCloudStreamPlayer) {
-            Log.d(TAG, "🧭 WatchPartyPlayback: host CloudStream rilevato (IPlayer presente), uso CloudStreamPlaybackBridge")
             CloudStreamPlaybackBridge()
         } else {
-            Log.d(TAG, "🧭 WatchPartyPlayback: IPlayer non risolvibile, presumo host Nuvio Enhanced, uso NuvioPlaybackBridge")
             NuvioPlaybackBridge()
         }
     }
