@@ -52,7 +52,7 @@ dependencies {
 }
 
 
-version = 22
+version = 23
 
 android {
     defaultConfig {
