@@ -11,7 +11,6 @@ import android.widget.TextView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.plugins.Plugin
-import it.dogior.hadEnough.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -71,7 +70,7 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         val ctx = requireContext().applicationContext
         CoroutineScope(Dispatchers.Default).launch {
             val bitmap = runCatching {
-                val stats = WrappedStats.compute()
+                val stats = WrappedStatsCalculator.compute()
                 WrappedCardRenderer.render(ctx, stats)
             }.getOrNull()
 
