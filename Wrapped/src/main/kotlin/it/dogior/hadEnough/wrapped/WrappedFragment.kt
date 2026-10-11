@@ -71,7 +71,7 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         val ctx = requireContext().applicationContext
         CoroutineScope(Dispatchers.Default).launch {
             val bitmap = runCatching {
-                val stats = WrappedStats.compute()
+                val stats = WrappedStatsCalculator.compute()
                 WrappedCardRenderer.render(ctx, stats)
             }.getOrNull()
 
