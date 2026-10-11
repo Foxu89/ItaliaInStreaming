@@ -34,3 +34,10 @@ cloudstream {
     description = "⚠️ BETA ⚠️ Generate your CloudStream Wrapped: total watch time, movies/series watched, your Nerd Rank, and a shareable card."
     requiresResources = true
 }
+
+android {
+    buildFeatures {
+        buildConfig = true
+        viewBinding = true
+    }
+}

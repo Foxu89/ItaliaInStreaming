@@ -35,7 +35,7 @@ data class WrappedStats(
  *  mentre i due contatori riflettono solo ciò che hai aggiunto alla
  *  libreria — onesto da dire all'utente, non un bug.
  */
-object WrappedStatsCalculator {
+object WrappedStats {
 
     fun compute(): WrappedStats {
         val profileName = currentProfileName()
