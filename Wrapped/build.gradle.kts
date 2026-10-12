@@ -12,7 +12,16 @@ dependencies {
     compileOnly("androidx.core:core-ktx:1.13.1")
 }
 
-version = 1
+version = 2
+
+android {
+    buildFeatures {
+        // Serve per generare la classe BuildConfig (usata in WrappedFragment.kt
+        // per risolvere le risorse del plugin via plugin.resources). Senza
+        // questo, AGP non la genera e il riferimento non compila.
+        buildConfig = true
+    }
+}
 
 cloudstream {
     authors = listOf("DieGon")
@@ -33,11 +42,4 @@ cloudstream {
     iconUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/Wrapped/Wrapped_icon.png"
     description = "⚠️ BETA ⚠️ Generate your CloudStream Wrapped: total watch time, movies/series watched, your Nerd Rank, and a shareable card."
     requiresResources = true
-}
-
-android {
-    buildFeatures {
-        buildConfig = true
-        viewBinding = true
-    }
 }

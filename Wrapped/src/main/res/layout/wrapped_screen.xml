@@ -15,6 +15,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
             android:text="CloudStream Wrapped"
+            android:textColor="#FFFFFF"
             android:textSize="24sp"
             android:textStyle="bold" />
 
@@ -22,28 +23,37 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="20dp"
-            android:alpha="0.6"
+            android:alpha="0.7"
             android:text="Le tue statistiche di visione, in una card da condividere."
+            android:textColor="#FFFFFF"
             android:textSize="14sp" />
 
-        <!-- Preview della card generata: niente CardView/ConstraintLayout, solo
-             un ImageView con adjustViewBounds che mantiene da sé le proporzioni
-             9:16 del bitmap generato (1080x1920), nessuna dipendenza in più. -->
-        <ImageView
-            android:id="@+id/wrapped_preview"
+        <!-- Riquadro anteprima: altezza FISSA (non adjustViewBounds), così il
+             box scuro con bordi arrotondati è sempre visibile da subito, anche
+             mentre la card è ancora in generazione in background — prima
+             l'ImageView non aveva nessuna src iniziale e con adjustViewBounds
+             collassava ad altezza zero finché il bitmap non era pronto,
+             facendo sembrare il pannello "vuoto"/invisibile. Lo spinner è
+             sovrapposto al centro dello stesso riquadro con un FrameLayout. -->
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            android:adjustViewBounds="true"
-            android:background="@drawable/wrapped_preview_bg"
-            android:scaleType="fitCenter" />
+            android:layout_height="420dp"
+            android:layout_marginBottom="20dp">
 
-        <ProgressBar
-            android:id="@+id/wrapped_loading"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:layout_marginBottom="20dp" />
+            <ImageView
+                android:id="@+id/wrapped_preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/wrapped_preview_bg"
+                android:scaleType="fitCenter" />
+
+            <ProgressBar
+                android:id="@+id/wrapped_loading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center" />
+
+        </FrameLayout>
 
         <TextView
             android:id="@+id/wrapped_share"
@@ -64,6 +74,7 @@
             android:background="@drawable/wrapped_outline_bg"
             android:gravity="center"
             android:text="Close"
+            android:textColor="#FFFFFF"
             android:textSize="14sp" />
 
     </LinearLayout>
