@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sfondo "card" in stile CloudStream: overlay traslucido chiaro con bordo
+     sottile, stesso linguaggio visivo dell'outline card di WatchParty.
+     Caricato solo via codice (getDrawable in WrappedFragment.kt), mai
+     referenziato con android:background in XML — vedi i commenti lì. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#14FFFFFF" />
+    <stroke android:width="1dp" android:color="#1FFFFFFF" />
+    <corners android:radius="16dp" />
+</shape>

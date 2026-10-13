@@ -1,13 +1,17 @@
 package it.dogior.hadEnough.wrapped
 
-import android.graphics.Bitmap
+import android.content.Context
+import android.graphics.drawable.ClipDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -24,17 +28,23 @@ import kotlinx.coroutines.withContext
 private const val TAG = "WrappedFragment"
 
 /**
- * Schermata "CloudStream Wrapped": calcola le statistiche, le disegna come
- * card, le mostra in anteprima, e lascia condividerle con lo share sheet
- * nativo. Tutto il lavoro pesante (lettura DataStoreHelper + disegno del
- * bitmap) gira su Dispatchers.Default, non sul thread UI.
+ * Pannello "CloudStream Wrapped": rank con icona + barra di progresso verso
+ * il prossimo, tempo totale guardato scomposto in giorni/ore/minuti, e
+ * conteggio film/serie. Nessuna anteprima della card condivisibile: quella
+ * si genera (stile diverso, pensato per i social) solo quando si preme
+ * "Condividi", non all'apertura del pannello.
  *
- * Stesso pattern di caricamento risorse di WatchParty (plugin.resources,
- * mai l'R.id/R.layout generato per l'host, che non li contiene).
+ * Nessun colore o android:background="@drawable/..." nell'XML: i colori di
+ * testo ereditano il tema di CloudStream (chiaro/scuro/AMOLED) come fa già
+ * WatchParty, e gli sfondi delle card si caricano via codice con
+ * getDrawable() qui sotto — un riferimento "@drawable/..." scritto in XML
+ * non si risolve in modo affidabile per le risorse di un plugin agganciate
+ * dinamicamente (bug reale già trovato e risolto su WatchParty).
  */
 class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
 
-    private var lastBitmap: Bitmap? = null
+    private var cachedStats: WrappedStats? = null
+    private var sharing = false
 
     private fun <T : View> View.findView(name: String): T {
         val id = plugin.resources!!.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
@@ -47,29 +57,16 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         return inflater.inflate(layout, container, false)
     }
 
-    /**
-     * Sfondi caricati e assegnati via codice, MAI via android:background="@drawable/..."
-     * nell'XML: stesso bug già trovato e risolto su WatchParty, dove quel
-     * riferimento non si risolveva in modo affidabile per le risorse agganciate
-     * dinamicamente di un plugin, l'inflate lanciava eccezione, e onCreateView()
-     * tornava null (pannello "vuoto"/invisibile).
-     */
     private fun getDrawable(name: String): Drawable? {
-        val res = plugin.resources ?: run {
-            android.util.Log.e(TAG, "getDrawable('$name'): plugin.resources è null")
-            return null
-        }
+        val res = plugin.resources ?: return null
         val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
-        if (id == 0) {
-            android.util.Log.e(TAG, "getDrawable('$name'): risorsa non trovata (id=0)")
-            return null
-        }
+        if (id == 0) return null
         return runCatching { ResourcesCompat.getDrawable(res, id, null) }
-            .onFailure { android.util.Log.e(TAG, "getDrawable('$name'): eccezione nel caricare il drawable", it) }
+            .onFailure { android.util.Log.e(TAG, "getDrawable('$name') fallita", it) }
             .getOrNull()
     }
 
-    /** Rete di sicurezza se il drawable del plugin non si carica per qualche motivo. */
+    /** Rete di sicurezza se un drawable del plugin non si carica per qualche motivo. */
     private fun coloredFallback(fill: Int, radiusDp: Float = 16f, strokeColor: Int? = null): Drawable {
         return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -79,69 +76,197 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         }
     }
 
+    private fun cardBackground(): Drawable =
+        getDrawable("wrapped_card_bg") ?: coloredFallback(0x14FFFFFF, radiusDp = 16f, strokeColor = 0x1FFFFFFF)
+
+    /** Colore associato al rank, usato sia per il badge di fallback che per la barra. */
+    private fun rankColor(rank: WrappedRank): Int = when (rank) {
+        WrappedRank.BRONZE -> 0xFFCD7F32.toInt()
+        WrappedRank.SILVER -> 0xFFB0B8C1.toInt()
+        WrappedRank.GOLD -> 0xFFFFC94A.toInt()
+        WrappedRank.DIAMOND -> 0xFF4FC3F7.toInt()
+        WrappedRank.MASTER -> 0xFFB388FF.toInt()
+    }
+
+    /** PNG del rank se presente nel plugin, altrimenti un badge colorato disegnato a codice. */
+    private fun rankIcon(rank: WrappedRank): Drawable =
+        getDrawable(rank.iconName) ?: GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(rankColor(rank))
+        }
+
+    private fun buildProgressDrawable(trackColor: Int, progressColor: Int): Drawable {
+        val radius = 7f * resources.displayMetrics.density
+        val track = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radius
+            setColor(trackColor)
+        }
+        val fill = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radius
+            setColor(progressColor)
+        }
+        val clip = ClipDrawable(fill, Gravity.START, ClipDrawable.HORIZONTAL)
+        val layer = LayerDrawable(arrayOf(track, clip))
+        layer.setId(0, android.R.id.background)
+        layer.setId(1, android.R.id.progress)
+        return layer
+    }
+
+    /** Una riga "14 / giorni": stessa view sia in colonna (telefono) che in riga (tablet). */
+    private fun buildTimeUnitView(ctx: Context, unit: WrappedTimeUnit): View {
+        val density = resources.displayMetrics.density
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            val m = (14 * density).toInt()
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = m; bottomMargin = m }
+        }
+        val value = TextView(ctx).apply {
+            text = unit.value.toString()
+            textSize = 24f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+        val label = TextView(ctx).apply {
+            text = unit.label
+            textSize = 12f
+            alpha = 0.6f
+        }
+        box.addView(value)
+        box.addView(label)
+        return box
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? = try {
         val root = getLayout("wrapped_screen", inflater, container)
 
-        val preview = root.findView<ImageView>("wrapped_preview")
         val loading = root.findView<ProgressBar>("wrapped_loading")
+        val content = root.findView<LinearLayout>("wrapped_content")
+
+        val rankCard = root.findView<LinearLayout>("wrapped_rank_card")
+        val rankIconView = root.findView<ImageView>("wrapped_rank_icon")
+        val rankTitle = root.findView<TextView>("wrapped_rank_title")
+        val rankProgress = root.findView<ProgressBar>("wrapped_rank_progress")
+        val rankProgressLabel = root.findView<TextView>("wrapped_rank_progress_label")
+
+        val timeCard = root.findView<LinearLayout>("wrapped_time_card")
+        val timeContainer = root.findView<LinearLayout>("wrapped_time_container")
+
+        val moviesCard = root.findView<LinearLayout>("wrapped_movies_card")
+        val moviesValue = root.findView<TextView>("wrapped_movies_value")
+        val seriesCard = root.findView<LinearLayout>("wrapped_series_card")
+        val seriesValue = root.findView<TextView>("wrapped_series_value")
+
         val shareBtn = root.findView<TextView>("wrapped_share")
         val closeBtn = root.findView<TextView>("wrapped_close")
 
-        preview.background = getDrawable("wrapped_preview_bg")
-            ?: coloredFallback(0xFF1C1B29.toInt(), radiusDp = 20f)
+        rankCard.background = cardBackground()
+        timeCard.background = cardBackground()
+        moviesCard.background = cardBackground()
+        seriesCard.background = cardBackground()
         shareBtn.background = getDrawable("wrapped_share_bg")
             ?: coloredFallback(0xFF3B65F5.toInt(), radiusDp = 16f)
         closeBtn.background = getDrawable("wrapped_outline_bg")
             ?: coloredFallback(0x12FFFFFF, radiusDp = 16f, strokeColor = 0x33FFFFFF)
 
-        shareBtn.isEnabled = false
-        shareBtn.alpha = 0.5f
         closeBtn.setOnClickListener { dismiss() }
-        shareBtn.setOnClickListener {
-            lastBitmap?.let { bmp -> WrappedShare.share(requireContext(), bmp) }
-        }
+        shareBtn.setOnClickListener { onShareClicked(shareBtn) }
 
-        generateCard(preview, loading, shareBtn)
+        loadStats(loading, content, rankIconView, rankTitle, rankProgress, rankProgressLabel, timeContainer, moviesValue, seriesValue)
 
         root
     } catch (t: Throwable) {
-        // Throwable e non Exception: un NoClassDefFoundError (come il bug
-        // reale trovato in WatchParty) o qualsiasi altro Error non verrebbe
-        // intercettato da un catch (e: Exception), farebbe fallire
-        // silenziosamente .show() e il pannello sembrerebbe vuoto/invisibile
-        // senza nessun indizio visibile per l'utente.
+        // Throwable e non Exception: un Error (es. NoClassDefFoundError, già
+        // visto su WatchParty) non verrebbe intercettato da un catch
+        // (e: Exception), e .show() fallirebbe silenziosamente lasciando il
+        // pannello vuoto senza nessun indizio visibile per l'utente.
         android.util.Log.e(TAG, "Eccezione in onCreateView()", t)
-        runCatching {
-            showToast("CloudStream Wrapped crash: ${t.javaClass.simpleName}: ${t.message}", Toast.LENGTH_LONG)
-        }
+        runCatching { showToast("CloudStream Wrapped crash: ${t.javaClass.simpleName}: ${t.message}", Toast.LENGTH_LONG) }
         null
     }
 
-    private fun generateCard(preview: ImageView, loading: ProgressBar, shareBtn: TextView) {
+    private fun loadStats(
+        loading: ProgressBar,
+        content: LinearLayout,
+        rankIconView: ImageView,
+        rankTitle: TextView,
+        rankProgress: ProgressBar,
+        rankProgressLabel: TextView,
+        timeContainer: LinearLayout,
+        moviesValue: TextView,
+        seriesValue: TextView,
+    ) {
         val ctx = requireContext().applicationContext
         CoroutineScope(Dispatchers.Default).launch {
-            val result = runCatching {
-                val stats = WrappedStatsCalculator.compute()
-                WrappedCardRenderer.render(ctx, stats)
-            }
-            val bitmap = result.getOrNull()
-            if (bitmap == null) {
-                result.exceptionOrNull()?.let {
-                    android.util.Log.e(TAG, "generateCard() fallita", it)
-                }
-            }
+            val result = runCatching { WrappedStatsCalculator.compute() }
+            result.exceptionOrNull()?.let { android.util.Log.e(TAG, "loadStats() fallita", it) }
+            val stats = result.getOrNull()
 
             withContext(Dispatchers.Main) {
-                if (!isAdded) return@withContext // il fragment potrebbe essere già chiuso
+                if (!isAdded) return@withContext
                 loading.visibility = View.GONE
+                if (stats == null) {
+                    val reason = result.exceptionOrNull()
+                    val detail = reason?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "motivo sconosciuto"
+                    showToast("Couldn't load your Wrapped stats ($detail)", Toast.LENGTH_LONG)
+                    return@withContext
+                }
+
+                cachedStats = stats
+                content.visibility = View.VISIBLE
+
+                // --- Rank + barra di progresso ---
+                rankIconView.setImageDrawable(rankIcon(stats.rank))
+                rankTitle.text = stats.rank.title
+                val progress = WrappedRankProgress.compute(stats.totalWatchedMs)
+                rankProgress.max = 1000
+                rankProgress.progressDrawable = buildProgressDrawable(0x1AFFFFFF, rankColor(progress.current))
+                rankProgress.progress = (progress.fraction * 1000).toInt()
+                rankProgressLabel.text = if (progress.next == null) "MAX" else ""
+
+                // --- Tempo totale, scomposto (mai ore decimali) ---
+                timeContainer.removeAllViews()
+                WrappedFormat.breakDownDuration(stats.totalWatchedMs).forEach {
+                    timeContainer.addView(buildTimeUnitView(ctx, it))
+                }
+
+                // --- Film / serie ---
+                moviesValue.text = stats.moviesWatched.toString()
+                seriesValue.text = stats.seriesWatched.toString()
+            }
+        }
+    }
+
+    private fun onShareClicked(shareBtn: TextView) {
+        if (sharing) return
+        val stats = cachedStats
+        if (stats == null) {
+            showToast("Stats not ready yet, try again in a moment")
+            return
+        }
+        sharing = true
+        val originalText = shareBtn.text
+        shareBtn.text = "…"
+        shareBtn.isEnabled = false
+
+        val ctx = requireContext().applicationContext
+        CoroutineScope(Dispatchers.Default).launch {
+            val result = runCatching { WrappedCardRenderer.render(ctx, stats) }
+            result.exceptionOrNull()?.let { android.util.Log.e(TAG, "onShareClicked() fallita", it) }
+            val bitmap = result.getOrNull()
+
+            withContext(Dispatchers.Main) {
+                sharing = false
+                if (!isAdded) return@withContext
+                shareBtn.text = originalText
+                shareBtn.isEnabled = true
                 if (bitmap != null) {
-                    lastBitmap = bitmap
-                    preview.setImageBitmap(bitmap)
-                    shareBtn.isEnabled = true
-                    shareBtn.alpha = 1f
+                    WrappedShare.share(requireContext(), bitmap)
                 } else {
                     val reason = result.exceptionOrNull()
                     val detail = reason?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "motivo sconosciuto"

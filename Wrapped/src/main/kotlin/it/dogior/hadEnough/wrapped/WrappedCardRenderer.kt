@@ -117,7 +117,7 @@ object WrappedCardRenderer {
     }
 
     private fun drawRank(canvas: Canvas, rank: WrappedRank) {
-        val badgeText = "${rank.emoji}  ${rank.title}"
+        val badgeText = rank.title
         val paint = textPaint(TEXT_PRIMARY, 38f, bold = true).apply {
             textAlign = Paint.Align.CENTER
         }
@@ -141,28 +141,38 @@ object WrappedCardRenderer {
         canvas.drawText(badgeText, WIDTH / 2f, badgeTop + badgeHeight / 2f + 14f, paint)
     }
 
+    /**
+     * Mai un numero decimale di ore/giorni (es. "14,4 giorni"): il
+     * componente più grande (giorni, o ore se meno di un giorno) in grande,
+     * il resto della scomposizione sotto, in chiaro — stessa logica di
+     * WrappedFormat usata nel pannello impostazioni.
+     */
     private fun drawHeroNumber(canvas: Canvas, totalMs: Long) {
-        val totalHours = totalMs / 3_600_000.0
-        val (bigText, unit) = if (totalHours >= 24) {
-            val days = totalHours / 24.0
-            "%.1f".format(days) to "giorni passati a guardare"
-        } else {
-            "%.0f".format(totalHours) to "ore totali di visione"
-        }
+        val units = WrappedFormat.breakDownDuration(totalMs)
+        val big = units.first()
+        val rest = units.drop(1)
 
         val numberPaint = textPaint(TEXT_PRIMARY, 220f, bold = true).apply {
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(bigText, WIDTH / 2f, 980f, numberPaint)
+        canvas.drawText(big.value.toString(), WIDTH / 2f, 980f, numberPaint)
 
-        val unitPaint = textPaint(TEXT_SECONDARY, 40f, bold = false).apply {
+        val labelPaint = textPaint(TEXT_SECONDARY, 44f, bold = true).apply {
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(unit, WIDTH / 2f, 1040f, unitPaint)
+        canvas.drawText(big.label, WIDTH / 2f, 1040f, labelPaint)
+
+        if (rest.isNotEmpty()) {
+            val restText = rest.joinToString("   ") { "${it.value} ${it.label}" }
+            val restPaint = textPaint(TEXT_SECONDARY, 36f, bold = false).apply {
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText(restText, WIDTH / 2f, 1100f, restPaint)
+        }
     }
 
     private fun drawCounters(canvas: Canvas, movies: Int, series: Int) {
-        val cardTop = 1180f
+        val cardTop = 1220f
         val cardHeight = 300f
         val gap = 40f
         val cardWidth = (WIDTH - 160f - gap) / 2f

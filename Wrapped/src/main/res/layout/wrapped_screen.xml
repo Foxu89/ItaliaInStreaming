@@ -1,13 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Variante TELEFONO (default, nessun qualificatore): il contenitore del
+     tempo (wrapped_time_container) è verticale, una voce per riga. La
+     variante layout-sw600dp/wrapped_screen.xml è identica tranne per quel
+     contenitore, orizzontale sugli schermi larghi (tablet). Nessun
+     android:background="@drawable/..." qui: si fa in codice in
+     WrappedFragment.kt (vedi commento su getDrawable in quel file) — e
+     nessun colore/testo hardcoded, così il pannello eredita il tema
+     chiaro/scuro/AMOLED scelto nelle impostazioni di CloudStream, come fa
+     già WatchParty. -->
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#15141F"
         android:orientation="vertical"
         android:padding="24dp">
 
@@ -16,69 +25,224 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
             android:text="CloudStream Wrapped"
-            android:textColor="#FFFFFF"
-            android:textSize="24sp"
+            android:textSize="22sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="20dp"
-            android:alpha="0.7"
-            android:text="Le tue statistiche di visione, in una card da condividere."
-            android:textColor="#FFFFFF"
+            android:alpha="0.65"
+            android:text="Le tue statistiche di visione."
             android:textSize="14sp" />
 
-        <!-- Riquadro anteprima: altezza FISSA (non adjustViewBounds), così il
-             box scuro con bordi arrotondati è sempre visibile da subito, anche
-             mentre la card è ancora in generazione in background — prima
-             l'ImageView non aveva nessuna src iniziale e con adjustViewBounds
-             collassava ad altezza zero finché il bitmap non era pronto,
-             facendo sembrare il pannello "vuoto"/invisibile. Lo spinner è
-             sovrapposto al centro dello stesso riquadro con un FrameLayout. -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="420dp"
-            android:layout_marginBottom="20dp">
+        <ProgressBar
+            android:id="@+id/wrapped_loading"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="40dp"
+            android:layout_marginBottom="40dp" />
 
-            <!-- Sfondo impostato via codice in WrappedFragment.kt (non in XML):
-                 un android:background="@drawable/..." scritto qui non si
-                 risolve in modo affidabile per le risorse agganciate
-                 dinamicamente di un plugin, lo stesso bug già trovato e
-                 risolto su WatchParty (vedi watchparty_settings*.xml). -->
-            <ImageView
-                android:id="@+id/wrapped_preview"
+        <LinearLayout
+            android:id="@+id/wrapped_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Card rank -->
+            <LinearLayout
+                android:id="@+id/wrapped_rank_card"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="fitCenter" />
-
-            <ProgressBar
-                android:id="@+id/wrapped_loading"
-                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center" />
+                android:layout_marginBottom="14dp"
+                android:orientation="vertical"
+                android:padding="16dp">
 
-        </FrameLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/wrapped_share"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginBottom="12dp"
-            android:gravity="center"
-            android:text="Share"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+                    <ImageView
+                        android:id="@+id/wrapped_rank_icon"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_marginEnd="14dp"
+                        android:scaleType="centerCrop" />
 
-        <TextView
-            android:id="@+id/wrapped_close"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:gravity="center"
-            android:text="Close"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:alpha="0.6"
+                            android:text="Il tuo rank"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/wrapped_rank_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            tools:text="Oro" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp">
+
+                    <ProgressBar
+                        android:id="@+id/wrapped_rank_progress"
+                        style="@android:style/Widget.ProgressBar.Horizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="14dp"
+                        android:max="1000" />
+
+                    <TextView
+                        android:id="@+id/wrapped_rank_progress_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        tools:text="MAX" />
+
+                </FrameLayout>
+
+            </LinearLayout>
+
+            <!-- Card tempo totale -->
+            <LinearLayout
+                android:id="@+id/wrapped_time_card"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:alpha="0.6"
+                    android:text="Tempo totale guardato"
+                    android:textSize="12sp" />
+
+                <!-- Popolato a runtime: una voce "14 / giorni" per
+                     componente, in colonna su telefono (qui) e in riga
+                     sugli schermi larghi (layout-sw600dp). -->
+                <LinearLayout
+                    android:id="@+id/wrapped_time_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </LinearLayout>
+
+            <!-- Card film/serie -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/wrapped_movies_card"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="7dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/wrapped_movies_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="26sp"
+                        android:textStyle="bold"
+                        tools:text="42" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:alpha="0.6"
+                        android:text="Film"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/wrapped_series_card"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="7dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/wrapped_series_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="26sp"
+                        android:textStyle="bold"
+                        tools:text="7" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:alpha="0.6"
+                        android:text="Serie TV"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:alpha="0.5"
+                android:text="Il conteggio film/serie riflette solo ciò che hai aggiunto alla tua libreria."
+                android:textSize="11sp" />
+
+            <!-- Nessuna anteprima: l'immagine si genera solo al click. -->
+            <TextView
+                android:id="@+id/wrapped_share"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginBottom="10dp"
+                android:gravity="center"
+                android:text="Condividi"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/wrapped_close"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:text="Chiudi"
+                android:textSize="14sp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
