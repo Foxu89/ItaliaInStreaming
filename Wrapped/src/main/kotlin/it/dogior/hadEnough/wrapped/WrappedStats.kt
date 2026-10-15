@@ -2,6 +2,7 @@ package it.dogior.hadEnough.wrapped
 
 import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.isMovieType
+import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.RESULT_WATCH_STATE_DATA
 import com.lagradost.cloudstream3.utils.VIDEO_POS_DUR
@@ -26,14 +27,17 @@ data class WrappedStats(
  *    aggiorna per OGNI film/episodio su cui hai premuto play, a prescindere
  *    da liste/preferiti. La fonte più completa che CloudStream tenga, e
  *    l'unica che continua a crescere anche senza toccare la libreria.
- *  - "film/serie guardati": contati sulla Libreria (RESULT_WATCH_STATE_DATA,
- *    i contenuti con uno stato tipo "Watching"/"Completed"), perché è
- *    l'unico posto dove CloudStream salva anche il TIPO (film o serie) per
- *    ogni voce. VIDEO_POS_DUR non lo sa: un id lì è solo un numero, senza
- *    sapere se è un film o un episodio di una serie.
+ *  - "film/serie guardati": contati sulla Libreria, SOLO sezione
+ *    "Completato" (WatchType.COMPLETED, salvato separatamente in
+ *    RESULT_WATCH_STATE, non dentro i dati del contenuto) — "Da guardare",
+ *    "In corso" ecc. non contano, altrimenti il numero includerebbe roba
+ *    che non hai nemmeno finito di guardare. RESULT_WATCH_STATE_DATA resta
+ *    la fonte del TIPO (film o serie) per ogni voce, perché è l'unico posto
+ *    dove CloudStream lo salva — VIDEO_POS_DUR non lo sa: un id lì è solo
+ *    un numero, senza sapere se è un film o un episodio di una serie.
  *  Significa che "tempo totale" include tutto ciò che hai mai guardato,
- *  mentre i due contatori riflettono solo ciò che hai aggiunto alla
- *  libreria — onesto da dire all'utente, non un bug.
+ *  mentre i due contatori riflettono solo ciò che hai segnato come
+ *  "Completato" in libreria — onesto da dire all'utente, non un bug.
  */
 object WrappedStatsCalculator {
 
@@ -70,7 +74,7 @@ object WrappedStatsCalculator {
         }
     }
 
-    /** Conta film vs serie tra i contenuti presenti in Libreria (hanno un tipo salvato). */
+    /** Conta film vs serie SOLO tra i contenuti segnati come "Completato" in Libreria. */
     private fun computeLibraryCounts(): Pair<Int, Int> {
         val folder = "${DataStoreHelper.currentAccount}/$RESULT_WATCH_STATE_DATA"
         val keys = CloudStreamApp.getKeys(folder) ?: return 0 to 0
@@ -79,6 +83,7 @@ object WrappedStatsCalculator {
         var series = 0
         keys.forEach { fullKey ->
             val id = fullKey.removePrefix(prefix).toIntOrNull() ?: return@forEach
+            if (DataStoreHelper.getResultWatchState(id) != WatchType.COMPLETED) return@forEach
             val data = DataStoreHelper.getBookmarkedData(id) ?: return@forEach
             // "type" è un var (campo mutabile su BookmarkedData): copiato in un
             // val locale perché lo smart-cast a non-null non funziona su un var.

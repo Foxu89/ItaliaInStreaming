@@ -17,6 +17,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.plugins.Plugin
 import it.dogior.hadEnough.BuildConfig
@@ -169,6 +170,7 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
 
         val shareBtn = root.findView<TextView>("wrapped_share")
         val closeBtn = root.findView<TextView>("wrapped_close")
+        val infoBtn = root.findView<TextView>("wrapped_info")
 
         rankCard.background = cardBackground()
         timeCard.background = cardBackground()
@@ -178,9 +180,12 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
             ?: coloredFallback(0xFF3B65F5.toInt(), radiusDp = 16f)
         closeBtn.background = getDrawable("wrapped_outline_bg")
             ?: coloredFallback(0x12FFFFFF, radiusDp = 16f, strokeColor = 0x33FFFFFF)
+        infoBtn.background = getDrawable("wrapped_outline_bg")
+            ?: coloredFallback(0x12FFFFFF, radiusDp = 16f, strokeColor = 0x33FFFFFF)
 
         closeBtn.setOnClickListener { dismiss() }
         shareBtn.setOnClickListener { onShareClicked(shareBtn) }
+        infoBtn.setOnClickListener { showInfoDialog() }
 
         loadStats(loading, content, rankIconView, rankTitle, rankProgress, rankProgressLabel, timeContainer, moviesValue, seriesValue)
 
@@ -193,6 +198,32 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         android.util.Log.e(TAG, "Eccezione in onCreateView()", t)
         runCatching { showToast("CloudStream Wrapped crash: ${t.javaClass.simpleName}: ${t.message}", Toast.LENGTH_LONG) }
         null
+    }
+
+    /** Popup "Cosa fa questo plugin" — stesso stile del pulsante "!" di WatchParty. */
+    private fun showInfoDialog() {
+        runCatching {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Cosa fa questo plugin")
+                .setMessage(
+                    "CloudStream Wrapped legge solo dati che CloudStream ha già salvato " +
+                        "sul tuo telefono: nessuna rete, nessun server esterno, nessun " +
+                        "permesso nuovo. Si attiva una volta sola quando apri questa " +
+                        "schermata, non gira in background.\n\n" +
+                        "Tempo totale: somma di ogni film/episodio su cui hai premuto play, " +
+                        "anche se ti sei fermato a metà — CloudStream salva la posizione in " +
+                        "continuo durante la riproduzione, non solo quando esci in modo " +
+                        "pulito.\n\n" +
+                        "Film e serie TV guardate: contano SOLO i contenuti che hai segnato " +
+                        "come \"Completato\" nella tua Libreria. Le altre sezioni (\"Da " +
+                        "guardare\", \"In corso\", ecc.) non vengono contate, altrimenti il " +
+                        "numero includerebbe anche roba che non hai nemmeno iniziato o " +
+                        "finito di guardare.\n\n" +
+                        "Rank: calcolato sulle ore totali guardate."
+                )
+                .setPositiveButton("Ho capito", null)
+                .show()
+        }.onFailure { android.util.Log.e(TAG, "showInfoDialog() fallita", it) }
     }
 
     private fun loadStats(
