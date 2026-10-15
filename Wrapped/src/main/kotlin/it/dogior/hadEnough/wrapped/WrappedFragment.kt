@@ -79,11 +79,16 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
     private fun cardBackground(): Drawable =
         getDrawable("wrapped_card_bg") ?: coloredFallback(0x14FFFFFF, radiusDp = 16f, strokeColor = 0x1FFFFFFF)
 
-    /** Colore associato al rank, usato sia per il badge di fallback che per la barra. */
+    /**
+     * Colore associato al rank, usato per la barra di progresso e come
+     * badge di fallback finché il PNG non si carica. Campionato dai PNG
+     * veri (bordo esagonale, escludendo la nuvola blu del logo al centro),
+     * così la barra combacia col colore reale dell'icona di ogni rank.
+     */
     private fun rankColor(rank: WrappedRank): Int = when (rank) {
-        WrappedRank.BRONZE -> 0xFFCD7F32.toInt()
-        WrappedRank.SILVER -> 0xFFB0B8C1.toInt()
-        WrappedRank.GOLD -> 0xFFFFC94A.toInt()
+        WrappedRank.BRONZE -> 0xFFD07040.toInt()
+        WrappedRank.SILVER -> 0xFFB0B0B8.toInt()
+        WrappedRank.GOLD -> 0xFFE0A830.toInt()
         WrappedRank.DIAMOND -> 0xFF4FC3F7.toInt()
         WrappedRank.MASTER -> 0xFFB388FF.toInt()
     }
@@ -256,7 +261,10 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
 
         val ctx = requireContext().applicationContext
         CoroutineScope(Dispatchers.Default).launch {
-            val result = runCatching { WrappedCardRenderer.render(ctx, stats) }
+            // Icona vera del rank (PNG del plugin), passata al renderer: lui
+            // riceve solo il Context dell'host e non può caricarla da solo.
+            val icon = runCatching { rankIcon(stats.rank) }.getOrNull()
+            val result = runCatching { WrappedCardRenderer.render(ctx, stats, icon) }
             result.exceptionOrNull()?.let { android.util.Log.e(TAG, "onShareClicked() fallita", it) }
             val bitmap = result.getOrNull()
 

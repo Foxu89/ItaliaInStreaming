@@ -17,7 +17,9 @@ enum class WrappedRank(val minHours: Int, val title: String, val iconName: Strin
     SILVER(20, "Argento", "rank_silver"),
     GOLD(60, "Oro", "rank_gold"),
     DIAMOND(150, "Diamante", "rank_diamond"),
-    MASTER(400, "Master", "rank_master");
+    // Rank più alto, tema viola/arcobaleno — "CloudStream" invece di "Master"
+    // su richiesta esplicita.
+    MASTER(400, "CloudStream", "rank_master");
 
     val isMax: Boolean get() = this == MASTER
 

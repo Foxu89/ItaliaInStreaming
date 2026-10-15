@@ -34,13 +34,19 @@ object WrappedCardRenderer {
     private val TEXT_PRIMARY = Color.WHITE
     private val TEXT_SECONDARY = Color.parseColor("#9A98AE")
 
-    fun render(context: Context, stats: WrappedStats): Bitmap {
+    /**
+     * [rankIcon] è il PNG vero del rank, già caricato dal chiamante (via
+     * plugin.resources — questo renderer riceve solo il Context dell'host,
+     * che non ha accesso alle risorse del plugin). Se null (icona non
+     * trovata) si disegna solo il testo del rank, senza badge.
+     */
+    fun render(context: Context, stats: WrappedStats, rankIcon: Drawable? = null): Bitmap {
         val bmp = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
 
         drawBackground(canvas)
         drawHeader(context, canvas, stats.profileName)
-        drawRank(canvas, stats.rank)
+        drawRank(canvas, stats.rank, rankIcon)
         drawHeroNumber(canvas, stats.totalWatchedMs)
         drawCounters(canvas, stats.moviesWatched, stats.seriesWatched)
         drawFooter(canvas)
@@ -116,7 +122,16 @@ object WrappedCardRenderer {
         }
     }
 
-    private fun drawRank(canvas: Canvas, rank: WrappedRank) {
+    private fun drawRank(canvas: Canvas, rank: WrappedRank, rankIcon: Drawable?) {
+        // Icona del rank (il PNG esagonale vero), se caricata dal chiamante.
+        if (rankIcon != null) {
+            val iconSize = 220
+            val iconLeft = (WIDTH - iconSize) / 2
+            val iconTop = 420
+            rankIcon.setBounds(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize)
+            rankIcon.draw(canvas)
+        }
+
         val badgeText = rank.title
         val paint = textPaint(TEXT_PRIMARY, 38f, bold = true).apply {
             textAlign = Paint.Align.CENTER
@@ -124,7 +139,7 @@ object WrappedCardRenderer {
         val textWidth = paint.measureText(badgeText)
         val paddingH = 48f
         val badgeHeight = 96f
-        val badgeTop = 560f
+        val badgeTop = if (rankIcon != null) 680f else 560f
         val badgeRect = RectF(
             WIDTH / 2f - textWidth / 2f - paddingH,
             badgeTop,
