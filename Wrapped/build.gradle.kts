@@ -12,7 +12,7 @@ dependencies {
     compileOnly("androidx.core:core-ktx:1.13.1")
 }
 
-version = 6
+version = 7
 
 android {
     buildFeatures {

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Variante TELEFONO (default, nessun qualificatore): il contenitore del
-     tempo (wrapped_time_container) è verticale, una voce per riga. La
-     variante layout-sw600dp/wrapped_screen.xml è identica tranne per quel
-     contenitore, orizzontale sugli schermi larghi (tablet). Nessun
-     android:background="@drawable/..." qui: si fa in codice in
+<!-- Variante TELEFONO (default, nessun qualificatore): identica alla
+     variante layout-sw600dp/wrapped_screen.xml (tablet), tenute separate
+     solo per poter divergere in futuro se servisse. Il pulsante "!" sta
+     dentro la card del rank, in alto a destra (vedi wrapped_rank_card).
+     Nessun android:background="@drawable/..." qui: si fa in codice in
      WrappedFragment.kt (vedi commento su getDrawable in quel file) — e
      nessun colore/testo hardcoded, così il pannello eredita il tema
      chiaro/scuro/AMOLED scelto nelle impostazioni di CloudStream, come fa
@@ -20,32 +20,13 @@
         android:orientation="vertical"
         android:padding="24dp">
 
-        <LinearLayout
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/wrapped_info"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:layout_marginEnd="10dp"
-                android:gravity="center"
-                android:text="!"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="CloudStream Wrapped"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-        </LinearLayout>
+            android:text="CloudStream Wrapped"
+            android:textSize="22sp"
+            android:textStyle="bold" />
 
         <TextView
             android:layout_width="match_parent"
@@ -79,43 +60,62 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <LinearLayout
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:id="@+id/wrapped_rank_icon"
-                        android:layout_width="64dp"
-                        android:layout_height="64dp"
-                        android:layout_marginEnd="14dp"
-                        android:scaleType="fitCenter" />
+                    android:layout_height="wrap_content">
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:layout_marginEnd="38dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:alpha="0.6"
-                            android:text="Il tuo rank"
-                            android:textSize="12sp" />
+                        <ImageView
+                            android:id="@+id/wrapped_rank_icon"
+                            android:layout_width="64dp"
+                            android:layout_height="64dp"
+                            android:layout_marginEnd="14dp"
+                            android:scaleType="fitCenter" />
 
-                        <TextView
-                            android:id="@+id/wrapped_rank_title"
-                            android:layout_width="match_parent"
+                        <LinearLayout
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:textSize="20sp"
-                            android:textStyle="bold"
-                            tools:text="Oro" />
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:alpha="0.6"
+                                android:text="Il tuo rank"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/wrapped_rank_title"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:textSize="20sp"
+                                android:textStyle="bold"
+                                tools:text="Oro" />
+
+                        </LinearLayout>
 
                     </LinearLayout>
 
-                </LinearLayout>
+                    <!-- Pulsante info, in alto a destra DENTRO la card del rank
+                         (spostato qui dall'header generale su richiesta). -->
+                    <TextView
+                        android:id="@+id/wrapped_info"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_gravity="top|end"
+                        android:gravity="center"
+                        android:text="!"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                </FrameLayout>
 
                 <FrameLayout
                     android:layout_width="match_parent"
@@ -160,13 +160,12 @@
                     android:textSize="12sp" />
 
                 <!-- Popolato a runtime: una voce "14 / giorni" per
-                     componente, in colonna su telefono (qui) e in riga
-                     sugli schermi larghi (layout-sw600dp). -->
+                     componente, sempre in fila orizzontale. -->
                 <LinearLayout
                     android:id="@+id/wrapped_time_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical" />
+                    android:orientation="horizontal" />
 
             </LinearLayout>
 

@@ -120,19 +120,23 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         return layer
     }
 
-    /** Una riga "14 / giorni": stessa view sia in colonna (telefono) che in riga (tablet). */
+    /** Una voce "14 / giorni" del tempo totale, sempre in fila (vedi wrapped_time_container). */
     private fun buildTimeUnitView(ctx: Context, unit: WrappedTimeUnit): View {
         val density = resources.displayMetrics.density
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            val m = (14 * density).toInt()
+            val m = (18 * density).toInt()
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { marginEnd = m; bottomMargin = m }
         }
         val value = TextView(ctx).apply {
             text = unit.value.toString()
-            textSize = 24f
+            textSize = 34f
+            // Bianco fisso (non il colore testo di default, troppo grigio/poco
+            // visibile): il numero è il dato principale della card, deve
+            // risaltare in ogni tema chiaro/scuro/AMOLED.
+            setTextColor(0xFFFFFFFF.toInt())
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
         val label = TextView(ctx).apply {
