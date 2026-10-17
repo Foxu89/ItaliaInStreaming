@@ -21,6 +21,7 @@ include(
 //    "IlGenioDelloStreaming",
     "OnlineSerieTV",
     "SectionOrganizer",
+    "SleepGuard",
 //    "StreamCenter",
 //    "StreamingCommunity",
     "StreamITA",

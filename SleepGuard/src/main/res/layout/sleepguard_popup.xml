@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Popup "Stai ancora guardando?": a schermo intero (sfondo scurito
+     impostato in codice in SleepGuardPopupFragment.onStart), con la card
+     vera e propria centrata. Nessun android:background="@drawable/..."
+     qui: si fa in codice, stessa regola di WatchParty/Wrapped. -->
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:id="@+id/sg_popup_card"
+        android:layout_width="320dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:padding="28dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:alpha="0.6"
+            android:gravity="center"
+            android:text="Inattività rilevata"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="28dp"
+            android:gravity="center"
+            android:text="Stai ancora guardando?"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/sg_popup_no"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginEnd="7dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="NO"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/sg_popup_yes"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_marginStart="7dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="SÌ"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>
