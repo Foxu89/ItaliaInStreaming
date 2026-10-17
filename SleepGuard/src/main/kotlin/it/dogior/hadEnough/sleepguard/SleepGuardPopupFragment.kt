@@ -69,10 +69,11 @@ class SleepGuardPopupFragment(
         dialog?.window?.setBackgroundDrawable(GradientDrawable().apply { setColor(0xCC000000.toInt()) })
     }
 
+    /** Stesso fix di SleepGuardSettingsFragment.getLayout: id valido solo nella tabella risorse del plugin. */
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
-        val res = plugin.resources ?: requireContext().resources
-        val id = res.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-        return inflater.cloneInContext(requireContext()).inflate(id, container, false)
+        val id = plugin.resources!!.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val layout = plugin.resources!!.getLayout(id)
+        return inflater.inflate(layout, container, false)
     }
 
     private fun <T : View> View.findView(name: String): T {

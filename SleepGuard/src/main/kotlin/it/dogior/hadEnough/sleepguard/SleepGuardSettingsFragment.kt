@@ -105,10 +105,19 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
         null
     }
 
+    /**
+     * L'id del layout è valido SOLO nella tabella risorse del plugin
+     * (plugin.resources): va quindi inflato con l'XmlResourceParser preso
+     * da lì (getLayout), mai passando il semplice Int id a un inflater
+     * legato al Context dell'host (cloneInContext) — risolverebbe l'id
+     * nella tabella risorse sbagliata e l'inflate fallirebbe silenziosamente,
+     * con lo stesso risultato "pannello invisibile" del bug già visto su
+     * Wrapped/WatchParty. Stesso pattern esatto di WrappedFragment.getLayout.
+     */
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
-        val res = plugin.resources ?: requireContext().resources
-        val id = res.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
-        return inflater.cloneInContext(requireContext()).inflate(id, container, false)
+        val id = plugin.resources!!.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+        val layout = plugin.resources!!.getLayout(id)
+        return inflater.inflate(layout, container, false)
     }
 
     private fun <T : View> View.findView(name: String): T {

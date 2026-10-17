@@ -17,7 +17,9 @@ object SleepGuardPrefs {
     private const val KEY_VOLUME_KEY_RESET_ENABLED = "volume_key_reset_enabled"
 
     const val DEFAULT_INACTIVITY_MINUTES = 60
-    const val MIN_INACTIVITY_MINUTES = 15
+    // TEMPORANEO per i test: 5 invece di 15, così non serve aspettare un
+    // quarto d'ora per vedere scattare il popup. Da rimettere a 15 più avanti.
+    const val MIN_INACTIVITY_MINUTES = 5
     const val MAX_INACTIVITY_MINUTES = 120
 
     const val DEFAULT_EPISODE_THRESHOLD = 3
