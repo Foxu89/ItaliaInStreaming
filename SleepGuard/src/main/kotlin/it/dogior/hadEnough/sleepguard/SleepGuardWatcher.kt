@@ -9,11 +9,15 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
-import androidx.fragment.app.FragmentActivity
-import androidx.fragment.app.FragmentManager
+import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.NavHostFragment
 import com.lagradost.cloudstream3.CommonActivity
+import com.lagradost.cloudstream3.MainActivity
+import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.ui.player.CSPlayerEvent
 import com.lagradost.cloudstream3.ui.player.FullScreenPlayer
+import com.lagradost.cloudstream3.ui.player.GeneratorPlayer
+import com.lagradost.cloudstream3.ui.player.PlayerEventSource
 
 private const val TAG = "SleepGuardWatcher"
 private const val TICK_MS = 1000L
@@ -22,8 +26,10 @@ private const val TICK_MS = 1000L
  * Motore del plugin: un unico "heartbeat" al secondo (approccio a polling,
  * non ci sono hook ufficiali per player/episodio/tasti lato plugin — vedi
  * i commenti sotto per ogni limite) che:
- *  1. rileva quando è aperto un player (FullScreenPlayer o sottoclassi come
- *     GeneratorPlayer, entrambe classi pubbliche dell'app);
+ *  1. rileva quando è aperto un player (GeneratorPlayer, la sottoclasse
+ *     pubblica di FullScreenPlayer usata per la riproduzione normale —
+ *     stesso identico meccanismo di ricerca già usato e verificato in
+ *     WatchParty, vedi currentPlayerFragment());
  *  2. aggancia un overlay trasparente per resettare il timer sul tocco;
  *  3. (opzionale) aggancia i tasti volume/telecomando, incatenando il
  *     listener già presente invece di sovrascriverlo — CommonActivity
@@ -72,8 +78,7 @@ object SleepGuardWatcher {
     }
 
     private fun heartbeat() {
-        val activity = CommonActivity.activity as? FragmentActivity
-        val fragment = activity?.supportFragmentManager?.let { findResumedPlayer(it) }
+        val fragment = currentPlayerFragment()
 
         if (fragment == null) {
             detach()
@@ -109,22 +114,25 @@ object SleepGuardWatcher {
     }
 
     /**
-     * CloudStream apre il player dentro un NavHostFragment (navigazione
-     * interna via Navigation Component), quindi il fragment del player non
-     * è mai "di primo livello" in activity.supportFragmentManager.fragments
-     * — lì c'è solo il NavHostFragment stesso. Va cercato ricorsivamente
-     * dentro ai childFragmentManager, altrimenti il watcher non lo trova
-     * mai (bug reale riscontrato: nessun aggancio, quindi nessuna pausa e
-     * nessun popup, anche con il timer scaduto).
+     * Stesso identico meccanismo di PlayerAccess.kt in WatchParty (già in
+     * produzione, confermato funzionante): CloudStream apre il player dentro
+     * un NavHostFragment (navigazione interna via Navigation Component), non
+     * come fragment di primo livello dell'Activity. Il tentativo precedente
+     * (ricerca ricorsiva generica su tutti i childFragmentManager, cercando
+     * una FullScreenPlayer resumed qualunque) trovava un fragment ma non
+     * sempre quello giusto/aggiornato: risultato, il popup compariva ma
+     * pausa/ripresa non avevano effetto sul player realmente in riproduzione.
+     * Qui invece si va dritti al nav_host_fragment via il suo id reale e si
+     * prende l'ultimo fragment del suo childFragmentManager, esattamente
+     * come fa WatchParty.
      */
-    private fun findResumedPlayer(fm: FragmentManager): FullScreenPlayer? {
-        for (fragment in fm.fragments) {
-            if (fragment is FullScreenPlayer && fragment.isResumed) return fragment
-            val nested = findResumedPlayer(fragment.childFragmentManager)
-            if (nested != null) return nested
-        }
-        return null
-    }
+    private fun currentPlayerFragment(): GeneratorPlayer? = runCatching {
+        val activity = CommonActivity.activity as? MainActivity ?: return@runCatching null
+        val navHost = activity.supportFragmentManager
+            .findFragmentById(R.id.nav_host_fragment) as? NavHostFragment ?: return@runCatching null
+        val top: Fragment? = navHost.childFragmentManager.fragments.lastOrNull()
+        top as? GeneratorPlayer
+    }.getOrNull()
 
     private fun attach(fragment: FullScreenPlayer) {
         detach() // chiude/scollega eventuale sessione precedente rimasta appesa
@@ -251,7 +259,10 @@ object SleepGuardWatcher {
         val plugin = hostPlugin ?: return
         popupShowing = true
 
-        runCatching { fragment.player.handleEvent(CSPlayerEvent.Pause) }
+        // PlayerEventSource.Sync (non UI): stessa scelta di WatchParty, è la
+        // fonte pensata per un comando di pausa/ripresa che arriva da fuori
+        // dai controlli a schermo, non da un tap dell'utente sul player.
+        runCatching { fragment.player.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync) }
             .onFailure { Log.e(TAG, "Impossibile mettere in pausa il player", it) }
 
         val popup = SleepGuardPopupFragment(
@@ -261,19 +272,21 @@ object SleepGuardWatcher {
                 lastInteractionAt = System.currentTimeMillis()
                 episodesSinceInteraction = 0
                 lastSeenTitle = null
-                runCatching { fragment.player.handleEvent(CSPlayerEvent.Play) }
+                runCatching { fragment.player.handleEvent(CSPlayerEvent.Play, PlayerEventSource.Sync) }
                     .onFailure { Log.e(TAG, "Impossibile riprendere il player", it) }
             },
             onNo = {
-                // Nessuna API plugin per chiudere l'Activity del player in modo
-                // pulito: come da richiesta, lasciamo il video in pausa e
-                // chiudiamo solo il popup.
+                // Il player vive dentro la stessa Activity di tutta l'app
+                // (navigazione interna via NavHostFragment, non una Activity
+                // separata): finish() chiude quindi l'intera app, non solo
+                // il player. Comportamento accettato così su richiesta,
+                // niente da "aggiustare" qui per ora.
                 popupShowing = false
                 runCatching {
                     val activity = fragment.activity
                     activity?.finish()
                 }.onFailure {
-                    Log.w(TAG, "finish() dell'activity del player non riuscita, resto in pausa", it)
+                    Log.w(TAG, "finish() dell'activity non riuscita, resto in pausa", it)
                 }
             },
         )
