@@ -11,7 +11,7 @@ dependencies {
     compileOnly("androidx.core:core-ktx:1.13.1")
 }
 
-version = 2
+version = 3
 
 android {
     buildFeatures {

@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
+import androidx.fragment.app.FragmentManager
 import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.ui.player.CSPlayerEvent
 import com.lagradost.cloudstream3.ui.player.FullScreenPlayer
@@ -72,8 +73,7 @@ object SleepGuardWatcher {
 
     private fun heartbeat() {
         val activity = CommonActivity.activity as? FragmentActivity
-        val fragment = activity?.supportFragmentManager?.fragments
-            ?.firstOrNull { it is FullScreenPlayer && it.isResumed } as? FullScreenPlayer
+        val fragment = activity?.supportFragmentManager?.let { findResumedPlayer(it) }
 
         if (fragment == null) {
             detach()
@@ -106,6 +106,24 @@ object SleepGuardWatcher {
         if (timeTriggered || episodeTriggered) {
             triggerPopup(fragment)
         }
+    }
+
+    /**
+     * CloudStream apre il player dentro un NavHostFragment (navigazione
+     * interna via Navigation Component), quindi il fragment del player non
+     * è mai "di primo livello" in activity.supportFragmentManager.fragments
+     * — lì c'è solo il NavHostFragment stesso. Va cercato ricorsivamente
+     * dentro ai childFragmentManager, altrimenti il watcher non lo trova
+     * mai (bug reale riscontrato: nessun aggancio, quindi nessuna pausa e
+     * nessun popup, anche con il timer scaduto).
+     */
+    private fun findResumedPlayer(fm: FragmentManager): FullScreenPlayer? {
+        for (fragment in fm.fragments) {
+            if (fragment is FullScreenPlayer && fragment.isResumed) return fragment
+            val nested = findResumedPlayer(fragment.childFragmentManager)
+            if (nested != null) return nested
+        }
+        return null
     }
 
     private fun attach(fragment: FullScreenPlayer) {
