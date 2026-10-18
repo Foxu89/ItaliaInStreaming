@@ -9,6 +9,14 @@ dependencies {
     compileOnly("androidx.navigation:navigation-fragment-ktx:2.7.7")
     compileOnly("com.google.android.material:material:1.4.0")
     compileOnly("androidx.core:core-ktx:1.13.1")
+    // MainActivity (CommonActivity.activity as? MainActivity in
+    // SleepGuardWatcher.currentPlayerFragment()) implementa
+    // ColorPickerDialogListener di questa libreria: senza questa riga
+    // Kotlin non riesce a risolvere i supertipi di MainActivity e la build
+    // fallisce ("Cannot access ColorPickerDialogListener..."), anche se il
+    // plugin non usa il color picker. Stessa dipendenza già presente in
+    // WatchParty per lo stesso identico motivo (vedi PlayerAccess.kt).
+    compileOnly("com.jaredrummler:colorpicker:1.1.0")
 }
 
 version = 4
