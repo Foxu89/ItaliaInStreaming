@@ -10,6 +10,7 @@ include(
 //    "AnimeUnity",
 //    "AnimeWorld",
 //    "Arte",
+    "AutoExtensions",
 //    "CalcioStreaming",
 //    "CB01",
 //    "Cinemacity",
