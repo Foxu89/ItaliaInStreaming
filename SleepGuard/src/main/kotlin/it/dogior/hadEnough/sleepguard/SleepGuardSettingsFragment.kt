@@ -8,7 +8,6 @@ import android.util.StateSet
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.CompoundButton
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -33,12 +32,12 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
         val timerSeekHost = root.findView<FrameLayout>("sg_timer_seek_host")
 
         val episodeCard = root.findView<LinearLayout>("sg_episode_card")
-        val episodeToggle = root.findView<android.widget.Switch>("sg_episode_toggle")
+        val episodeToggleHost = root.findView<FrameLayout>("sg_episode_toggle_host")
         val episodeValue = root.findView<TextView>("sg_episode_value")
         val episodeSeekHost = root.findView<FrameLayout>("sg_episode_seek_host")
 
         val volumeCard = root.findView<LinearLayout>("sg_volume_card")
-        val volumeToggle = root.findView<android.widget.Switch>("sg_volume_toggle")
+        val volumeToggleHost = root.findView<FrameLayout>("sg_volume_toggle_host")
 
         val closeBtn = root.findView<TextView>("sg_close")
 
@@ -64,15 +63,15 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
         val episodeSteps = (minEp..maxEp).toList()
         val currentEp = SleepGuardPrefs.episodeThreshold(ctx)
         episodeValue.text = "$currentEp episodes"
-        episodeToggle.isChecked = SleepGuardPrefs.isEpisodeCounterEnabled(ctx)
+        var episodeEnabled = SleepGuardPrefs.isEpisodeCounterEnabled(ctx)
         fun refreshEpisodeRowEnabled() {
-            val enabled = episodeToggle.isChecked
-            episodeSeekHost.isEnabled = enabled
-            episodeSeekHost.alpha = if (enabled) 1f else 0.4f
-            episodeValue.alpha = if (enabled) 1f else 0.4f
+            episodeSeekHost.isEnabled = episodeEnabled
+            episodeSeekHost.alpha = if (episodeEnabled) 1f else 0.4f
+            episodeValue.alpha = if (episodeEnabled) 1f else 0.4f
         }
         refreshEpisodeRowEnabled()
-        episodeToggle.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
+        mountToggle(episodeToggleHost, episodeEnabled) { checked ->
+            episodeEnabled = checked
             SleepGuardPrefs.setEpisodeCounterEnabled(ctx, checked)
             refreshEpisodeRowEnabled()
         }
@@ -82,8 +81,7 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
         }
 
         // --- Volume/remote key reset (experimental) ---
-        volumeToggle.isChecked = SleepGuardPrefs.isVolumeKeyResetEnabled(ctx)
-        volumeToggle.setOnCheckedChangeListener { _: CompoundButton, checked: Boolean ->
+        mountToggle(volumeToggleHost, SleepGuardPrefs.isVolumeKeyResetEnabled(ctx)) { checked ->
             SleepGuardPrefs.setVolumeKeyResetEnabled(ctx, checked)
         }
 

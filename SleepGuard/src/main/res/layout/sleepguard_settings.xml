@@ -103,12 +103,10 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
-                <Switch
-                    android:id="@+id/sg_episode_toggle"
+                <FrameLayout
+                    android:id="@+id/sg_episode_toggle_host"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true" />
+                    android:layout_height="wrap_content" />
 
             </LinearLayout>
 
@@ -160,12 +158,10 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
-                <Switch
-                    android:id="@+id/sg_volume_toggle"
+                <FrameLayout
+                    android:id="@+id/sg_volume_toggle_host"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true" />
+                    android:layout_height="wrap_content" />
 
             </LinearLayout>
 

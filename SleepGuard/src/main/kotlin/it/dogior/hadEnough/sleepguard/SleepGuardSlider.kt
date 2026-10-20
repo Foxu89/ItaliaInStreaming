@@ -67,20 +67,34 @@ private fun mountComposeSlider(
     val composeView = androidx.compose.ui.platform.ComposeView(host.context)
     val state = androidx.compose.runtime.mutableStateOf(initialIndex.toFloat())
     val accent = androidx.compose.ui.graphics.Color(accentColorInt)
+    // Unselected track + selected-tick color (requested value).
+    val unselectedColor = androidx.compose.ui.graphics.Color(0xFF494458)
+    fun commit(value: Float) {
+        val idx = value.toInt().coerceIn(0, steps.size - 1)
+        onValueChange(steps[idx])
+    }
     composeView.setContent {
         androidx.compose.material3.MaterialTheme {
             androidx.compose.material3.Slider(
                 value = state.value,
-                onValueChange = { state.value = it },
-                onValueChangeFinished = {
-                    val idx = state.value.toInt().coerceIn(0, steps.size - 1)
-                    onValueChange(steps[idx])
+                onValueChange = {
+                    state.value = it
+                    // Live update while dragging, not only on release.
+                    commit(it)
                 },
+                onValueChangeFinished = { commit(state.value) },
                 valueRange = 0f..(steps.size - 1).toFloat(),
                 steps = steps.size - 2, // M3 "steps" = INTERMEDIATE ticks, excluding both endpoints
                 colors = androidx.compose.material3.SliderDefaults.colors(
                     thumbColor = accent,
                     activeTrackColor = accent,
+                    // The part of the track NOT covered by the theme color.
+                    inactiveTrackColor = unselectedColor,
+                    // Tick dots: on the unselected part of the track, use the
+                    // theme accent color; on the selected part, use the same
+                    // dark shade as the unselected track.
+                    activeTickColor = unselectedColor,
+                    inactiveTickColor = accent,
                 ),
             )
         }
@@ -108,5 +122,5 @@ fun themeAccentColor(context: Context): Int {
     }.getOrNull()
     if (fromPlatform != null) return fromPlatform
 
-    return 0xFF3B65F5.toInt() // same fallback blue used elsewhere in the plugin
+    return 0xFF2E7DFF.toInt() // same exact fallback blue WatchParty uses
 }
