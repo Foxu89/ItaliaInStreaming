@@ -12,15 +12,14 @@ import com.lagradost.cloudstream3.plugins.Plugin
 private const val TAG = "SleepGuard"
 
 /**
- * Plugin solo-CloudStream: rileva l'inattività durante la riproduzione
- * (nessun tocco, nessun tasto volume/telecomando, N episodi Auto-Next di
- * fila) e mette in pausa chiedendo "Stai ancora guardando?", come
- * Netflix/YouTube.
+ * CloudStream-only plugin: detects inactivity during playback (no touch,
+ * no volume/remote key, N Auto-Next episodes in a row) and pauses, asking
+ * "Are you still watching?", just like Netflix/YouTube.
  *
- * Il monitoraggio (SleepGuardWatcher) parte subito al caricamento del
- * plugin, non solo quando si apre il pannello impostazioni: deve essere
- * attivo ogni volta che l'utente guarda qualcosa, senza bisogno di azioni
- * manuali. Il pannello impostazioni serve solo per regolare le soglie.
+ * Monitoring (SleepGuardWatcher) starts right away when the plugin loads,
+ * not only when the settings panel is opened: it needs to be active
+ * whenever the user is watching something, with no manual action required.
+ * The settings panel is only there to adjust the thresholds.
  */
 @CloudstreamPlugin
 class SleepGuardPlugin : Plugin() {
@@ -40,7 +39,7 @@ class SleepGuardPlugin : Plugin() {
         }
         SleepGuardSettingsFragment(this).show(activity.supportFragmentManager, "SleepGuard")
     }.onFailure {
-        Log.e(TAG, "openSettingsSheet(): eccezione inattesa", it)
+        Log.e(TAG, "openSettingsSheet(): unexpected exception", it)
         showToast("Can't open SleepGuard settings: ${it.javaClass.simpleName}", Toast.LENGTH_LONG)
     }
 }

@@ -23,24 +23,24 @@ private const val TAG = "SleepGuardWatcher"
 private const val TICK_MS = 1000L
 
 /**
- * Motore del plugin: un unico "heartbeat" al secondo (approccio a polling,
- * non ci sono hook ufficiali per player/episodio/tasti lato plugin — vedi
- * i commenti sotto per ogni limite) che:
- *  1. rileva quando è aperto un player (GeneratorPlayer, la sottoclasse
- *     pubblica di FullScreenPlayer usata per la riproduzione normale —
- *     stesso identico meccanismo di ricerca già usato e verificato in
- *     WatchParty, vedi currentPlayerFragment());
- *  2. aggancia un overlay trasparente per resettare il timer sul tocco;
- *  3. (opzionale) aggancia i tasti volume/telecomando, incatenando il
- *     listener già presente invece di sovrascriverlo — CommonActivity
- *     espone un solo slot condiviso con il player stesso per i suoi gesti
- *     volume/DPAD, quindi va trattato con cautela;
- *  4. (opzionale, BETA) legge il titolo mostrato a schermo per intuire un
- *     cambio episodio da Auto-Next — nessuna API ufficiale per questo,
- *     è una lettura best-effort della UI che può smettere di funzionare
- *     se CloudStream cambia gli id delle view del player;
- *  5. a soglia raggiunta, mette in pausa (via la proprietà pubblica
- *     `player` di AbstractPlayerFragment) e mostra il popup.
+ * The plugin's engine: a single one-second "heartbeat" (polling approach,
+ * there are no official plugin hooks for the player/episode/keys — see the
+ * comments below for each limitation) that:
+ *  1. detects when a player is open (GeneratorPlayer, the public subclass
+ *     of FullScreenPlayer used for normal playback — same exact lookup
+ *     mechanism already used and verified in WatchParty, see
+ *     currentPlayerFragment());
+ *  2. attaches a transparent overlay to reset the timer on touch;
+ *  3. (optional) hooks volume/remote keys, chaining the existing listener
+ *     instead of overwriting it — CommonActivity exposes a single slot
+ *     shared with the player itself for its volume/D-pad gestures, so it
+ *     has to be handled carefully;
+ *  4. (optional, BETA) reads the on-screen title to guess an Auto-Next
+ *     episode change — no official API for this, it's a best-effort read
+ *     of the UI that can stop working if CloudStream changes the player's
+ *     view ids;
+ *  5. once a threshold is reached, pauses (via AbstractPlayerFragment's
+ *     public `player` property) and shows the popup.
  */
 object SleepGuardWatcher {
 
@@ -72,7 +72,7 @@ object SleepGuardWatcher {
 
     private val tick = object : Runnable {
         override fun run() {
-            runCatching { heartbeat() }.onFailure { Log.e(TAG, "heartbeat() fallito", it) }
+            runCatching { heartbeat() }.onFailure { Log.e(TAG, "heartbeat() failed", it) }
             handler.postDelayed(this, TICK_MS)
         }
     }
@@ -114,17 +114,16 @@ object SleepGuardWatcher {
     }
 
     /**
-     * Stesso identico meccanismo di PlayerAccess.kt in WatchParty (già in
-     * produzione, confermato funzionante): CloudStream apre il player dentro
-     * un NavHostFragment (navigazione interna via Navigation Component), non
-     * come fragment di primo livello dell'Activity. Il tentativo precedente
-     * (ricerca ricorsiva generica su tutti i childFragmentManager, cercando
-     * una FullScreenPlayer resumed qualunque) trovava un fragment ma non
-     * sempre quello giusto/aggiornato: risultato, il popup compariva ma
-     * pausa/ripresa non avevano effetto sul player realmente in riproduzione.
-     * Qui invece si va dritti al nav_host_fragment via il suo id reale e si
-     * prende l'ultimo fragment del suo childFragmentManager, esattamente
-     * come fa WatchParty.
+     * Same exact mechanism as PlayerAccess.kt in WatchParty (already in
+     * production, confirmed working): CloudStream opens the player inside
+     * a NavHostFragment (internal navigation via the Navigation Component),
+     * not as a top-level fragment of the Activity. The earlier attempt
+     * (generic recursive search through every childFragmentManager, looking
+     * for any resumed FullScreenPlayer) did find a fragment, but not always
+     * the right/current one: the popup would show up, but pause/resume had
+     * no effect on the player actually playing. This goes straight to
+     * nav_host_fragment via its real id and takes the last fragment of its
+     * childFragmentManager, exactly like WatchParty does.
      */
     private fun currentPlayerFragment(): GeneratorPlayer? = runCatching {
         val activity = CommonActivity.activity as? MainActivity ?: return@runCatching null
@@ -135,7 +134,7 @@ object SleepGuardWatcher {
     }.getOrNull()
 
     private fun attach(fragment: FullScreenPlayer) {
-        detach() // chiude/scollega eventuale sessione precedente rimasta appesa
+        detach() // close/detach any previous session left hanging around
         currentFragment = fragment
         lastInteractionAt = System.currentTimeMillis()
         episodesSinceInteraction = 0
@@ -152,9 +151,9 @@ object SleepGuardWatcher {
     }
 
     /**
-     * Overlay trasparente sopra la view del player: intercetta ACTION_DOWN
-     * per resettare il timer ma ritorna sempre false, così il tocco prosegue
-     * normalmente verso i controlli del player sotto (passthrough, non lo consuma).
+     * Transparent overlay over the player's view: intercepts ACTION_DOWN to
+     * reset the timer but always returns false, so the touch keeps flowing
+     * normally to the player controls underneath (passthrough, never consumed).
      */
     private fun attachTouchOverlay(fragment: FullScreenPlayer) {
         val root = fragment.view as? ViewGroup ?: return
@@ -179,12 +178,13 @@ object SleepGuardWatcher {
     }
 
     /**
-     * CommonActivity.keyEventListener è UNA variabile sola, non una lista:
-     * il player (PlayerGestureHelper/FullScreenPlayer) la usa per i propri
-     * gesti volume/DPAD e può riassegnarla in ogni momento del suo ciclo
-     * vita. Per non romperla: salviamo quello che c'è già, lo richiamiamo
-     * sempre noi stessi, e ricontrolliamo ad ogni tick se qualcun altro
-     * (il player) l'ha sovrascritta nel frattempo, riagganciandoci sopra.
+     * CommonActivity.keyEventListener is a SINGLE variable, not a list: the
+     * player (PlayerGestureHelper/FullScreenPlayer) uses it for its own
+     * volume/D-pad gestures and can reassign it at any point in its
+     * lifecycle. To avoid breaking it: save whatever is already there,
+     * always call through to it ourselves, and re-check on every tick
+     * whether someone else (the player) overwrote it in the meantime,
+     * re-chaining ourselves on top if so.
      */
     private fun ensureKeyListenerChained() {
         if (CommonActivity.keyEventListener === ourKeyListener) return
@@ -194,8 +194,8 @@ object SleepGuardWatcher {
             if (event != null && isRelevantKey(event.keyCode)) {
                 lastInteractionAt = System.currentTimeMillis()
             }
-            // Inoltra sempre al listener originale: non cambiamo il comportamento
-            // nativo, aggiungiamo solo il reset del timer in ascolto.
+            // Always forward to the original listener: we don't change the
+            // native behavior, we only add the timer reset on top of it.
             originalKeyListener?.invoke(pair) ?: false
         }
         ourKeyListener = wrapper
@@ -221,14 +221,13 @@ object SleepGuardWatcher {
     }
 
     /**
-     * BETA: nessuna API per sapere quando Auto-Next passa all'episodio
-     * successivo (lo stato interno del player è privato). Come proxy si
-     * legge il testo del titolo mostrato a schermo (id reale del player
-     * di CloudStream, "player_video_title") e si conta un cambio di
-     * episodio quando il testo cambia. Se CloudStream rinomina quella
-     * view in un futuro aggiornamento questa funzione smette silenziosamente
-     * di contare (fallisce dentro il runCatching del chiamante), senza
-     * rompere il resto del plugin.
+     * BETA: no API to know when Auto-Next moves to the next episode (the
+     * player's internal state is private). As a proxy, this reads the
+     * on-screen title text (CloudStream's real view id, "player_video_title")
+     * and counts an episode change whenever that text changes. If
+     * CloudStream ever renames that view in a future update, this function
+     * silently stops counting (it fails inside the caller's runCatching),
+     * without breaking the rest of the plugin.
      */
     private fun pollEpisodeTitle(fragment: FullScreenPlayer) {
         val root = fragment.view ?: return
@@ -259,11 +258,11 @@ object SleepGuardWatcher {
         val plugin = hostPlugin ?: return
         popupShowing = true
 
-        // PlayerEventSource.Sync (non UI): stessa scelta di WatchParty, è la
-        // fonte pensata per un comando di pausa/ripresa che arriva da fuori
-        // dai controlli a schermo, non da un tap dell'utente sul player.
+        // PlayerEventSource.Sync (not UI): same choice as WatchParty, it's
+        // the source meant for a pause/resume command coming from outside
+        // the on-screen controls, not from a user tap on the player.
         runCatching { fragment.player.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync) }
-            .onFailure { Log.e(TAG, "Impossibile mettere in pausa il player", it) }
+            .onFailure { Log.e(TAG, "Could not pause the player", it) }
 
         val popup = SleepGuardPopupFragment(
             plugin = plugin,
@@ -273,20 +272,30 @@ object SleepGuardWatcher {
                 episodesSinceInteraction = 0
                 lastSeenTitle = null
                 runCatching { fragment.player.handleEvent(CSPlayerEvent.Play, PlayerEventSource.Sync) }
-                    .onFailure { Log.e(TAG, "Impossibile riprendere il player", it) }
+                    .onFailure { Log.e(TAG, "Could not resume the player", it) }
             },
             onNo = {
-                // Il player vive dentro la stessa Activity di tutta l'app
-                // (navigazione interna via NavHostFragment, non una Activity
-                // separata): finish() chiude quindi l'intera app, non solo
-                // il player. Comportamento accettato così su richiesta,
-                // niente da "aggiustare" qui per ora.
+                // The player fragment doesn't register its own
+                // OnBackPressedCallback: it relies entirely on the Navigation
+                // Component's default integration with onBackPressedDispatcher
+                // (popping the NavHostFragment). Calling onBackPressedDispatcher
+                // here is therefore exactly equivalent to pressing the system
+                // Back button while in the player: it closes ONLY the player
+                // and returns to the previous screen (the movie/series detail
+                // page), not the whole app. finish() is kept only as a
+                // fallback in case this isn't available for some reason.
                 popupShowing = false
                 runCatching {
                     val activity = fragment.activity
-                    activity?.finish()
+                    val dispatcher = activity?.onBackPressedDispatcher
+                    if (dispatcher != null && dispatcher.hasEnabledCallbacks()) {
+                        dispatcher.onBackPressed()
+                    } else {
+                        activity?.finish()
+                    }
                 }.onFailure {
-                    Log.w(TAG, "finish() dell'activity non riuscita, resto in pausa", it)
+                    Log.w(TAG, "Could not close the player, falling back to finishing the activity", it)
+                    runCatching { fragment.activity?.finish() }
                 }
             },
         )
@@ -294,7 +303,7 @@ object SleepGuardWatcher {
         runCatching {
             popup.show(fragment.parentFragmentManager, "SleepGuardPopup")
         }.onFailure {
-            Log.e(TAG, "Impossibile mostrare il popup SleepGuard", it)
+            Log.e(TAG, "Could not show the SleepGuard popup", it)
             popupShowing = false
         }
     }

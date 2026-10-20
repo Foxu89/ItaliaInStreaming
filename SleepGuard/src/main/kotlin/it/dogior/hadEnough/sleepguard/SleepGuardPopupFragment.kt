@@ -3,7 +3,9 @@ package it.dogior.hadEnough.sleepguard
 import android.app.Dialog
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
+import android.util.StateSet
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,12 +15,13 @@ import androidx.fragment.app.DialogFragment
 import it.dogior.hadEnough.BuildConfig
 
 /**
- * Popup "Stai ancora guardando?" mostrato sopra il player in pausa.
- * Non annullabile (niente tap-outside/back) altrimenti l'utente lo chiude
- * per sbaglio e il player resta in pausa senza che nessuno se ne accorga.
+ * "Are you still watching?" popup shown over the paused player.
+ * Not cancelable (no tap-outside/back dismiss), otherwise the user could
+ * close it by accident and the player would stay paused with no one
+ * noticing.
  *
- * Nessun android:background="@drawable/..." nel layout: stessa lezione
- * imparata su WatchParty/Wrapped, si imposta tutto in codice qui sotto.
+ * No android:background="@drawable/..." in the layout: same lesson learned
+ * on WatchParty/Wrapped, everything is set in code below.
  */
 class SleepGuardPopupFragment(
     private val plugin: SleepGuardPlugin,
@@ -44,8 +47,8 @@ class SleepGuardPopupFragment(
         val noBtn = root.findView<TextView>("sg_popup_no")
 
         card.background = cardBackground()
-        yesBtn.background = getDrawable("sleepguard_accent_bg") ?: coloredFallback(0xFF3B65F5.toInt(), radiusDp = 14f)
-        noBtn.background = getDrawable("sleepguard_outline_bg") ?: coloredFallback(0x12FFFFFF, radiusDp = 14f, strokeColor = 0x33FFFFFF)
+        yesBtn.background = focusableBackground(normal = 0xFF3B65F5.toInt(), focused = 0xFF5B82FF.toInt(), radiusDp = 14f)
+        noBtn.background = focusableBackground(normal = 0x12FFFFFF, focused = 0x24FFFFFF, radiusDp = 14f, strokeColor = 0x33FFFFFF)
 
         yesBtn.setOnClickListener {
             runCatching { dismissAllowingStateLoss() }
@@ -56,20 +59,24 @@ class SleepGuardPopupFragment(
             onNo()
         }
 
+        // Default focus on "Yes" (the safe choice) so a remote/D-pad user
+        // can confirm immediately with a single press, same as Netflix.
+        yesBtn.post { runCatching { yesBtn.requestFocus() } }
+
         root
     } catch (t: Throwable) {
-        android.util.Log.e(TAG, "Eccezione in onCreateView() del popup SleepGuard", t)
+        android.util.Log.e(TAG, "Exception in SleepGuard popup onCreateView()", t)
         null
     }
 
     override fun onStart() {
         super.onStart()
-        // Occupa tutto lo schermo sopra il player, sfondo scurito dietro la card.
+        // Fills the whole screen above the player, dimmed background behind the card.
         dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog?.window?.setBackgroundDrawable(GradientDrawable().apply { setColor(0xCC000000.toInt()) })
     }
 
-    /** Stesso fix di SleepGuardSettingsFragment.getLayout: id valido solo nella tabella risorse del plugin. */
+    /** Same fix as SleepGuardSettingsFragment.getLayout: the id is only valid in the plugin's own resource table. */
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
         val id = plugin.resources!!.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
         val layout = plugin.resources!!.getLayout(id)
@@ -96,6 +103,25 @@ class SleepGuardPopupFragment(
             setColor(fill)
             cornerRadius = radiusDp * density
             strokeColor?.let { setStroke((1 * density).toInt(), it) }
+        }
+    }
+
+    /**
+     * Visible highlight when the button gets D-pad/remote focus (TV/remote
+     * navigation): a StateListDrawable with a brighter fill for the focused
+     * and pressed states, so a remote user can see which button is selected.
+     */
+    private fun focusableBackground(normal: Int, focused: Int, radiusDp: Float, strokeColor: Int? = null): Drawable {
+        val density = resources.displayMetrics.density
+        fun shape(color: Int) = GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = radiusDp * density
+            strokeColor?.let { setStroke((1 * density).toInt(), it) }
+        }
+        return StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_focused), shape(focused))
+            addState(intArrayOf(android.R.attr.state_pressed), shape(focused))
+            addState(StateSet.WILD_CARD, shape(normal))
         }
     }
 

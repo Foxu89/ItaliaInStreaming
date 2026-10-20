@@ -4,9 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
- * Impostazioni del plugin, salvate in locale (SharedPreferences, nessun
- * account/rete coinvolta). Letture/scritture leggere, nessuna chiamata da
- * thread diversi dalla UI quindi niente bisogno di sincronizzazione.
+ * Plugin settings, stored locally (SharedPreferences, no account/network
+ * involved). Lightweight reads/writes, never called from a thread other
+ * than the UI thread, so no synchronization is needed.
  */
 object SleepGuardPrefs {
     private const val FILE = "sleepguard_prefs"
@@ -17,8 +17,8 @@ object SleepGuardPrefs {
     private const val KEY_VOLUME_KEY_RESET_ENABLED = "volume_key_reset_enabled"
 
     const val DEFAULT_INACTIVITY_MINUTES = 60
-    // TEMPORANEO per i test: 5 invece di 15, così non serve aspettare un
-    // quarto d'ora per vedere scattare il popup. Da rimettere a 15 più avanti.
+    // TEMPORARY for testing: 5 instead of 15, so there's no need to wait a
+    // quarter of an hour to see the popup trigger. Put back to 15 later.
     const val MIN_INACTIVITY_MINUTES = 5
     const val MAX_INACTIVITY_MINUTES = 120
 
@@ -43,7 +43,7 @@ object SleepGuardPrefs {
         prefs(context).edit().putInt(KEY_EPISODE_THRESHOLD, count).apply()
     }
 
-    /** Beta: conteggio episodi auto-next, via lettura del titolo a schermo (nessun hook ufficiale). */
+    /** Beta: Auto-Next episode counting, via reading the on-screen title (no official hook). */
     fun isEpisodeCounterEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_EPISODE_COUNTER_ENABLED, true)
 
@@ -51,7 +51,7 @@ object SleepGuardPrefs {
         prefs(context).edit().putBoolean(KEY_EPISODE_COUNTER_ENABLED, enabled).apply()
     }
 
-    /** Sperimentale: reset su tasti volume/telecomando, condivide uno slot con CloudStream stesso. */
+    /** Experimental: reset on volume/remote keys, shares a slot with CloudStream itself. */
     fun isVolumeKeyResetEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_VOLUME_KEY_RESET_ENABLED, true)
 

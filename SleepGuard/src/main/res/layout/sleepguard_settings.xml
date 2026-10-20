@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pannello impostazioni SleepGuard, stesso stile "card" di Wrapped/WatchParty.
-     Nessun android:background="@drawable/..." qui: tutto in codice in
-     SleepGuardSettingsFragment.kt, niente colori hardcoded così il pannello
-     eredita il tema chiaro/scuro/AMOLED di CloudStream. -->
+<!-- SleepGuard settings panel, same "card" style as Wrapped/WatchParty.
+     No android:background="@drawable/..." here: everything is set in code
+     in SleepGuardSettingsFragment.kt, no hardcoded colors so the panel
+     inherits CloudStream's light/dark/AMOLED theme. -->
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -28,10 +28,10 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="20dp"
             android:alpha="0.65"
-            android:text="Rilevamento inattività durante la riproduzione."
+            android:text="Inactivity detection during playback."
             android:textSize="14sp" />
 
-        <!-- Card timer di inattività -->
+        <!-- Inactivity timer card -->
         <LinearLayout
             android:id="@+id/sg_timer_card"
             android:layout_width="match_parent"
@@ -50,7 +50,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Timer di inattività"
+                    android:text="Inactivity timer"
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
@@ -70,17 +70,17 @@
                 android:layout_marginTop="2dp"
                 android:layout_marginBottom="6dp"
                 android:alpha="0.6"
-                android:text="Senza tocchi, pausa e chiede se stai ancora guardando."
+                android:text="With no touches, pauses and asks if you're still watching."
                 android:textSize="12sp" />
 
-            <SeekBar
-                android:id="@+id/sg_timer_seek"
+            <FrameLayout
+                android:id="@+id/sg_timer_seek_host"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
         </LinearLayout>
 
-        <!-- Card conteggio episodi (beta) -->
+        <!-- Episode counter (beta) card -->
         <LinearLayout
             android:id="@+id/sg_episode_card"
             android:layout_width="match_parent"
@@ -99,14 +99,16 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Conteggio episodi (beta)"
+                    android:text="Episode counter (beta)"
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
                 <Switch
                     android:id="@+id/sg_episode_toggle"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true" />
 
             </LinearLayout>
 
@@ -116,7 +118,7 @@
                 android:layout_marginTop="2dp"
                 android:layout_marginBottom="10dp"
                 android:alpha="0.6"
-                android:text="Best-effort: legge il titolo a schermo per capire se è partito un nuovo episodio in Auto-Next, non è un dato ufficiale di CloudStream."
+                android:text="Best-effort: reads the on-screen title to guess when Auto-Next moves to a new episode, not an official CloudStream signal. Only applies to TV series, not movies."
                 android:textSize="12sp" />
 
             <TextView
@@ -126,16 +128,16 @@
                 android:layout_marginBottom="6dp"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                tools:text="3 episodi" />
+                tools:text="3 episodes" />
 
-            <SeekBar
-                android:id="@+id/sg_episode_seek"
+            <FrameLayout
+                android:id="@+id/sg_episode_seek_host"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
         </LinearLayout>
 
-        <!-- Card reset su tasti volume/telecomando (sperimentale) -->
+        <!-- Volume/remote key reset (experimental) card -->
         <LinearLayout
             android:id="@+id/sg_volume_card"
             android:layout_width="match_parent"
@@ -154,14 +156,16 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Reset su volume/telecomando (sperimentale)"
+                    android:text="Reset on volume/remote keys (experimental)"
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
                 <Switch
                     android:id="@+id/sg_volume_toggle"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true" />
 
             </LinearLayout>
 
@@ -170,7 +174,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:alpha="0.6"
-                android:text="Condivide lo stesso aggancio usato dal player per i gesti volume/DPAD: in rari casi può interferire con la navigazione da telecomando."
+                android:text="Shares the same hook the player uses for volume/D-pad gestures: in rare cases it may interfere with remote-control navigation."
                 android:textSize="12sp" />
 
         </LinearLayout>
@@ -179,8 +183,10 @@
             android:id="@+id/sg_close"
             android:layout_width="match_parent"
             android:layout_height="48dp"
+            android:clickable="true"
+            android:focusable="true"
             android:gravity="center"
-            android:text="Chiudi"
+            android:text="Close"
             android:textSize="14sp" />
 
     </LinearLayout>

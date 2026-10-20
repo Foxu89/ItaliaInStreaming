@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Popup "Stai ancora guardando?": a schermo intero (sfondo scurito
-     impostato in codice in SleepGuardPopupFragment.onStart), con la card
-     vera e propria centrata. Nessun android:background="@drawable/..."
-     qui: si fa in codice, stessa regola di WatchParty/Wrapped. -->
+<!-- "Are you still watching?" popup: full screen (dimmed background set
+     in code in SleepGuardPopupFragment.onStart), with the actual card
+     centered. No android:background="@drawable/..." here: done in code,
+     same rule as WatchParty/Wrapped. -->
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -22,7 +22,7 @@
             android:layout_marginBottom="8dp"
             android:alpha="0.6"
             android:gravity="center"
-            android:text="Inattività rilevata"
+            android:text="Inactivity detected"
             android:textColor="#FFFFFF"
             android:textSize="13sp"
             android:textStyle="bold" />
@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="28dp"
             android:gravity="center"
-            android:text="Stai ancora guardando?"
+            android:text="Are you still watching?"
             android:textColor="#FFFFFF"
             android:textSize="22sp"
             android:textStyle="bold" />
@@ -48,7 +48,11 @@
                 android:layout_height="52dp"
                 android:layout_marginEnd="7dp"
                 android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
                 android:gravity="center"
+                android:nextFocusRight="@id/sg_popup_yes"
                 android:text="NO"
                 android:textColor="#FFFFFF"
                 android:textSize="15sp"
@@ -60,8 +64,12 @@
                 android:layout_height="52dp"
                 android:layout_marginStart="7dp"
                 android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
                 android:gravity="center"
-                android:text="SÌ"
+                android:nextFocusLeft="@id/sg_popup_no"
+                android:text="YES"
                 android:textColor="#FFFFFF"
                 android:textSize="15sp"
                 android:textStyle="bold" />
