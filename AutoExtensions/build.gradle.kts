@@ -24,7 +24,7 @@ dependencies {
     compileOnly("androidx.compose.runtime:runtime:1.6.7")
 }
 
-version = 1
+version = 2
 
 android {
     buildFeatures {
@@ -51,6 +51,6 @@ cloudstream {
     )
 
     iconUrl = "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/AutoExtensions/AutoExtensions_icon.png"
-    description = "⚠️ BETA ⚠️ Automatically downloads extensions from your repositories that aren't installed yet, in case CloudStream removes its own auto-download feature."
+    description = "Plugin that revives some of the extension settings removed from CloudStream."
     requiresResources = true
 }

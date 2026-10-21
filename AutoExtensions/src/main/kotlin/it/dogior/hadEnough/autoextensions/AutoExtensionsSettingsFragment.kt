@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
@@ -37,6 +38,12 @@ class AutoExtensionsSettingsFragment(private val plugin: AutoExtensionsPlugin) :
         val nsfwCard = root.findView<LinearLayout>("ae_nsfw_card")
         val nsfwToggleHost = root.findView<FrameLayout>("ae_nsfw_toggle_host")
 
+        val updateCard = root.findView<LinearLayout>("ae_update_card")
+        val updateNowBtn = root.findView<TextView>("ae_update_now")
+
+        val enabledIcon = root.findView<ImageView>("ae_enabled_icon")
+        val updateIcon = root.findView<ImageView>("ae_update_icon")
+
         val statusCard = root.findView<LinearLayout>("ae_status_card")
         val statusTextView = root.findView<TextView>("ae_status_text")
         val checkNowBtn = root.findView<TextView>("ae_check_now")
@@ -45,9 +52,21 @@ class AutoExtensionsSettingsFragment(private val plugin: AutoExtensionsPlugin) :
 
         enabledCard.background = cardBackground()
         nsfwCard.background = cardBackground()
+        updateCard.background = cardBackground()
         statusCard.background = cardBackground()
+        updateNowBtn.background = focusableOutlineBackground()
         checkNowBtn.background = focusableOutlineBackground()
         closeBtn.background = focusableOutlineBackground()
+
+        // Same puzzle-piece icon CloudStream uses for these two settings,
+        // colored like the panel's own text so it follows the theme.
+        val iconColor = statusTextView.currentTextColor
+        listOf(enabledIcon, updateIcon).forEach { icon ->
+            getDrawable("autoextensions_ic_extension")?.let {
+                icon.setImageDrawable(it)
+                icon.setColorFilter(iconColor)
+            } ?: run { icon.visibility = View.GONE }
+        }
 
         statusText = statusTextView
         refreshStatusText(ctx)
@@ -62,6 +81,10 @@ class AutoExtensionsSettingsFragment(private val plugin: AutoExtensionsPlugin) :
         checkNowBtn.setOnClickListener {
             statusTextView.text = "Checking…"
             AutoExtensionsWorker.runCheckNow()
+        }
+        updateNowBtn.setOnClickListener {
+            statusTextView.text = "Updating…"
+            AutoExtensionsWorker.runUpdateAllNow()
         }
         closeBtn.setOnClickListener { dismiss() }
 
