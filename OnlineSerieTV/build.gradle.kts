@@ -1,6 +1,5 @@
 // use an integer for version numbers
-version = 24
-
+version = 4
 
 cloudstream {
     // All of these properties are optional, you can safely remove them
@@ -22,5 +21,5 @@ cloudstream {
     requiresResources = false
     language = "it"
 
-    iconUrl = "https://onlineserietv.lol/wp-content/uploads/2023/01/cropped-tv-1.png"
+    iconUrl = "https://lingering-truth-455c.diegon7771.workers.dev/wp-content/uploads/2023/01/cropped-tv-1.png"
 }

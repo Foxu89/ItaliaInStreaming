@@ -350,8 +350,7 @@ class AnimeUnity : MainAPI() {
         if (imageUrl.isNotEmpty()) {
             try {
                 val fileName = imageUrl.substringAfterLast("/")
-                val cdnHost = mainUrl.toHttpUrl().host.replace("www", "img")
-                return "https://$cdnHost/anime/$fileName"
+                return "https://img.animeunity.co/anime/$fileName"
             } catch (_: Exception) {
             }
         }

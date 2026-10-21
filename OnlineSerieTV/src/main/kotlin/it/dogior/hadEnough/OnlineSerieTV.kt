@@ -29,8 +29,10 @@ import com.lagradost.cloudstream3.newEpisode
 import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
-import it.dogior.hadEnough.extractors.MaxStreamExtractor
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -281,24 +283,36 @@ class OnlineSerieTV : MainAPI() {
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         Log.d("OnlineSerieTV:Links", "Data: $data")
-        val links = parseJson<List<String>>(data)
-        links.forEach {
-            if (!it.contains("uprot")) return@forEach
-            if (it.contains("msd")) {
-                Log.d("OnlineSerieTV:Links", "⏭️ Skip Scarica: $it")
+        val links = runCatching { parseJson<List<String>>(data) }.getOrNull() ?: return false
+        links.forEach { raw ->
+            val link = raw.trim()
+            if (!link.contains("uprot")) return@forEach
+            if (link.contains("msd")) {
+                Log.d("OnlineSerieTV:Links", "Skip download: $link")
+                return@forEach
+            }
+            if (link.contains("fxf")) {
+                Log.d("OnlineSerieTV:Links", "Skip FXF: $link")
                 return@forEach
             }
 
-            if (it.contains("fxf")) {
-                Log.d("OnlineSerieTV:Links", "⏭️ Skip FXF (disattivato): $it")
-            } else {
-                val url = bypassUprot(it)
-                Log.d("OnlineSerieTV:Links", "Bypassed Url: $url")
-                if (url != null) {
-                    Log.d("OnlineSerieTV:Links", "🎬 MaxStreamExtractor")
-                    MaxStreamExtractor().getUrl(url, null, subtitleCallback, callback)
-                }
+            val m3u8 = UprotResolver.resolve(link)
+            if (m3u8 == null) {
+                Log.e("OnlineSerieTV:Links", "Resolve failed: $link")
+                return@forEach
             }
+            Log.d("OnlineSerieTV:Links", "M3U8: $m3u8")
+            callback.invoke(
+                newExtractorLink(
+                    source = "MaxStream",
+                    name = "MaxStream",
+                    url = m3u8,
+                    type = ExtractorLinkType.M3U8
+                ) {
+                    this.referer = "https://maxstream.video/"
+                    this.quality = Qualities.Unknown.value
+                }
+            )
         }
         return true
     }
