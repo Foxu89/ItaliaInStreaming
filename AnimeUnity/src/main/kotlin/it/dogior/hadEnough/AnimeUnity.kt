@@ -120,7 +120,7 @@ class AnimeUnity : MainAPI() {
         if (!imageUrl.isNullOrEmpty()) {
             try {
                 val fileName = imageUrl.substringAfterLast("/")
-                return "https://img.animeunity.so/anime/$fileName"
+                return "https://img.animeunity.co/anime/$fileName"
             } catch (_: Exception) {
                 // Fallback to Anilist if direct image fails
             }
