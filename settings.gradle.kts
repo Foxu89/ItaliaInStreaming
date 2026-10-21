@@ -7,7 +7,7 @@ rootProject.name = "CloudstreamPlugins"
 include(
  //   "AltaDefinizione",
     "AnimeSaturn",
-//    "AnimeUnity",
+    "AnimeUnity",
 //    "AnimeWorld",
 //    "Arte",
     "AutoExtensions",
@@ -25,7 +25,7 @@ include(
     "SleepGuard",
 //    "StreamCenter",
 //    "StreamingCommunity",
-    "StreamITA",
+//    "StreamITA",
 //    "Stremio",
 //    "SyncStream",
 //    "TV",

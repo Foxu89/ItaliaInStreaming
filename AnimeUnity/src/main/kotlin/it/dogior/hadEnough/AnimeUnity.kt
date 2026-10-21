@@ -43,7 +43,7 @@ class AnimeUnity : MainAPI() {
 
     companion object {
         @Suppress("ConstPropertyName")
-        const val mainUrl = "https://www.animeunity.so"
+        const val mainUrl = "https://broad-mouse-85c7.diegon7771.workers.dev"
         var name = "AnimeUnity"
         var headers = mapOf(
             "Host" to mainUrl.toHttpUrl().host,
