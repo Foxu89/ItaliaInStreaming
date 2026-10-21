@@ -11,16 +11,6 @@ import com.lagradost.cloudstream3.plugins.Plugin
 
 private const val TAG = "SleepGuard"
 
-/**
- * CloudStream-only plugin: detects inactivity during playback (no touch,
- * no volume/remote key, N Auto-Next episodes in a row) and pauses, asking
- * "Are you still watching?", just like Netflix/YouTube.
- *
- * Monitoring (SleepGuardWatcher) starts right away when the plugin loads,
- * not only when the settings panel is opened: it needs to be active
- * whenever the user is watching something, with no manual action required.
- * The settings panel is only there to adjust the thresholds.
- */
 @CloudstreamPlugin
 class SleepGuardPlugin : Plugin() {
 

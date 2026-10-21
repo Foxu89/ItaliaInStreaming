@@ -9,19 +9,6 @@ import kotlin.math.abs
 
 private const val TAG = "SleepGuardSlider"
 
-/**
- * Mounts a real Material3 Compose Slider (same exact mechanism as
- * mountSlider() in WatchPartySlider.kt, already shipping in production
- * there): a discrete-step slider, visually matching CloudStream's own
- * style. SleepGuard is CloudStream-only (no Nuvio branch needed), but the
- * try/catch fallback to a native SeekBar is kept anyway, in case Compose
- * fails to resolve for any reason on some build — same defensive style
- * used throughout this plugin.
- *
- * [steps] is the ordered list of selectable values (e.g. [5,10,15,...]);
- * [onValueChange] receives the VALUE (not the index) closest to where the
- * user left the slider.
- */
 fun mountSlider(host: FrameLayout, steps: List<Int>, initialValue: Int, onValueChange: (Int) -> Unit) {
     host.removeAllViews()
     require(steps.size >= 2) { "mountSlider needs at least 2 values" }
@@ -51,12 +38,6 @@ fun mountSlider(host: FrameLayout, steps: List<Int>, initialValue: Int, onValueC
     }
 }
 
-/**
- * Kept in its own function, same as WatchParty's mountComposeSlider: never
- * loaded/verified on a host without Compose, thanks to Android's lazy
- * class resolution (the runCatching above never even touches these
- * Compose classes if they fail to resolve at classload time).
- */
 private fun mountComposeSlider(
     host: FrameLayout,
     steps: List<Int>,
@@ -67,7 +48,6 @@ private fun mountComposeSlider(
     val composeView = androidx.compose.ui.platform.ComposeView(host.context)
     val state = androidx.compose.runtime.mutableStateOf(initialIndex.toFloat())
     val accent = androidx.compose.ui.graphics.Color(accentColorInt)
-    // Unselected track + selected-tick color (requested value).
     val unselectedColor = androidx.compose.ui.graphics.Color(0xFF494458)
     fun commit(value: Float) {
         val idx = value.toInt().coerceIn(0, steps.size - 1)
@@ -79,20 +59,15 @@ private fun mountComposeSlider(
                 value = state.value,
                 onValueChange = {
                     state.value = it
-                    // Live update while dragging, not only on release.
                     commit(it)
                 },
                 onValueChangeFinished = { commit(state.value) },
                 valueRange = 0f..(steps.size - 1).toFloat(),
-                steps = steps.size - 2, // M3 "steps" = INTERMEDIATE ticks, excluding both endpoints
+                steps = steps.size - 2,
                 colors = androidx.compose.material3.SliderDefaults.colors(
                     thumbColor = accent,
                     activeTrackColor = accent,
-                    // The part of the track NOT covered by the theme color.
                     inactiveTrackColor = unselectedColor,
-                    // Tick dots: on the unselected part of the track, use the
-                    // theme accent color; on the selected part, use the same
-                    // dark shade as the unselected track.
                     activeTickColor = unselectedColor,
                     inactiveTickColor = accent,
                 ),
@@ -106,7 +81,6 @@ private fun mountComposeSlider(
     return true
 }
 
-/** Same helper as WatchParty's themeAccentColor (WatchPartyComposeSwitch.kt). */
 fun themeAccentColor(context: Context): Int {
     val typedValue = TypedValue()
     val fromAppCompat = runCatching {
@@ -122,5 +96,5 @@ fun themeAccentColor(context: Context): Int {
     }.getOrNull()
     if (fromPlatform != null) return fromPlatform
 
-    return 0xFF2E7DFF.toInt() // same exact fallback blue WatchParty uses
+    return 0xFF2E7DFF.toInt()
 }

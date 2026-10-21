@@ -3,11 +3,6 @@ package it.dogior.hadEnough.autoextensions
 import android.content.Context
 import android.content.SharedPreferences
 
-/**
- * Plugin settings, stored locally (SharedPreferences, no account/network
- * involved). Lightweight reads/writes, never called from a thread other
- * than the UI thread.
- */
 object AutoExtensionsPrefs {
     private const val FILE = "autoextensions_prefs"
 
@@ -16,9 +11,6 @@ object AutoExtensionsPrefs {
     private const val KEY_LAST_RUN_AT = "last_run_at"
     private const val KEY_LAST_RUN_SUMMARY = "last_run_summary"
 
-    // Off by default, same as CloudStream's own original "auto-download new
-    // extensions" setting: this downloads and runs third-party code
-    // automatically, so it should be an explicit opt-in, not a silent default.
     const val DEFAULT_ENABLED = false
     const val DEFAULT_INCLUDE_NSFW = false
 

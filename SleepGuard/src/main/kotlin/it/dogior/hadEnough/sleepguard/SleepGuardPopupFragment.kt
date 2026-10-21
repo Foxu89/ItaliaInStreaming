@@ -14,15 +14,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.DialogFragment
 import it.dogior.hadEnough.BuildConfig
 
-/**
- * "Are you still watching?" popup shown over the paused player.
- * Not cancelable (no tap-outside/back dismiss), otherwise the user could
- * close it by accident and the player would stay paused with no one
- * noticing.
- *
- * No android:background="@drawable/..." in the layout: same lesson learned
- * on WatchParty/Wrapped, everything is set in code below.
- */
 class SleepGuardPopupFragment(
     private val plugin: SleepGuardPlugin,
     private val onYes: () -> Unit,
@@ -59,8 +50,6 @@ class SleepGuardPopupFragment(
             onNo()
         }
 
-        // Default focus on "Yes" (the safe choice) so a remote/D-pad user
-        // can confirm immediately with a single press, same as Netflix.
         yesBtn.post { runCatching { yesBtn.requestFocus() } }
 
         root
@@ -71,12 +60,10 @@ class SleepGuardPopupFragment(
 
     override fun onStart() {
         super.onStart()
-        // Fills the whole screen above the player, dimmed background behind the card.
         dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         dialog?.window?.setBackgroundDrawable(GradientDrawable().apply { setColor(0xCC000000.toInt()) })
     }
 
-    /** Same fix as SleepGuardSettingsFragment.getLayout: the id is only valid in the plugin's own resource table. */
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
         val id = plugin.resources!!.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
         val layout = plugin.resources!!.getLayout(id)
@@ -106,11 +93,6 @@ class SleepGuardPopupFragment(
         }
     }
 
-    /**
-     * Visible highlight when the button gets D-pad/remote focus (TV/remote
-     * navigation): a StateListDrawable with a brighter fill for the focused
-     * and pressed states, so a remote user can see which button is selected.
-     */
     private fun focusableBackground(normal: Int, focused: Int, radiusDp: Float, strokeColor: Int? = null): Drawable {
         val density = resources.displayMetrics.density
         fun shape(color: Int) = GradientDrawable().apply {

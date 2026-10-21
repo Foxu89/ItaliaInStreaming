@@ -2,9 +2,7 @@ package it.dogior.hadEnough.sleepguard
 
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
-import android.util.StateSet
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -15,10 +13,6 @@ import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import it.dogior.hadEnough.BuildConfig
 
-/**
- * SleepGuard settings panel, same "card" style as Wrapped/WatchParty
- * (backgrounds set in code, never android:background="@drawable/..." in XML).
- */
 class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomSheetDialogFragment() {
 
     override fun onCreateView(
@@ -44,9 +38,8 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
         timerCard.background = cardBackground()
         episodeCard.background = cardBackground()
         volumeCard.background = cardBackground()
-        closeBtn.background = focusableOutlineBackground()
+        closeBtn.background = getDrawable("sleepguard_btn_danger") ?: coloredFallback(0x14FF6B6B, radiusDp = 8f, strokeColor = 0x99FF7F7F.toInt(), strokeDp = 2f)
 
-        // --- Inactivity timer ---
         val minMin = SleepGuardPrefs.MIN_INACTIVITY_MINUTES
         val maxMin = SleepGuardPrefs.MAX_INACTIVITY_MINUTES
         val minuteSteps = (minMin..maxMin step 5).toList()
@@ -57,7 +50,6 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
             SleepGuardPrefs.setInactivityMinutes(ctx, minutes)
         }
 
-        // --- Episode counter (beta) ---
         val minEp = SleepGuardPrefs.MIN_EPISODE_THRESHOLD
         val maxEp = SleepGuardPrefs.MAX_EPISODE_THRESHOLD
         val episodeSteps = (minEp..maxEp).toList()
@@ -80,7 +72,6 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
             SleepGuardPrefs.setEpisodeThreshold(ctx, count)
         }
 
-        // --- Volume/remote key reset (experimental) ---
         mountToggle(volumeToggleHost, SleepGuardPrefs.isVolumeKeyResetEnabled(ctx)) { checked ->
             SleepGuardPrefs.setVolumeKeyResetEnabled(ctx, checked)
         }
@@ -93,15 +84,6 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
         null
     }
 
-    /**
-     * The layout id is only valid in the plugin's own resource table
-     * (plugin.resources): it must be inflated with the XmlResourceParser
-     * taken from there (getLayout), never by passing the plain Int id to
-     * an inflater bound to the host's Context (cloneInContext) — it would
-     * resolve the id against the wrong resource table and inflate would
-     * fail silently, with the same "invisible panel" symptom already seen
-     * on Wrapped/WatchParty. Same exact pattern as WrappedFragment.getLayout.
-     */
     private fun getLayout(name: String, inflater: LayoutInflater, container: ViewGroup?): View {
         val id = plugin.resources!!.getIdentifier(name, "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
         val layout = plugin.resources!!.getLayout(id)
@@ -122,27 +104,12 @@ class SleepGuardSettingsFragment(private val plugin: SleepGuardPlugin) : BottomS
         return runCatching { ResourcesCompat.getDrawable(res, id, null) }.getOrNull()
     }
 
-    private fun coloredFallback(fill: Int, radiusDp: Float, strokeColor: Int? = null): Drawable {
+    private fun coloredFallback(fill: Int, radiusDp: Float, strokeColor: Int? = null, strokeDp: Float = 1f): Drawable {
         val density = resources.displayMetrics.density
         return GradientDrawable().apply {
             setColor(fill)
             cornerRadius = radiusDp * density
-            strokeColor?.let { setStroke((1 * density).toInt(), it) }
-        }
-    }
-
-    /** Visible highlight on D-pad/remote focus, same mechanism as the popup's buttons. */
-    private fun focusableOutlineBackground(): Drawable {
-        val density = resources.displayMetrics.density
-        fun shape(fill: Int, stroke: Int) = GradientDrawable().apply {
-            setColor(fill)
-            cornerRadius = 16f * density
-            setStroke((1 * density).toInt(), stroke)
-        }
-        return StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_focused), shape(0x24FFFFFF, 0x55FFFFFF))
-            addState(intArrayOf(android.R.attr.state_pressed), shape(0x24FFFFFF, 0x55FFFFFF))
-            addState(StateSet.WILD_CARD, shape(0x12FFFFFF, 0x33FFFFFF))
+            strokeColor?.let { setStroke((strokeDp * density).toInt(), it) }
         }
     }
 

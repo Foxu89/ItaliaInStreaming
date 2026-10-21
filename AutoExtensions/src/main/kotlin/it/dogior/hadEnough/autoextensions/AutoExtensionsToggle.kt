@@ -8,7 +8,6 @@ import androidx.appcompat.widget.SwitchCompat
 
 private const val TAG = "AutoExtensionsToggle"
 
-/** Same helper as WatchParty's/SleepGuard's themeAccentColor. */
 fun themeAccentColor(context: Context): Int {
     val typedValue = TypedValue()
     val fromAppCompat = runCatching {
@@ -24,15 +23,9 @@ fun themeAccentColor(context: Context): Int {
     }.getOrNull()
     if (fromPlatform != null) return fromPlatform
 
-    return 0xFF2E7DFF.toInt() // same exact fallback blue WatchParty/SleepGuard use
+    return 0xFF2E7DFF.toInt()
 }
 
-/**
- * Mounts a toggle inside [host] (an empty FrameLayout in the XML): a real
- * Material3 Compose Switch with the same exact hardcoded colors as
- * WatchParty's/SleepGuard's mountToggle(), falling back to a plain
- * SwitchCompat if Compose fails to resolve for any reason.
- */
 fun mountToggle(host: FrameLayout, initialChecked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     host.removeAllViews()
     val accent = themeAccentColor(host.context)

@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- "Are you still watching?" popup: full screen (dimmed background set
-     in code in SleepGuardPopupFragment.onStart), with the actual card
-     centered. No android:background="@drawable/..." here: done in code,
-     same rule as WatchParty/Wrapped. -->
 <FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"

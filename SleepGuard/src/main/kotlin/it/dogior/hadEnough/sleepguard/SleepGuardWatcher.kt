@@ -22,26 +22,6 @@ import com.lagradost.cloudstream3.ui.player.PlayerEventSource
 private const val TAG = "SleepGuardWatcher"
 private const val TICK_MS = 1000L
 
-/**
- * The plugin's engine: a single one-second "heartbeat" (polling approach,
- * there are no official plugin hooks for the player/episode/keys — see the
- * comments below for each limitation) that:
- *  1. detects when a player is open (GeneratorPlayer, the public subclass
- *     of FullScreenPlayer used for normal playback — same exact lookup
- *     mechanism already used and verified in WatchParty, see
- *     currentPlayerFragment());
- *  2. attaches a transparent overlay to reset the timer on touch;
- *  3. (optional) hooks volume/remote keys, chaining the existing listener
- *     instead of overwriting it — CommonActivity exposes a single slot
- *     shared with the player itself for its volume/D-pad gestures, so it
- *     has to be handled carefully;
- *  4. (optional, BETA) reads the on-screen title to guess an Auto-Next
- *     episode change — no official API for this, it's a best-effort read
- *     of the UI that can stop working if CloudStream changes the player's
- *     view ids;
- *  5. once a threshold is reached, pauses (via AbstractPlayerFragment's
- *     public `player` property) and shows the popup.
- */
 object SleepGuardWatcher {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -113,18 +93,6 @@ object SleepGuardWatcher {
         }
     }
 
-    /**
-     * Same exact mechanism as PlayerAccess.kt in WatchParty (already in
-     * production, confirmed working): CloudStream opens the player inside
-     * a NavHostFragment (internal navigation via the Navigation Component),
-     * not as a top-level fragment of the Activity. The earlier attempt
-     * (generic recursive search through every childFragmentManager, looking
-     * for any resumed FullScreenPlayer) did find a fragment, but not always
-     * the right/current one: the popup would show up, but pause/resume had
-     * no effect on the player actually playing. This goes straight to
-     * nav_host_fragment via its real id and takes the last fragment of its
-     * childFragmentManager, exactly like WatchParty does.
-     */
     private fun currentPlayerFragment(): GeneratorPlayer? = runCatching {
         val activity = CommonActivity.activity as? MainActivity ?: return@runCatching null
         val navHost = activity.supportFragmentManager
@@ -134,7 +102,7 @@ object SleepGuardWatcher {
     }.getOrNull()
 
     private fun attach(fragment: FullScreenPlayer) {
-        detach() // close/detach any previous session left hanging around
+        detach()
         currentFragment = fragment
         lastInteractionAt = System.currentTimeMillis()
         episodesSinceInteraction = 0
@@ -150,11 +118,6 @@ object SleepGuardWatcher {
         popupShowing = false
     }
 
-    /**
-     * Transparent overlay over the player's view: intercepts ACTION_DOWN to
-     * reset the timer but always returns false, so the touch keeps flowing
-     * normally to the player controls underneath (passthrough, never consumed).
-     */
     private fun attachTouchOverlay(fragment: FullScreenPlayer) {
         val root = fragment.view as? ViewGroup ?: return
         val overlay = FrameLayout(root.context).apply {
@@ -177,15 +140,7 @@ object SleepGuardWatcher {
         overlayView = null
     }
 
-    /**
-     * CommonActivity.keyEventListener is a SINGLE variable, not a list: the
-     * player (PlayerGestureHelper/FullScreenPlayer) uses it for its own
-     * volume/D-pad gestures and can reassign it at any point in its
-     * lifecycle. To avoid breaking it: save whatever is already there,
-     * always call through to it ourselves, and re-check on every tick
-     * whether someone else (the player) overwrote it in the meantime,
-     * re-chaining ourselves on top if so.
-     */
+    // CommonActivity.keyEventListener is a single shared slot: always chain, never overwrite
     private fun ensureKeyListenerChained() {
         if (CommonActivity.keyEventListener === ourKeyListener) return
         originalKeyListener = CommonActivity.keyEventListener
@@ -194,8 +149,6 @@ object SleepGuardWatcher {
             if (event != null && isRelevantKey(event.keyCode)) {
                 lastInteractionAt = System.currentTimeMillis()
             }
-            // Always forward to the original listener: we don't change the
-            // native behavior, we only add the timer reset on top of it.
             originalKeyListener?.invoke(pair) ?: false
         }
         ourKeyListener = wrapper
@@ -220,15 +173,6 @@ object SleepGuardWatcher {
         else -> false
     }
 
-    /**
-     * BETA: no API to know when Auto-Next moves to the next episode (the
-     * player's internal state is private). As a proxy, this reads the
-     * on-screen title text (CloudStream's real view id, "player_video_title")
-     * and counts an episode change whenever that text changes. If
-     * CloudStream ever renames that view in a future update, this function
-     * silently stops counting (it fails inside the caller's runCatching),
-     * without breaking the rest of the plugin.
-     */
     private fun pollEpisodeTitle(fragment: FullScreenPlayer) {
         val root = fragment.view ?: return
         if (!hostTitleViewIdResolved) {
@@ -258,9 +202,6 @@ object SleepGuardWatcher {
         val plugin = hostPlugin ?: return
         popupShowing = true
 
-        // PlayerEventSource.Sync (not UI): same choice as WatchParty, it's
-        // the source meant for a pause/resume command coming from outside
-        // the on-screen controls, not from a user tap on the player.
         runCatching { fragment.player.handleEvent(CSPlayerEvent.Pause, PlayerEventSource.Sync) }
             .onFailure { Log.e(TAG, "Could not pause the player", it) }
 
@@ -275,15 +216,7 @@ object SleepGuardWatcher {
                     .onFailure { Log.e(TAG, "Could not resume the player", it) }
             },
             onNo = {
-                // The player fragment doesn't register its own
-                // OnBackPressedCallback: it relies entirely on the Navigation
-                // Component's default integration with onBackPressedDispatcher
-                // (popping the NavHostFragment). Calling onBackPressedDispatcher
-                // here is therefore exactly equivalent to pressing the system
-                // Back button while in the player: it closes ONLY the player
-                // and returns to the previous screen (the movie/series detail
-                // page), not the whole app. finish() is kept only as a
-                // fallback in case this isn't available for some reason.
+                // Same as the system Back button: closes only the player
                 popupShowing = false
                 runCatching {
                     val activity = fragment.activity

@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AutoExtensions settings panel, same "card" style as Wrapped/WatchParty/
-     SleepGuard. No android:background="@drawable/..." (and no drawable src)
-     here: everything is set in code in AutoExtensionsSettingsFragment.kt,
-     so the panel inherits CloudStream's light/dark/AMOLED theme. -->
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -31,7 +27,6 @@
             android:text="Automatically downloads missing extensions from your repositories."
             android:textSize="14sp" />
 
-        <!-- Enabled card (auto-download missing extensions) -->
         <LinearLayout
             android:id="@+id/ae_enabled_card"
             android:layout_width="match_parent"
@@ -45,13 +40,6 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
-
-                <ImageView
-                    android:id="@+id/ae_enabled_icon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginEnd="12dp"
-                    android:contentDescription="@null" />
 
                 <TextView
                     android:layout_width="0dp"
@@ -78,7 +66,6 @@
 
         </LinearLayout>
 
-        <!-- NSFW card -->
         <LinearLayout
             android:id="@+id/ae_nsfw_card"
             android:layout_width="match_parent"
@@ -118,61 +105,6 @@
 
         </LinearLayout>
 
-        <!-- Update all card (manual update of installed extensions) -->
-        <LinearLayout
-            android:id="@+id/ae_update_card"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="14dp"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <ImageView
-                    android:id="@+id/ae_update_icon"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginEnd="12dp"
-                    android:contentDescription="@null" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Update extensions"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-            </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:layout_marginBottom="12dp"
-                android:alpha="0.6"
-                android:text="Re-downloads all your installed extensions from their repositories, like CloudStream's manual update."
-                android:textSize="12sp" />
-
-            <TextView
-                android:id="@+id/ae_update_now"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:text="Update all now"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-        </LinearLayout>
-
-        <!-- Status / manual check card -->
         <LinearLayout
             android:id="@+id/ae_status_card"
             android:layout_width="match_parent"
@@ -194,11 +126,12 @@
             <TextView
                 android:id="@+id/ae_check_now"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
+                android:layout_height="50dp"
                 android:clickable="true"
                 android:focusable="true"
                 android:gravity="center"
                 android:text="Check now"
+                android:textAllCaps="false"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -207,12 +140,14 @@
         <TextView
             android:id="@+id/ae_close"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="50dp"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
             android:text="Close"
-            android:textSize="14sp" />
+            android:textAllCaps="false"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 

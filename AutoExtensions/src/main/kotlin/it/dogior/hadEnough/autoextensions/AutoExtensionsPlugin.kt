@@ -11,17 +11,6 @@ import com.lagradost.cloudstream3.plugins.Plugin
 
 private const val TAG = "AutoExtensions"
 
-/**
- * CloudStream-only plugin: automatically downloads extensions from the
- * user's repositories (the ones they added, plus CloudStream's own
- * built-in list) that aren't installed yet — recreating the
- * "auto-download missing extensions" feature from Settings > Updates &
- * Backup > Extensions, in case a future CloudStream release removes it.
- *
- * Disabled by default (see AutoExtensionsPrefs): this downloads and runs
- * third-party code automatically, so it's an explicit opt-in from the
- * settings panel, not a silent default.
- */
 @CloudstreamPlugin
 class AutoExtensionsPlugin : Plugin() {
 
@@ -32,9 +21,8 @@ class AutoExtensionsPlugin : Plugin() {
         AutoExtensionsWorker.scheduleInitialCheck(this)
     }
 
-    /** Called by AutoExtensionsWorker on the main thread once a check finishes. */
-    fun onCheckFinished(summary: String) {
-        settingsFragment?.onCheckFinished(summary)
+    fun onCheckFinished() {
+        settingsFragment?.onCheckFinished()
     }
 
     private fun openSettingsSheet() = runCatching {

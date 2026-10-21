@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- SleepGuard settings panel, same "card" style as Wrapped/WatchParty.
-     No android:background="@drawable/..." here: everything is set in code
-     in SleepGuardSettingsFragment.kt, no hardcoded colors so the panel
-     inherits CloudStream's light/dark/AMOLED theme. -->
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -28,11 +24,10 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="20dp"
             android:alpha="0.65"
-            android:text="Inactivity detection during playback."
+            android:text="Detects inactivity during playback."
             android:textSize="14sp" />
 
-        <!-- Inactivity timer card -->
-        <LinearLayout
+                <LinearLayout
             android:id="@+id/sg_timer_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -70,7 +65,7 @@
                 android:layout_marginTop="2dp"
                 android:layout_marginBottom="6dp"
                 android:alpha="0.6"
-                android:text="With no touches, pauses and asks if you're still watching."
+                android:text="Pauses video and asks if you're still watching when inactive."
                 android:textSize="12sp" />
 
             <FrameLayout
@@ -80,8 +75,7 @@
 
         </LinearLayout>
 
-        <!-- Episode counter (beta) card -->
-        <LinearLayout
+                <LinearLayout
             android:id="@+id/sg_episode_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -116,7 +110,7 @@
                 android:layout_marginTop="2dp"
                 android:layout_marginBottom="10dp"
                 android:alpha="0.6"
-                android:text="Best-effort: reads the on-screen title to guess when Auto-Next moves to a new episode, not an official CloudStream signal. Only applies to TV series, not movies."
+                android:text="Estimates episode progression using Auto-Next titles. Applies to TV series only."
                 android:textSize="12sp" />
 
             <TextView
@@ -135,8 +129,7 @@
 
         </LinearLayout>
 
-        <!-- Volume/remote key reset (experimental) card -->
-        <LinearLayout
+                <LinearLayout
             android:id="@+id/sg_volume_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -170,7 +163,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:alpha="0.6"
-                android:text="Shares the same hook the player uses for volume/D-pad gestures: in rare cases it may interfere with remote-control navigation."
+                android:text="Resets the timer on volume or D-pad keypresses. May interfere with remote navigation."
                 android:textSize="12sp" />
 
         </LinearLayout>
@@ -178,12 +171,14 @@
         <TextView
             android:id="@+id/sg_close"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="50dp"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
             android:text="Close"
-            android:textSize="14sp" />
+            android:textAllCaps="false"
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 
