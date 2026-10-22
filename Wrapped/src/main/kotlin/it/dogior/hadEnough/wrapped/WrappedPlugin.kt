@@ -11,19 +11,6 @@ import com.lagradost.cloudstream3.plugins.Plugin
 
 private const val TAG = "CloudStreamWrapped"
 
-/**
- * Plugin solo-CloudStream: genera una card riassuntiva delle statistiche
- * di visione locali (vedi WrappedStats) e permette di condividerla.
- *
- * Punto di ingresso: "Impostazioni" del plugin dalla schermata Estensioni
- * (openSettings sotto) — nessun overlay sul player, non serve essere nel
- * player per vedere le proprie statistiche.
- *
- * FragmentActivity (non AppCompatActivity): lezione imparata da WatchParty,
- * dove il cast ad AppCompatActivity ha causato un NoClassDefFoundError non
- * gestito su alcuni dispositivi/host. supportFragmentManager è già
- * dichiarato su FragmentActivity, non serve scendere fino ad AppCompatActivity.
- */
 @CloudstreamPlugin
 class WrappedPlugin : Plugin() {
 
@@ -41,7 +28,7 @@ class WrappedPlugin : Plugin() {
         }
         WrappedFragment(this).show(activity.supportFragmentManager, "CloudStreamWrapped")
     }.onFailure {
-        Log.e(TAG, "openWrappedSheet(): eccezione inattesa", it)
+        Log.e(TAG, "openWrappedSheet() failed", it)
         showToast("Can't open CloudStream Wrapped: ${it.javaClass.simpleName}", Toast.LENGTH_LONG)
     }
 }

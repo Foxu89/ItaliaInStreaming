@@ -28,20 +28,6 @@ import kotlinx.coroutines.withContext
 
 private const val TAG = "WrappedFragment"
 
-/**
- * Pannello "CloudStream Wrapped": rank con icona + barra di progresso verso
- * il prossimo, tempo totale guardato scomposto in giorni/ore/minuti, e
- * conteggio film/serie. Nessuna anteprima della card condivisibile: quella
- * si genera (stile diverso, pensato per i social) solo quando si preme
- * "Condividi", non all'apertura del pannello.
- *
- * Nessun colore o android:background="@drawable/..." nell'XML: i colori di
- * testo ereditano il tema di CloudStream (chiaro/scuro/AMOLED) come fa già
- * WatchParty, e gli sfondi delle card si caricano via codice con
- * getDrawable() qui sotto — un riferimento "@drawable/..." scritto in XML
- * non si risolve in modo affidabile per le risorse di un plugin agganciate
- * dinamicamente (bug reale già trovato e risolto su WatchParty).
- */
 class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() {
 
     private var cachedStats: WrappedStats? = null
@@ -63,12 +49,10 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         val id = res.getIdentifier(name, "drawable", BuildConfig.LIBRARY_PACKAGE_NAME)
         if (id == 0) return null
         return runCatching { ResourcesCompat.getDrawable(res, id, null) }
-            .onFailure { android.util.Log.e(TAG, "getDrawable('$name') fallita", it) }
             .getOrNull()
     }
 
-    /** Rete di sicurezza se un drawable del plugin non si carica per qualche motivo. */
-    private fun coloredFallback(fill: Int, radiusDp: Float = 16f, strokeColor: Int? = null): Drawable {
+        private fun coloredFallback(fill: Int, radiusDp: Float = 16f, strokeColor: Int? = null): Drawable {
         return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = radiusDp * resources.displayMetrics.density
@@ -80,13 +64,7 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
     private fun cardBackground(): Drawable =
         getDrawable("wrapped_card_bg") ?: coloredFallback(0x14FFFFFF, radiusDp = 16f, strokeColor = 0x1FFFFFFF)
 
-    /**
-     * Colore associato al rank, usato per la barra di progresso e come
-     * badge di fallback finché il PNG non si carica. Campionato dai PNG
-     * veri (bordo esagonale, escludendo la nuvola blu del logo al centro),
-     * così la barra combacia col colore reale dell'icona di ogni rank.
-     */
-    private fun rankColor(rank: WrappedRank): Int = when (rank) {
+        private fun rankColor(rank: WrappedRank): Int = when (rank) {
         WrappedRank.BRONZE -> 0xFFD07040.toInt()
         WrappedRank.SILVER -> 0xFFB0B0B8.toInt()
         WrappedRank.GOLD -> 0xFFE0A830.toInt()
@@ -94,8 +72,7 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         WrappedRank.MASTER -> 0xFFB388FF.toInt()
     }
 
-    /** PNG del rank se presente nel plugin, altrimenti un badge colorato disegnato a codice. */
-    private fun rankIcon(rank: WrappedRank): Drawable =
+        private fun rankIcon(rank: WrappedRank): Drawable =
         getDrawable(rank.iconName) ?: GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(rankColor(rank))
@@ -120,8 +97,7 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         return layer
     }
 
-    /** Una voce "14 / giorni" del tempo totale, sempre in fila (vedi wrapped_time_container). */
-    private fun buildTimeUnitView(ctx: Context, unit: WrappedTimeUnit): View {
+        private fun buildTimeUnitView(ctx: Context, unit: WrappedTimeUnit): View {
         val density = resources.displayMetrics.density
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -133,9 +109,6 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         val value = TextView(ctx).apply {
             text = unit.value.toString()
             textSize = 34f
-            // Bianco fisso (non il colore testo di default, troppo grigio/poco
-            // visibile): il numero è il dato principale della card, deve
-            // risaltare in ogni tema chiaro/scuro/AMOLED.
             setTextColor(0xFFFFFFFF.toInt())
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
@@ -195,39 +168,26 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
 
         root
     } catch (t: Throwable) {
-        // Throwable e non Exception: un Error (es. NoClassDefFoundError, già
-        // visto su WatchParty) non verrebbe intercettato da un catch
-        // (e: Exception), e .show() fallirebbe silenziosamente lasciando il
-        // pannello vuoto senza nessun indizio visibile per l'utente.
-        android.util.Log.e(TAG, "Eccezione in onCreateView()", t)
+        android.util.Log.e(TAG, "onCreateView() failed", t)
         runCatching { showToast("CloudStream Wrapped crash: ${t.javaClass.simpleName}: ${t.message}", Toast.LENGTH_LONG) }
         null
     }
 
-    /** Popup "Cosa fa questo plugin" — stesso stile del pulsante "!" di WatchParty. */
-    private fun showInfoDialog() {
+        private fun showInfoDialog() {
         runCatching {
             MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Cosa fa questo plugin")
+                .setTitle("How it works")
                 .setMessage(
-                    "CloudStream Wrapped legge solo dati che CloudStream ha già salvato " +
-                        "sul tuo telefono: nessuna rete, nessun server esterno, nessun " +
-                        "permesso nuovo. Si attiva una volta sola quando apri questa " +
-                        "schermata, non gira in background.\n\n" +
-                        "Tempo totale: somma di ogni film/episodio su cui hai premuto play, " +
-                        "anche se ti sei fermato a metà — CloudStream salva la posizione in " +
-                        "continuo durante la riproduzione, non solo quando esci in modo " +
-                        "pulito.\n\n" +
-                        "Film e serie TV guardate: contano SOLO i contenuti che hai segnato " +
-                        "come \"Completato\" nella tua Libreria. Le altre sezioni (\"Da " +
-                        "guardare\", \"In corso\", ecc.) non vengono contate, altrimenti il " +
-                        "numero includerebbe anche roba che non hai nemmeno iniziato o " +
-                        "finito di guardare.\n\n" +
-                        "Rank: calcolato sulle ore totali guardate."
+                    "CloudStream Wrapped uses data already stored on your device. " +
+                        "It makes no network requests, uses no external servers, and requires no additional permissions.\n\n" +
+                        "- Watch time: Includes all recorded playback time, even for partially watched content.\n" +
+                        "- Movies & TV shows: Only items marked as \"Completed\" in your Library are counted.\n" +
+                        "- Your rank: Based on your total watch time.\n\n" +
+                        "The plugin runs only when you open this screen and never runs in the background."
                 )
-                .setPositiveButton("Ho capito", null)
+                .setPositiveButton("Got it", null)
                 .show()
-        }.onFailure { android.util.Log.e(TAG, "showInfoDialog() fallita", it) }
+        }
     }
 
     private fun loadStats(
@@ -244,7 +204,6 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
         val ctx = requireContext().applicationContext
         CoroutineScope(Dispatchers.Default).launch {
             val result = runCatching { WrappedStatsCalculator.compute() }
-            result.exceptionOrNull()?.let { android.util.Log.e(TAG, "loadStats() fallita", it) }
             val stats = result.getOrNull()
 
             withContext(Dispatchers.Main) {
@@ -252,7 +211,7 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
                 loading.visibility = View.GONE
                 if (stats == null) {
                     val reason = result.exceptionOrNull()
-                    val detail = reason?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "motivo sconosciuto"
+                    val detail = reason?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "unknown reason"
                     showToast("Couldn't load your Wrapped stats ($detail)", Toast.LENGTH_LONG)
                     return@withContext
                 }
@@ -260,7 +219,6 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
                 cachedStats = stats
                 content.visibility = View.VISIBLE
 
-                // --- Rank + barra di progresso ---
                 rankIconView.setImageDrawable(rankIcon(stats.rank))
                 rankTitle.text = stats.rank.title
                 val progress = WrappedRankProgress.compute(stats.totalWatchedMs)
@@ -269,13 +227,11 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
                 rankProgress.progress = (progress.fraction * 1000).toInt()
                 rankProgressLabel.text = if (progress.next == null) "MAX" else ""
 
-                // --- Tempo totale, scomposto (mai ore decimali) ---
                 timeContainer.removeAllViews()
                 WrappedFormat.breakDownDuration(stats.totalWatchedMs).forEach {
                     timeContainer.addView(buildTimeUnitView(ctx, it))
                 }
 
-                // --- Film / serie ---
                 moviesValue.text = stats.moviesWatched.toString()
                 seriesValue.text = stats.seriesWatched.toString()
             }
@@ -296,11 +252,8 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
 
         val ctx = requireContext().applicationContext
         CoroutineScope(Dispatchers.Default).launch {
-            // Icona vera del rank (PNG del plugin), passata al renderer: lui
-            // riceve solo il Context dell'host e non può caricarla da solo.
             val icon = runCatching { rankIcon(stats.rank) }.getOrNull()
             val result = runCatching { WrappedCardRenderer.render(ctx, stats, icon) }
-            result.exceptionOrNull()?.let { android.util.Log.e(TAG, "onShareClicked() fallita", it) }
             val bitmap = result.getOrNull()
 
             withContext(Dispatchers.Main) {
@@ -312,7 +265,7 @@ class WrappedFragment(private val plugin: Plugin) : BottomSheetDialogFragment() 
                     WrappedShare.share(requireContext(), bitmap)
                 } else {
                     val reason = result.exceptionOrNull()
-                    val detail = reason?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "motivo sconosciuto"
+                    val detail = reason?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "unknown reason"
                     showToast("Couldn't generate your Wrapped card ($detail)", Toast.LENGTH_LONG)
                 }
             }

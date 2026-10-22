@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
@@ -13,39 +14,24 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
-/**
- * Disegna la card 9:16 interamente a runtime con Canvas (niente immagini
- * pre-fatte): testo, forme, colori e l'icona VERA di CloudStream presa
- * dalle risorse dell'app stessa via PackageManager — non un logo
- * ricostruito da zero, quello vero installato sul telefono dell'utente.
- *
- * Layout (dall'alto in basso), per righe ben separate invece di una lista
- * verticale disordinata:
- *  1. Header: icona + "CLOUDSTREAM WRAPPED" a sinistra, @nomeutente a destra.
- *  2. Badge esagonale del rank con alone colorato dietro, pillola col nome
- *     del rank sotto.
- *  3. Blocco unico col tempo totale (icona orologio + testo, mai decimali).
- *  4. Due card affiancate: film guardati / serie TV guardate.
- *  5. Footer di branding, centrato.
- */
 object WrappedCardRenderer {
 
     private const val WIDTH = 1080
     private const val HEIGHT = 1920
+    private const val MARGIN = 80f
 
-    // Sfondo "dark mode profondo" richiesto, non il viola dell'app: qui la
-    // card deve leggersi come un contenuto a sé, quasi nero con riflessi blu/indaco.
     private val BG_TOP = Color.parseColor("#05070C")
     private val BG_BOTTOM = Color.parseColor("#0B0E14")
     private val ACCENT = Color.parseColor("#3B65F5")
-    private val ACCENT_LIGHT = Color.parseColor("#818FFF")
     private val CARD_FILL = Color.parseColor("#15161F")
     private val CARD_STROKE = Color.parseColor("#262838")
     private val TEXT_PRIMARY = Color.WHITE
     private val TEXT_SECONDARY = Color.parseColor("#9A98AE")
 
-    /** Stesso colore per rank usato nel pannello impostazioni (WrappedFragment.rankColor). */
     private fun rankColor(rank: WrappedRank): Int = when (rank) {
         WrappedRank.BRONZE -> Color.parseColor("#D07040")
         WrappedRank.SILVER -> Color.parseColor("#B0B0B8")
@@ -54,12 +40,6 @@ object WrappedCardRenderer {
         WrappedRank.MASTER -> Color.parseColor("#B388FF")
     }
 
-    /**
-     * [rankIcon] è il PNG vero del rank, già caricato dal chiamante (via
-     * plugin.resources — questo renderer riceve solo il Context dell'host,
-     * che non ha accesso alle risorse del plugin). Se null (icona non
-     * trovata) si disegna un badge esagonale di riserva disegnato a codice.
-     */
     fun render(context: Context, stats: WrappedStats, rankIcon: Drawable? = null): Bitmap {
         val bmp = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -68,78 +48,69 @@ object WrappedCardRenderer {
         drawBackground(canvas, accent)
         drawHeader(context, canvas, stats.profileName)
         drawRankBadge(canvas, stats.rank, rankIcon, accent)
-        drawHeroTime(canvas, stats.totalWatchedMs)
+        drawTotalTime(canvas, stats.totalWatchedMs)
         drawCounters(canvas, stats.moviesWatched, stats.seriesWatched)
         drawFooter(canvas)
 
         return bmp
     }
 
-    /** Salva il bitmap in cache e ritorna il file, pronto per FileProvider. */
     fun saveToCache(context: Context, bitmap: Bitmap): File {
         val file = File(context.cacheDir, "cloudstream_wrapped.png")
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-        }
+        FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
         return file
     }
 
     private fun drawBackground(canvas: Canvas, accent: Int) {
-        val gradient = LinearGradient(
-            0f, 0f, 0f, HEIGHT.toFloat(),
-            BG_TOP, BG_BOTTOM, Shader.TileMode.CLAMP
-        )
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = gradient }
-        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), paint)
-
-        // Alone morbido col colore del rank dietro al badge, non un blu fisso:
-        // Diamante si illumina d'azzurro, CloudStream di viola, ecc.
-        val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = RadialGradient(
-                WIDTH / 2f, 560f, 520f,
-                intArrayOf(colorWithAlpha(accent, 110), colorWithAlpha(accent, 0)),
-                null, Shader.TileMode.CLAMP
-            )
+        val base = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(0f, 0f, 0f, HEIGHT.toFloat(), BG_TOP, BG_BOTTOM, Shader.TileMode.CLAMP)
         }
-        canvas.drawRect(0f, 40f, WIDTH.toFloat(), 1080f, glow)
+        canvas.drawRect(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(), base)
+
+        val steps = 18
+        val peak = 95
+        val colors = IntArray(steps)
+        val positions = FloatArray(steps)
+        for (i in 0 until steps) {
+            val t = i / (steps - 1f)
+            val eased = ((1.0 + cos(PI * t)) / 2.0).toFloat()
+            colors[i] = colorWithAlpha(accent, (peak * eased).toInt())
+            positions[i] = t
+        }
+        val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            isDither = true
+            shader = RadialGradient(WIDTH / 2f, 510f, 720f, colors, positions, Shader.TileMode.CLAMP)
+        }
+        canvas.drawRect(0f, 0f, WIDTH.toFloat(), 1300f, glow)
     }
 
-    /** Riga header: icona + etichetta a sinistra, handle utente a destra. */
     private fun drawHeader(context: Context, canvas: Canvas, profileName: String) {
         val iconSize = 64f
         val top = 90f
-        val left = 80f
 
-        drawAppIcon(context, canvas, left, top, iconSize)
+        drawAppIcon(context, canvas, MARGIN, top, iconSize)
 
         val labelPaint = textPaint(TEXT_SECONDARY, 26f, bold = true).apply {
             textAlign = Paint.Align.LEFT
             letterSpacing = 0.14f
         }
-        canvas.drawText("CLOUDSTREAM WRAPPED", left + iconSize + 24f, top + iconSize / 2f + 9f, labelPaint)
+        canvas.drawText("CLOUDSTREAM WRAPPED", MARGIN + iconSize + 24f, top + iconSize / 2f + 9f, labelPaint)
 
-        val handlePaint = textPaint(TEXT_PRIMARY, 32f, bold = true).apply {
-            textAlign = Paint.Align.RIGHT
-        }
-        val handle = "@${profileName.trim()}"
-        canvas.drawText(handle, WIDTH - 80f, top + iconSize / 2f + 11f, handlePaint)
+        val handlePaint = textPaint(TEXT_PRIMARY, 32f, bold = true).apply { textAlign = Paint.Align.RIGHT }
+        canvas.drawText("@${profileName.trim()}", WIDTH - MARGIN, top + iconSize / 2f + 11f, handlePaint)
 
-        // Sottile linea divisoria, per separare l'header dal resto senza
-        // un altro blocco di testo: solo struttura.
-        val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val divider = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = colorWithAlpha(TEXT_SECONDARY, 50)
             strokeWidth = 2f
         }
-        canvas.drawLine(80f, top + iconSize + 34f, WIDTH - 80f, top + iconSize + 34f, dividerPaint)
+        canvas.drawLine(MARGIN, top + iconSize + 34f, WIDTH - MARGIN, top + iconSize + 34f, divider)
     }
 
     private fun drawAppIcon(context: Context, canvas: Canvas, left: Float, top: Float, size: Float) {
-        val icon: Drawable? = runCatching {
-            context.packageManager.getApplicationIcon(context.packageName)
-        }.getOrNull()
+        val icon: Drawable? = runCatching { context.packageManager.getApplicationIcon(context.packageName) }.getOrNull()
 
-        val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CARD_FILL }
-        canvas.drawCircle(left + size / 2f, top + size / 2f, size / 2f + 8f, circlePaint)
+        val circle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CARD_FILL }
+        canvas.drawCircle(left + size / 2f, top + size / 2f, size / 2f + 8f, circle)
 
         if (icon != null) {
             icon.setBounds(left.toInt(), top.toInt(), (left + size).toInt(), (top + size).toInt())
@@ -150,7 +121,6 @@ object WrappedCardRenderer {
         }
     }
 
-    /** Badge esagonale del rank (hero section), con pillola del nome sotto. */
     private fun drawRankBadge(canvas: Canvas, rank: WrappedRank, rankIcon: Drawable?, accent: Int) {
         val badgeSize = 420
         val badgeLeft = (WIDTH - badgeSize) / 2
@@ -160,160 +130,184 @@ object WrappedCardRenderer {
             rankIcon.setBounds(badgeLeft, badgeTop, badgeLeft + badgeSize, badgeTop + badgeSize)
             rankIcon.draw(canvas)
         } else {
-            // Riserva: esagono disegnato a codice, stesso colore del rank,
-            // così la card non resta mai senza badge anche senza i PNG.
             drawHexagonFallback(canvas, badgeLeft + badgeSize / 2f, badgeTop + badgeSize / 2f, badgeSize / 2f, accent)
         }
 
         val pillTop = (badgeTop + badgeSize + 40).toFloat()
         val pillHeight = 88f
         val label = rank.title.uppercase()
-        val textPaintObj = textPaint(TEXT_PRIMARY, 40f, bold = true).apply {
+        val text = textPaint(TEXT_PRIMARY, 40f, bold = true).apply {
             textAlign = Paint.Align.CENTER
             letterSpacing = 0.06f
         }
-        val textWidth = textPaintObj.measureText(label)
-        val paddingH = 56f
-        val pillRect = RectF(
-            WIDTH / 2f - textWidth / 2f - paddingH,
-            pillTop,
-            WIDTH / 2f + textWidth / 2f + paddingH,
-            pillTop + pillHeight
-        )
-        val pillFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colorWithAlpha(accent, 48) }
-        canvas.drawRoundRect(pillRect, pillHeight / 2f, pillHeight / 2f, pillFill)
-        val pillStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val half = text.measureText(label) / 2f + 56f
+        val pill = RectF(WIDTH / 2f - half, pillTop, WIDTH / 2f + half, pillTop + pillHeight)
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colorWithAlpha(accent, 48) }
+        canvas.drawRoundRect(pill, pillHeight / 2f, pillHeight / 2f, fill)
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = accent
             style = Paint.Style.STROKE
             strokeWidth = 3f
         }
-        canvas.drawRoundRect(pillRect, pillHeight / 2f, pillHeight / 2f, pillStroke)
-        canvas.drawText(label, WIDTH / 2f, pillTop + pillHeight / 2f + 15f, textPaintObj)
+        canvas.drawRoundRect(pill, pillHeight / 2f, pillHeight / 2f, stroke)
+        canvas.drawText(label, WIDTH / 2f, pillTop + pillHeight / 2f + 15f, text)
     }
 
     private fun drawHexagonFallback(canvas: Canvas, cx: Float, cy: Float, radius: Float, color: Int) {
-        val path = android.graphics.Path()
+        val path = Path()
         for (i in 0 until 6) {
             val angle = Math.toRadians((60 * i - 90).toDouble())
-            val x = cx + radius * Math.cos(angle).toFloat()
-            val y = cy + radius * Math.sin(angle).toFloat()
+            val x = cx + radius * cos(angle).toFloat()
+            val y = cy + radius * sin(angle).toFloat()
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         path.close()
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(
-                cx, cy - radius, cx, cy + radius,
-                color, colorWithAlpha(color, 160), Shader.TileMode.CLAMP
-            )
+            shader = LinearGradient(cx, cy - radius, cx, cy + radius, color, colorWithAlpha(color, 160), Shader.TileMode.CLAMP)
         }
         canvas.drawPath(path, fill)
     }
 
-    /**
-     * Blocco unico centrale col tempo totale: icona orologio + testo in fila,
-     * mai un numero decimale ("14,4 giorni"), sempre la scomposizione
-     * giorni/ore/minuti separata da "•" (stessa logica di WrappedFormat,
-     * usata anche nel pannello impostazioni).
-     */
-    private fun drawHeroTime(canvas: Canvas, totalMs: Long) {
+    private fun drawTotalTime(canvas: Canvas, totalMs: Long) {
         val units = WrappedFormat.breakDownDuration(totalMs)
-        val timeText = units.joinToString("   •   ") {
-            "${it.value} ${it.label.replaceFirstChar(Char::uppercase)}"
-        }
+        val top = 920f
+        val height = 300f
+        val rect = RectF(MARGIN, top, WIDTH - MARGIN, top + height)
+        drawCardFrame(canvas, rect, 40f)
 
         val labelPaint = textPaint(TEXT_SECONDARY, 26f, bold = true).apply {
-            textAlign = Paint.Align.CENTER
             letterSpacing = 0.14f
         }
-        canvas.drawText("TEMPO TOTALE GUARDATO", WIDTH / 2f, 1000f, labelPaint)
+        val label = "TOTAL TIME"
+        val iconSize = 40f
+        val gap = 20f
+        val labelWidth = labelPaint.measureText(label)
+        val startX = WIDTH / 2f - (iconSize + gap + labelWidth) / 2f
+        val headerY = top + 66f
+        drawClockIcon(canvas, startX + iconSize / 2f, headerY - 9f, iconSize / 2f)
+        canvas.drawText(label, startX + iconSize + gap, headerY, labelPaint)
 
-        // Dimensione del font adattiva: la stringa cambia lunghezza in base
-        // a quante unità (giorni/ore/Min) ci sono, non deve mai uscire dalla card.
-        val maxWidth = WIDTH - 160f
-        var fontSize = 58f
-        val valuePaint = textPaint(TEXT_PRIMARY, fontSize, bold = true).apply {
-            textAlign = Paint.Align.CENTER
-        }
-        while (valuePaint.measureText(timeText) > maxWidth && fontSize > 32f) {
-            fontSize -= 2f
-            valuePaint.textSize = fontSize
-        }
+        val innerLeft = rect.left + 24f
+        val innerWidth = rect.width() - 48f
+        val colWidth = innerWidth / units.size
+        val numberY = top + 205f
+        val captionY = top + 255f
 
-        val cardTop = 1050f
-        val cardHeight = 150f
-        val cardRect = RectF(80f, cardTop, WIDTH - 80f, cardTop + cardHeight)
-        val cardFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CARD_FILL }
-        canvas.drawRoundRect(cardRect, 32f, 32f, cardFill)
-        val cardStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = CARD_STROKE
-            style = Paint.Style.STROKE
+        val longest = units.maxOf { it.value.toString().length }
+        var numberSize = 96f
+        val numberPaint = textPaint(TEXT_PRIMARY, numberSize, bold = true).apply { textAlign = Paint.Align.CENTER }
+        val widest = "8".repeat(longest)
+        while (numberPaint.measureText(widest) > colWidth - 36f && numberSize > 44f) {
+            numberSize -= 4f
+            numberPaint.textSize = numberSize
+        }
+        val captionPaint = textPaint(TEXT_SECONDARY, 30f, bold = false).apply { textAlign = Paint.Align.CENTER }
+        val divider = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = colorWithAlpha(TEXT_SECONDARY, 60)
             strokeWidth = 2f
         }
-        canvas.drawRoundRect(cardRect, 32f, 32f, cardStroke)
 
-        val clockPaint = textPaint(TEXT_PRIMARY, fontSize, bold = false).apply {
-            textAlign = Paint.Align.CENTER
+        units.forEachIndexed { i, unit ->
+            val cx = innerLeft + colWidth * i + colWidth / 2f
+            canvas.drawText(unit.value.toString(), cx, numberY, numberPaint)
+            canvas.drawText(unit.label, cx, captionY, captionPaint)
+            if (i > 0) {
+                val x = innerLeft + colWidth * i
+                canvas.drawLine(x, top + 150f, x, top + 262f, divider)
+            }
         }
-        val clockWidth = clockPaint.measureText("⏱ ")
-        val totalWidth = valuePaint.measureText(timeText) + clockWidth
-        val startX = WIDTH / 2f - totalWidth / 2f
-        val baseline = cardTop + cardHeight / 2f + fontSize * 0.34f
-
-        canvas.drawText("⏱", startX + clockWidth / 2f, baseline, textPaint(TEXT_PRIMARY, fontSize, bold = false).apply {
-            textAlign = Paint.Align.CENTER
-        })
-        canvas.drawText(
-            timeText,
-            startX + clockWidth + (totalWidth - clockWidth) / 2f,
-            baseline,
-            textPaint(TEXT_PRIMARY, fontSize, bold = true).apply { textAlign = Paint.Align.CENTER }
-        )
     }
 
-    /** Griglia in basso: due card affiancate, sfondo grigio scuro su sfondo quasi nero. */
     private fun drawCounters(canvas: Canvas, movies: Int, series: Int) {
-        val cardTop = 1270f
-        val cardHeight = 300f
+        val top = 1280f
+        val height = 310f
         val gap = 32f
-        val cardWidth = (WIDTH - 160f - gap) / 2f
+        val width = (WIDTH - 2 * MARGIN - gap) / 2f
 
-        drawStatCard(canvas, 80f, cardTop, cardWidth, cardHeight, movies.toString(), "Film guardati", "🎬")
-        drawStatCard(canvas, 80f + cardWidth + gap, cardTop, cardWidth, cardHeight, series.toString(), "Serie TV guardate", "📺")
+        drawStatCard(canvas, MARGIN, top, width, height, movies.toString(), "Movies watched", ::drawMovieIcon)
+        drawStatCard(canvas, MARGIN + width + gap, top, width, height, series.toString(), "TV shows watched", ::drawTvIcon)
     }
 
     private fun drawStatCard(
         canvas: Canvas, left: Float, top: Float, width: Float, height: Float,
-        value: String, label: String, emoji: String
+        value: String, label: String, icon: (Canvas, Float, Float, Float) -> Unit,
     ) {
-        val rect = RectF(left, top, left + width, top + height)
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CARD_FILL }
-        canvas.drawRoundRect(rect, 36f, 36f, bgPaint)
+        drawCardFrame(canvas, RectF(left, top, left + width, top + height), 40f)
 
-        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val cx = left + width / 2f
+        icon(canvas, cx, top + 78f, 30f)
+
+        val valuePaint = textPaint(TEXT_PRIMARY, 96f, bold = true).apply { textAlign = Paint.Align.CENTER }
+        canvas.drawText(value, cx, top + 200f, valuePaint)
+
+        val labelPaint = textPaint(TEXT_SECONDARY, 30f, bold = false).apply { textAlign = Paint.Align.CENTER }
+        canvas.drawText(label, cx, top + 258f, labelPaint)
+    }
+
+    private fun drawCardFrame(canvas: Canvas, rect: RectF, radius: Float) {
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CARD_FILL }
+        canvas.drawRoundRect(rect, radius, radius, fill)
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = CARD_STROKE
             style = Paint.Style.STROKE
             strokeWidth = 2f
         }
-        canvas.drawRoundRect(rect, 36f, 36f, borderPaint)
+        canvas.drawRoundRect(rect, radius, radius, stroke)
+    }
 
-        val centerX = left + width / 2f
-        val emojiPaint = textPaint(TEXT_PRIMARY, 56f, bold = false).apply { textAlign = Paint.Align.CENTER }
-        canvas.drawText(emoji, centerX, top + 100f, emojiPaint)
+    private fun iconPaint(size: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = TEXT_PRIMARY
+        style = Paint.Style.STROKE
+        strokeWidth = size * 0.14f
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
 
-        val valuePaint = textPaint(TEXT_PRIMARY, 92f, bold = true).apply { textAlign = Paint.Align.CENTER }
-        canvas.drawText(value, centerX, top + 210f, valuePaint)
+    private fun drawClockIcon(canvas: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = iconPaint(r * 2)
+        canvas.drawCircle(cx, cy, r, p)
+        canvas.drawLine(cx, cy, cx, cy - r * 0.55f, p)
+        canvas.drawLine(cx, cy, cx + r * 0.42f, cy + r * 0.24f, p)
+    }
 
-        val labelPaint = textPaint(TEXT_SECONDARY, 32f, bold = false).apply { textAlign = Paint.Align.CENTER }
-        canvas.drawText(label, centerX, top + 262f, labelPaint)
+    private fun drawMovieIcon(canvas: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = iconPaint(r * 2)
+        val w = r * 2f
+        val left = cx - w / 2f
+        val right = cx + w / 2f
+        val barTop = cy - r * 0.95f
+        val barBottom = cy - r * 0.35f
+        val bodyBottom = cy + r * 0.95f
+
+        canvas.drawRoundRect(RectF(left, barBottom, right, bodyBottom), r * 0.2f, r * 0.2f, p)
+        canvas.drawRoundRect(RectF(left, barTop, right, barBottom), r * 0.14f, r * 0.14f, p)
+        val stripeW = w / 4f
+        for (i in 0..1) {
+            val x = left + stripeW * (i * 2 + 1)
+            canvas.drawLine(x - stripeW * 0.4f, barBottom, x + stripeW * 0.4f, barTop, p)
+        }
+    }
+
+    private fun drawTvIcon(canvas: Canvas, cx: Float, cy: Float, r: Float) {
+        val p = iconPaint(r * 2)
+        val w = r * 2.1f
+        val left = cx - w / 2f
+        val right = cx + w / 2f
+        val top = cy - r * 0.5f
+        val bottom = cy + r * 0.9f
+
+        canvas.drawRoundRect(RectF(left, top, right, bottom), r * 0.25f, r * 0.25f, p)
+        canvas.drawLine(cx - r * 0.55f, cy - r * 1.0f, cx, top, p)
+        canvas.drawLine(cx + r * 0.55f, cy - r * 1.0f, cx, top, p)
     }
 
     private fun drawFooter(canvas: Canvas) {
         val paint = textPaint(TEXT_SECONDARY, 30f, bold = false).apply {
             textAlign = Paint.Align.CENTER
             alpha = 170
-            letterSpacing = 0.02f
+            letterSpacing = 0.04f
         }
-        canvas.drawText("cloudstream.wiki  •  Watch Timeline", WIDTH / 2f, HEIGHT - 110f, paint)
+        canvas.drawText("Developed by DieGon", WIDTH / 2f, HEIGHT - 110f, paint)
     }
 
     private fun textPaint(color: Int, size: Float, bold: Boolean) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -322,7 +316,6 @@ object WrappedCardRenderer {
         typeface = Typeface.create(Typeface.DEFAULT, if (bold) Typeface.BOLD else Typeface.NORMAL)
     }
 
-    private fun colorWithAlpha(color: Int, alpha: Int): Int {
-        return Color.argb(alpha.coerceIn(0, 255), Color.red(color), Color.green(color), Color.blue(color))
-    }
+    private fun colorWithAlpha(color: Int, alpha: Int): Int =
+        Color.argb(alpha.coerceIn(0, 255), Color.red(color), Color.green(color), Color.blue(color))
 }
