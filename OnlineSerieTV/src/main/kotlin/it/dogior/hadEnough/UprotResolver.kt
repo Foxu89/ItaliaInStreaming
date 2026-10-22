@@ -195,7 +195,6 @@ object UprotResolver {
         val cap = parseUpCaptcha(html) ?: return null
         if (!jar.map.containsKey("PHPSESSID") || left <= 0) return null
         val answer = solveUpCaptcha(cap) ?: return null
-        Log.d(TAG, "captcha solved: $answer")
         val form = "${URLEncoder.encode(cap.field, "UTF-8")}=${URLEncoder.encode(answer, "UTF-8")}"
         val (nextHtml, nextLocation) = upPost(link, form, jar)
         return attempt(link, nextHtml, jar, left - 1, nextLocation)
@@ -318,10 +317,7 @@ object UprotResolver {
     suspend fun resolve(link: String): String? {
         val key = uprotKey(link)
         cachedPlayer(key)?.let { player ->
-            maxstreamM3u8(player)?.let {
-                Log.d(TAG, "cache hit: $player")
-                return it
-            }
+            maxstreamM3u8(player)?.let { return it }
         }
 
         val uprots = unlockUprot(link)
