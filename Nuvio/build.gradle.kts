@@ -16,6 +16,11 @@ android {
     }
 }
 
+dependencies {
+    // Brings in AppCompat (AlertDialog) like the other modules with a settings dialog
+    implementation("com.google.android.material:material:1.13.0")
+}
+
 cloudstream {
     language = "it"
     description = "Usa gli scraper dei repository Nuvio (JavaScript) dentro CloudStream"
