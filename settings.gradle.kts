@@ -20,6 +20,7 @@ include(
 //    "GuardaPlay",
 //    "Huhu",
 //    "IlGenioDelloStreaming",
+    "Nuvio",
     "OnlineSerieTV",
     "SectionOrganizer",
     "SleepGuard",
