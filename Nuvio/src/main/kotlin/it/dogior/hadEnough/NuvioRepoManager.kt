@@ -200,6 +200,17 @@ class NuvioRepoManager(context: Context) {
         return out
     }
 
+    private val settingsFlag = HashMap<String, Boolean>()
+
+    /** True if the manifest says so or the script itself defines onSettings (cached per file version). */
+    fun hasSettings(repo: NuvioRepo, scraper: NuvioScraper): Boolean {
+        if (scraper.hasSettings) return true
+        val f = scriptFile(repo, scraper)
+        if (!f.exists()) return false
+        val key = f.path + ":" + f.lastModified()
+        return settingsFlag.getOrPut(key) { f.readText().contains("onSettings") }
+    }
+
     fun readScript(repo: NuvioRepo, scraper: NuvioScraper): String? {
         val f = scriptFile(repo, scraper)
         return if (f.exists()) f.readText() else null

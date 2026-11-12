@@ -22,7 +22,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.SwitchCompat
 import com.lagradost.cloudstream3.app
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -211,11 +210,7 @@ class NuvioSettings(
         )
         head.addView(texts)
 
-        val sw = SwitchCompat(ctx).apply {
-            isChecked = enabled
-            isFocusable = false
-            isClickable = false
-        }
+        val sw = toggle(enabled)
         head.addView(sw)
         card.addView(head)
 
@@ -260,13 +255,8 @@ class NuvioSettings(
     // ── repository screen: one card per scraper ──
 
     private fun renderRepo(repo: NuvioRepo) {
-        container.addView(button("<  INDIETRO", GRAY) {
-            openRepoId = null
-            render()
-        })
-
         val repoOn = manager.isRepoEnabled(repo.id)
-        container.addView(label(repo.name, 18f, bold = true, topDp = 12))
+        container.addView(label(repo.name, 18f, bold = true, topDp = 4))
         if (repo.description.isNotEmpty()) container.addView(label(repo.description, 12f, alpha = 0.65f))
         if (!repoOn) {
             container.addView(
@@ -355,11 +345,21 @@ class NuvioSettings(
         if (s.author.isNotEmpty()) texts.addView(label("di ${s.author}", 11f, alpha = 0.5f, topDp = 1))
         top.addView(texts)
 
-        val sw = SwitchCompat(ctx).apply {
-            isChecked = manager.isEnabled(repo, s)
-            isFocusable = false
-            isClickable = false
+        if (manager.hasSettings(repo, s)) {
+            top.addView(TextView(ctx).apply {
+                text = "⚙"
+                textSize = 22f
+                gravity = Gravity.CENTER
+                background = focusBg(GREEN, 22)
+                isFocusable = true
+                isClickable = true
+                contentDescription = "Impostazioni di ${s.name}"
+                layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply { rightMargin = dp(8) }
+                setOnClickListener { openScraperSettings(repo, s) }
+            })
         }
+
+        val sw = toggle(manager.isEnabled(repo, s))
         top.addView(sw)
         card.addView(top)
 
@@ -391,16 +391,6 @@ class NuvioSettings(
             onChanged()
         }
 
-        if (s.hasSettings) {
-            val row = LinearLayout(ctx).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = dp(8) }
-            }
-            row.addView(small("IMPOSTAZIONI", GREEN) { openScraperSettings(repo, s) })
-            card.addView(row)
-        }
         return card
     }
 
@@ -535,7 +525,7 @@ class NuvioSettings(
                     t.addView(label(lbl, 13f, bold = true, topDp = 0))
                     if (desc.isNotEmpty()) t.addView(label(desc, 11f, alpha = 0.6f, topDp = 1))
                     row.addView(t)
-                    val sw = SwitchCompat(ctx).apply { isChecked = state; isFocusable = false; isClickable = false }
+                    val sw = toggle(state)
                     row.addView(sw)
                     row.setOnClickListener { state = !state; sw.isChecked = state }
                     form.addView(row)
@@ -694,6 +684,17 @@ class NuvioSettings(
         addState(intArrayOf(android.R.attr.state_focused), box(FOCUS, 70, 255, 4, radiusDp))
         addState(intArrayOf(android.R.attr.state_pressed), box(color, 70, 255, 2, radiusDp))
         addState(intArrayOf(), box(color, 20, 110, 2, radiusDp))
+    }
+
+    /** Same plain platform Switch used by WatchParty (theme colours, no text, compact). */
+    private fun toggle(checked: Boolean) = android.widget.Switch(ctx).apply {
+        isChecked = checked
+        isFocusable = false
+        isClickable = false
+        minimumHeight = 0
+        showText = false
+        switchMinWidth = dp(28)
+        layoutParams = LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun toast(msg: String, long: Boolean = false) {

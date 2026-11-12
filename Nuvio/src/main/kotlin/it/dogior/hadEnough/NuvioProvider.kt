@@ -268,6 +268,10 @@ class NuvioProvider(private val manager: NuvioRepoManager) : MainAPI() {
                 ?: behavior?.optJSONObject("headers")?.toStringMap()
                 ?: emptyMap()
 
+            val headerMap = LinkedHashMap<String, String>(headers)
+            if (headerMap.keys.none { it.equals("user-agent", true) }) headerMap["User-Agent"] = DEFAULT_UA
+            val referer = headerMap.entries.firstOrNull { it.key.equals("referer", true) }?.value ?: ""
+
             val declaredType = o.str("type")?.lowercase()
             val linkType: ExtractorLinkType? = when {
                 declaredType == "hls" || url.contains(".m3u8", ignoreCase = true) -> ExtractorLinkType.M3U8
@@ -278,7 +282,8 @@ class NuvioProvider(private val manager: NuvioRepoManager) : MainAPI() {
             callback.invoke(
                 newExtractorLink(scraper.name, displayName, url, linkType) {
                     this.quality = qualityValue(o.str("quality"), "$displayName ${title ?: ""}")
-                    this.headers = headers
+                    this.headers = headerMap
+                    this.referer = referer
                 }
             )
             count++
@@ -297,6 +302,9 @@ class NuvioProvider(private val manager: NuvioRepoManager) : MainAPI() {
         }
         return count
     }
+
+    private val DEFAULT_UA =
+        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
     private fun qualityValue(quality: String?, fallbackText: String): Int {
         val t = "${quality ?: ""} $fallbackText".lowercase()
