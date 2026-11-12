@@ -27,7 +27,7 @@ include(
 //    "StreamCenter",
 //    "StreamingCommunity",
 //    "StreamITA",
-//    "Stremio",
+    "Stremio",
 //    "SyncStream",
 //    "TV",
     "ToonItalia",
