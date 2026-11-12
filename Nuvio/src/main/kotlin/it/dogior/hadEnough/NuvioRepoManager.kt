@@ -64,6 +64,13 @@ class NuvioRepoManager(context: Context) {
     fun removeRepo(id: String) {
         saveRepos(repos().filterNot { it.id == id })
         File(root, id).deleteRecursively()
+        setRepoEnabled(id, true)
+        val vals = valuesStore()
+        val vKeys = vals.keys().asSequence().filter { it.startsWith("$id:") }.toList()
+        if (vKeys.isNotEmpty()) {
+            vKeys.forEach { vals.remove(it) }
+            prefs.edit().putString(KEY_VALUES, vals.toString()).apply()
+        }
         val overrides = overrides()
         val keys = overrides.keys().asSequence().filter { it.startsWith("$id:") }.toList()
         if (keys.isNotEmpty()) {
@@ -100,6 +107,12 @@ class NuvioRepoManager(context: Context) {
                     types = o.stringList("supportedTypes"),
                     languages = o.stringList("contentLanguage"),
                     enabledByDefault = o.optBoolean("enabled", true),
+                    author = o.str("author") ?: "",
+                    logo = o.str("logo") ?: "",
+                    formats = o.stringList("formats"),
+                    hasSettings = o.optBoolean("hasSettings", false),
+                    limited = o.optBoolean("limited", false),
+                    notes = o.str("notes") ?: "",
                 )
             )
         }
@@ -127,6 +140,7 @@ class NuvioRepoManager(context: Context) {
             name = manifest.str("name") ?: base.removePrefix("https://").substringBefore('/'),
             description = manifest.str("description") ?: "",
             scrapers = scrapers,
+            version = manifest.str("version") ?: "",
         )
         val all = repos().toMutableList()
         val idx = all.indexOfFirst { it.id == repoId }
@@ -154,10 +168,31 @@ class NuvioRepoManager(context: Context) {
         prefs.edit().putString(KEY_ENABLED, o.toString()).apply()
     }
 
-    /** Enabled scrapers whose script was actually downloaded. */
+    // ── whole repository on/off ──
+
+    fun isRepoEnabled(repoId: String): Boolean = !disabledRepos().contains(repoId)
+
+    fun setRepoEnabled(repoId: String, enabled: Boolean) {
+        val set = disabledRepos().toMutableSet()
+        if (enabled) set.remove(repoId) else set.add(repoId)
+        prefs.edit().putStringSet(KEY_DISABLED_REPOS, set).apply()
+    }
+
+    private fun disabledRepos(): Set<String> =
+        prefs.getStringSet(KEY_DISABLED_REPOS, emptySet()) ?: emptySet()
+
+    /** Sets every scraper of a repository on or off in one go. */
+    fun setAllEnabled(repo: NuvioRepo, enabled: Boolean) {
+        val o = overrides()
+        repo.scrapers.forEach { o.put("${repo.id}:${it.id}", enabled) }
+        prefs.edit().putString(KEY_ENABLED, o.toString()).apply()
+    }
+
+    /** Enabled scrapers (of enabled repositories) whose script was actually downloaded. */
     fun enabledScrapers(): List<Pair<NuvioRepo, NuvioScraper>> {
         val out = mutableListOf<Pair<NuvioRepo, NuvioScraper>>()
         for (repo in repos()) {
+            if (!isRepoEnabled(repo.id)) continue
             for (s in repo.scrapers) {
                 if (isEnabled(repo, s) && scriptFile(repo, s).exists()) out.add(repo to s)
             }
@@ -191,6 +226,60 @@ class NuvioRepoManager(context: Context) {
             prefs.edit().putString(KEY_SETTINGS, clean).apply()
         }
 
+    // ── per-scraper settings (built from the scraper's own onSettings() blueprint) ──
+
+    private fun blueprintFile(repo: NuvioRepo, scraper: NuvioScraper) =
+        File(File(root, repo.id), safeName(scraper.filename) + ".settings.json")
+
+    private fun valuesStore(): JSONObject {
+        val json = prefs.getString(KEY_VALUES, null) ?: return JSONObject()
+        return try { JSONObject(json) } catch (_: Exception) { JSONObject() }
+    }
+
+    /** The cached onSettings() layout of a scraper, or null if it was never read (or has none). */
+    fun blueprint(repo: NuvioRepo, scraper: NuvioScraper): JSONArray? {
+        val f = blueprintFile(repo, scraper)
+        if (!f.exists()) return null
+        return try { JSONArray(f.readText()) } catch (_: Exception) { null }
+    }
+
+    /** Runs onSettings() (blocking, call from IO) and caches the result. Returns null with no settings. */
+    fun loadBlueprint(repo: NuvioRepo, scraper: NuvioScraper): JSONArray? {
+        val code = readScript(repo, scraper) ?: return null
+        val res = NuvioJsEngine.settingsBlueprint(scraper.name, code, scraperSettingsJson, app.baseClient)
+        val arr = try { JSONArray(res.json ?: return null) } catch (_: Exception) { return null }
+        blueprintFile(repo, scraper).writeText(arr.toString())
+        return arr
+    }
+
+    /** Values the user typed for one scraper (only what was changed). */
+    fun scraperValues(repo: NuvioRepo, scraper: NuvioScraper): JSONObject =
+        valuesStore().optJSONObject("${repo.id}:${scraper.id}") ?: JSONObject()
+
+    fun setScraperValues(repo: NuvioRepo, scraper: NuvioScraper, values: JSONObject) {
+        val s = valuesStore()
+        s.put("${repo.id}:${scraper.id}", values)
+        prefs.edit().putString(KEY_VALUES, s.toString()).apply()
+    }
+
+    /** What the scraper gets as SCRAPER_SETTINGS: global JSON, then blueprint defaults, then the user's values. */
+    fun settingsFor(repo: NuvioRepo, scraper: NuvioScraper): String {
+        val out = try { JSONObject(scraperSettingsJson) } catch (_: Exception) { JSONObject() }
+        val bp = blueprint(repo, scraper)
+        if (bp != null) {
+            for (i in 0 until bp.length()) {
+                val item = bp.optJSONObject(i) ?: continue
+                val key = item.optString("key")
+                if (key.isNotEmpty() && item.has("defaultValue") && !item.isNull("defaultValue")) {
+                    out.put(key, item.get("defaultValue"))
+                }
+            }
+        }
+        val mine = scraperValues(repo, scraper)
+        for (k in mine.keys()) out.put(k, mine.get(k))
+        return out.toString()
+    }
+
     var timeoutSeconds: Int
         get() = prefs.getInt(KEY_TIMEOUT, DEFAULT_TIMEOUT).coerceIn(5, 180)
         set(value) {
@@ -205,6 +294,8 @@ class NuvioRepoManager(context: Context) {
         private const val KEY_ENABLED = "enabled_overrides"
         private const val KEY_SETTINGS = "scraper_settings"
         private const val KEY_TIMEOUT = "timeout_seconds"
+        private const val KEY_DISABLED_REPOS = "disabled_repos"
+        private const val KEY_VALUES = "scraper_values"
         const val DEFAULT_TIMEOUT = 45
 
         fun repoId(base: String): String = Integer.toHexString(base.lowercase().hashCode())
@@ -252,6 +343,7 @@ class NuvioRepoManager(context: Context) {
             put("url", r.url)
             put("name", r.name)
             put("description", r.description)
+            put("version", r.version)
             put("scrapers", JSONArray().apply {
                 r.scrapers.forEach { s ->
                     put(JSONObject().apply {
@@ -263,6 +355,12 @@ class NuvioRepoManager(context: Context) {
                         put("types", JSONArray(s.types))
                         put("languages", JSONArray(s.languages))
                         put("enabled", s.enabledByDefault)
+                        put("author", s.author)
+                        put("logo", s.logo)
+                        put("formats", JSONArray(s.formats))
+                        put("hasSettings", s.hasSettings)
+                        put("limited", s.limited)
+                        put("notes", s.notes)
                     })
                 }
             })
@@ -283,6 +381,12 @@ class NuvioRepoManager(context: Context) {
                         types = s.stringList("types"),
                         languages = s.stringList("languages"),
                         enabledByDefault = s.optBoolean("enabled", true),
+                        author = s.optString("author"),
+                        logo = s.optString("logo"),
+                        formats = s.stringList("formats"),
+                        hasSettings = s.optBoolean("hasSettings", false),
+                        limited = s.optBoolean("limited", false),
+                        notes = s.optString("notes"),
                     )
                 )
             }
@@ -292,6 +396,7 @@ class NuvioRepoManager(context: Context) {
                 name = o.optString("name"),
                 description = o.optString("description"),
                 scrapers = scrapers,
+                version = o.optString("version"),
             )
         }
     }

@@ -9,6 +9,12 @@ data class NuvioScraper(
     val types: List<String> = emptyList(),
     val languages: List<String> = emptyList(),
     val enabledByDefault: Boolean = true,
+    val author: String = "",
+    val logo: String = "",
+    val formats: List<String> = emptyList(),
+    val hasSettings: Boolean = false,
+    val limited: Boolean = false,
+    val notes: String = "",
 ) {
     /** mediaType is "movie" or "tv" (the values Nuvio scrapers receive). */
     fun supports(mediaType: String): Boolean {
@@ -25,6 +31,7 @@ data class NuvioRepo(
     val name: String,
     val description: String = "",
     val scrapers: List<NuvioScraper> = emptyList(),
+    val version: String = "",
 )
 
 data class NuvioLoadData(

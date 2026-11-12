@@ -212,7 +212,6 @@ class NuvioProvider(private val manager: NuvioRepoManager) : MainAPI() {
         val targets = manager.enabledScrapers().filter { (_, s) -> s.supports(mediaType) }
         if (targets.isEmpty()) return false
 
-        val settings = manager.scraperSettingsJson
         val timeoutMs = manager.timeoutSeconds * 1000L
         val found = AtomicInteger(0)
 
@@ -222,7 +221,7 @@ class NuvioProvider(private val manager: NuvioRepoManager) : MainAPI() {
                 NuvioJsEngine.run(
                     scraperName = scraper.name,
                     code = code,
-                    settingsJson = settings,
+                    settingsJson = manager.settingsFor(repo, scraper),
                     tmdbId = tmdbId,
                     mediaType = mediaType,
                     season = load.season,

@@ -117,7 +117,7 @@ object NuvioJsEngine {
         Thread(r, "nuvio-http").apply { isDaemon = true }
     }
 
-    /** Blocking. Call it from a background dispatcher. */
+    /** getStreams(tmdbId, mediaType, season, episode). Blocking: call it from a background dispatcher. */
     fun run(
         scraperName: String,
         code: String,
@@ -126,6 +126,25 @@ object NuvioJsEngine {
         mediaType: String,
         season: Int?,
         episode: Int?,
+        timeoutMs: Long,
+        client: OkHttpClient,
+    ): Result {
+        val args = org.json.JSONArray().put(tmdbId).put(mediaType)
+            .put(season ?: org.json.JSONObject.NULL).put(episode ?: org.json.JSONObject.NULL)
+        return execute(scraperName, code, settingsJson, "getStreams", args.toString(), timeoutMs, client)
+    }
+
+    /** Calls the optional onSettings() of a scraper and returns its blueprint as JSON. */
+    fun settingsBlueprint(scraperName: String, code: String, settingsJson: String, client: OkHttpClient): Result =
+        execute(scraperName, code, settingsJson, "onSettings", "[]", 10_000L, client)
+
+    /** Runs any exported function of a scraper. Blocking. */
+    fun execute(
+        scraperName: String,
+        code: String,
+        settingsJson: String,
+        fnName: String,
+        argsJson: String,
         timeoutMs: Long,
         client: OkHttpClient,
     ): Result {
@@ -171,6 +190,37 @@ object NuvioJsEngine {
                 val msg = "[$scraperName] " + Context.toString(a.getOrNull(1))
                 Log.d(TAG, msg)
                 Undefined.instance
+            }
+
+            val dom = NuvioDom()
+            define("__domCall") { _, a ->
+                try {
+                    dom.call(
+                        Context.toString(a.getOrNull(0)),
+                        Context.toString(a.getOrNull(1)),
+                        a.getOrNull(2)?.takeIf { it !== Undefined.instance }?.let { Context.toString(it) },
+                        a.getOrNull(3)?.takeIf { it !== Undefined.instance }?.let { Context.toString(it) },
+                    )
+                } catch (e: Exception) {
+                    Log.d(TAG, "[$scraperName] dom: ${e.message}")
+                    null
+                }
+            }
+            define("__cryptoHash") { _, a ->
+                NuvioCrypto.hash(Context.toString(a.getOrNull(0)), Context.toString(a.getOrNull(1)))
+            }
+            define("__cryptoHmac") { _, a ->
+                NuvioCrypto.hmac(Context.toString(a.getOrNull(0)), Context.toString(a.getOrNull(1)), Context.toString(a.getOrNull(2)))
+            }
+            define("__cryptoCipher") { _, a ->
+                NuvioCrypto.cipher(
+                    Context.toString(a.getOrNull(0)), Context.toString(a.getOrNull(1)), Context.toString(a.getOrNull(2)),
+                    Context.toString(a.getOrNull(3)), Context.toString(a.getOrNull(4)), Context.toString(a.getOrNull(5)),
+                    Context.toString(a.getOrNull(6)),
+                )
+            }
+            define("__cryptoRandom") { _, a ->
+                NuvioCrypto.random(Context.toNumber(a.getOrNull(0)).toInt())
             }
 
             define("__nativeBytes") { c, a ->
@@ -228,7 +278,7 @@ object NuvioJsEngine {
             cx.evaluateString(scope, "globalThis.SCRAPER_SETTINGS = $settings;", "nuvio-settings", 1, null)
 
             cx.evaluateString(scope, code, scraperName, 1, null)
-            callJs("__start", tmdbId, mediaType, season, episode)
+            callJs("__startCall", fnName, argsJson)
 
             // ── event loop ──
             var timedOut = false
