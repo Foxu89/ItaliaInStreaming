@@ -254,13 +254,29 @@ class NuvioRepoManager(context: Context) {
         return try { JSONArray(f.readText()) } catch (_: Exception) { null }
     }
 
-    /** Runs onSettings() (blocking, call from IO) and caches the result. Returns null with no settings. */
-    fun loadBlueprint(repo: NuvioRepo, scraper: NuvioScraper): JSONArray? {
-        val code = readScript(repo, scraper) ?: return null
+    class BlueprintResult(val items: JSONArray?, val error: String?)
+
+    /** Runs onSettings() (blocking, call from IO), caches the result and explains why it failed if it did. */
+    fun loadBlueprint(repo: NuvioRepo, scraper: NuvioScraper): BlueprintResult {
+        val code = readScript(repo, scraper) ?: return BlueprintResult(null, "file dello scraper non scaricato (prova AGGIORNA)")
         val res = NuvioJsEngine.settingsBlueprint(scraper.name, code, scraperSettingsJson, app.baseClient)
-        val arr = try { JSONArray(res.json ?: return null) } catch (_: Exception) { return null }
+        if (res.error != null) return BlueprintResult(null, res.error)
+        val parsed: Any? = try { org.json.JSONTokener(res.json ?: "null").nextValue() } catch (_: Exception) { null }
+        val arr: JSONArray? = when (parsed) {
+            is JSONArray -> parsed
+            is JSONObject -> {
+                var found: JSONArray? = null
+                for (k in listOf("settings", "fields", "items", "blueprint", "options", "form")) {
+                    parsed.optJSONArray(k)?.let { found = it }
+                    if (found != null) break
+                }
+                found ?: if (parsed.has("type")) JSONArray().put(parsed) else null
+            }
+            else -> null
+        }
+        if (arr == null || arr.length() == 0) return BlueprintResult(null, "onSettings ha restituito un formato non riconosciuto: ${res.json?.take(120)}")
         blueprintFile(repo, scraper).writeText(arr.toString())
-        return arr
+        return BlueprintResult(arr, null)
     }
 
     /** Values the user typed for one scraper (only what was changed). */

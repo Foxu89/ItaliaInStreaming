@@ -113,6 +113,9 @@ private class NuvioTimeoutError : Error("timeout")
 object NuvioJsEngine {
     class Result(val json: String?, val error: String?)
 
+    private val ASYNC_WORDS = Regex("\\b(async|await)\\b")
+    private val transpiled = ConcurrentHashMap<Int, String>()
+
     private val httpPool = Executors.newCachedThreadPool { r ->
         Thread(r, "nuvio-http").apply { isDaemon = true }
     }
@@ -277,7 +280,17 @@ object NuvioJsEngine {
             val settings = try { JSONObject(settingsJson).toString() } catch (_: Exception) { "{}" }
             cx.evaluateString(scope, "globalThis.SCRAPER_SETTINGS = $settings;", "nuvio-settings", 1, null)
 
-            cx.evaluateString(scope, code, scraperName, 1, null)
+            // Rhino has no async/await: if the script does not compile and uses them, rewrite it to generators.
+            val compiled = try {
+                cx.compileString(code, scraperName, 1, null)
+            } catch (e: RhinoException) {
+                if (!ASYNC_WORDS.containsMatchIn(code)) throw e
+                val rewritten = transpiled.getOrPut(code.hashCode()) {
+                    Context.toString(callJs("__nvTranspile", code))
+                }
+                cx.compileString(rewritten, scraperName, 1, null)
+            }
+            compiled.exec(cx, scope)
             callJs("__startCall", fnName, argsJson)
 
             // ── event loop ──

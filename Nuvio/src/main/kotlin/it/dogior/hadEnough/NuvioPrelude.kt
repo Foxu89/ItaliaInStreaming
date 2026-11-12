@@ -1145,4 +1145,271 @@ function require(name) {
 
 """
 
-internal val NUVIO_PRELUDE: String = listOf(PART_CORE, PART_WEB, PART_CHEERIO, PART_CRYPTO, PART_MODULES).joinToString("\n")
+private const val PART_ASYNC = """
+// Part 6: async/await support for Rhino (which has generators but no async functions).
+// __nvTranspile(code) rewrites async functions / arrows / methods into generators driven by __nvAsync.
+// It is a token-level rewrite (strings, comments, regex and templates are respected), applied only
+// when the original script does not compile.
+
+function __nvAsync(thisArg, args, genFn) {
+  return new Promise(function (resolve, reject) {
+    var gen;
+    try { gen = genFn.apply(thisArg, args); } catch (e) { reject(e); return; }
+    function step(method, value) {
+      var r;
+      try { r = gen[method](value); } catch (e) { reject(e); return; }
+      if (r.done) resolve(r.value);
+      else Promise.resolve(r.value).then(function (x) { step('next', x); }, function (e) { step('throw', e); });
+    }
+    step('next');
+  });
+}
+
+var __nvTokenize = (function () {
+  var REGEX_AFTER = { 'return': 1, 'typeof': 1, 'void': 1, 'delete': 1, 'in': 1, 'of': 1, 'instanceof': 1, 'new': 1, 'case': 1, 'do': 1, 'else': 1, 'throw': 1, 'yield': 1, 'await': 1 };
+  var PUNCT3 = ['>>>=', '...', '===', '!==', '**=', '<<=', '>>=', '>>>', '&&=', '||=', '??='];
+  var PUNCT2 = ['=>', '==', '!=', '<=', '>=', '&&', '||', '??', '?.', '++', '--', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<', '>>', '**'];
+  function isIdStart(c) { return /[A-Za-z_${'$'}\u0080-￿]/.test(c); }
+  function isIdPart(c) { return /[A-Za-z0-9_${'$'}\u0080-￿]/.test(c); }
+
+  return function (src) {
+    var toks = [], i = 0, n = src.length, lastSig = null;
+    function push(type, s, e) { var t = { t: type, v: src.substring(s, e) }; toks.push(t); if (type !== 'ws' && type !== 'cm') lastSig = t; }
+    function regexAllowed() {
+      if (!lastSig) return true;
+      if (lastSig.t === 'id') return !!REGEX_AFTER[lastSig.v];
+      if (lastSig.t === 'num' || lastSig.t === 'str' || lastSig.t === 'tpl' || lastSig.t === 're') return false;
+      if (lastSig.t === 'p') return !(lastSig.v === ')' || lastSig.v === ']' || lastSig.v === '}');
+      return true;
+    }
+    while (i < n) {
+      var c = src.charAt(i), s = i;
+      if (/\s/.test(c)) { while (i < n && /\s/.test(src.charAt(i))) i++; push('ws', s, i); continue; }
+      if (c === '/' && src.charAt(i + 1) === '/') { while (i < n && src.charAt(i) !== '\n') i++; push('cm', s, i); continue; }
+      if (c === '/' && src.charAt(i + 1) === '*') { var e = src.indexOf('*/', i + 2); i = e < 0 ? n : e + 2; push('cm', s, i); continue; }
+      if (c === '"' || c === "'") {
+        i++;
+        while (i < n && src.charAt(i) !== c) { if (src.charAt(i) === '\\') i++; i++; }
+        i++; push('str', s, i); continue;
+      }
+      if (c === '`') {
+        i++;
+        while (i < n && src.charAt(i) !== '`') {
+          if (src.charAt(i) === '\\') { i += 2; continue; }
+          if (src.charAt(i) === '${'$'}' && src.charAt(i + 1) === '{') {
+            var depth = 1; i += 2;
+            while (i < n && depth > 0) {
+              var d = src.charAt(i);
+              if (d === '{') depth++;
+              else if (d === '}') depth--;
+              else if (d === '"' || d === "'") { i++; while (i < n && src.charAt(i) !== d) { if (src.charAt(i) === '\\') i++; i++; } }
+              else if (d === '`') { i++; while (i < n && src.charAt(i) !== '`') { if (src.charAt(i) === '\\') i++; i++; } }
+              i++;
+            }
+            continue;
+          }
+          i++;
+        }
+        i++; push('tpl', s, i); continue;
+      }
+      if (c === '/' && regexAllowed()) {
+        i++;
+        var inClass = false;
+        while (i < n) {
+          var r = src.charAt(i);
+          if (r === '\\') { i += 2; continue; }
+          if (r === '[') inClass = true;
+          else if (r === ']') inClass = false;
+          else if (r === '/' && !inClass) break;
+          else if (r === '\n') break;
+          i++;
+        }
+        i++;
+        while (i < n && isIdPart(src.charAt(i))) i++;
+        push('re', s, i); continue;
+      }
+      if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src.charAt(i + 1)))) {
+        while (i < n && /[0-9A-Za-z_.]/.test(src.charAt(i))) {
+          if ((src.charAt(i) === 'e' || src.charAt(i) === 'E') && /[+-]/.test(src.charAt(i + 1)) && !/^0[xX]/.test(src.substring(s, i))) i++;
+          i++;
+        }
+        push('num', s, i); continue;
+      }
+      if (isIdStart(c)) { while (i < n && isIdPart(src.charAt(i))) i++; push('id', s, i); continue; }
+      var four = src.substr(i, 4), three = src.substr(i, 3), two = src.substr(i, 2), len = 1, k;
+      if (four === '>>>=') len = 4;
+      else { for (k = 0; k < PUNCT3.length; k++) if (PUNCT3[k] === three) { len = 3; break; } }
+      if (len === 1) for (k = 0; k < PUNCT2.length; k++) if (PUNCT2[k] === two) { len = 2; break; }
+      i += len; push('p', s, i);
+    }
+    return toks;
+  };
+})();
+
+function __nvTranspile(src) {
+  var toks = __nvTokenize(src);
+
+  function isSig(t) { return t.t !== 'ws' && t.t !== 'cm'; }
+  function nextSig(i, end) { i++; while (i < end && !isSig(toks[i])) i++; return i; }
+  function isP(i, v) { return i >= 0 && i < toks.length && toks[i].t === 'p' && toks[i].v === v; }
+  function isId(i, v) { return i >= 0 && i < toks.length && toks[i].t === 'id' && (v === undefined || toks[i].v === v); }
+  function closeOf(v) { return v === '(' ? ')' : v === '[' ? ']' : '}'; }
+
+  function matchClose(i) {
+    var depth = 0;
+    for (var k = i; k < toks.length; k++) {
+      if (toks[k].t !== 'p') continue;
+      var v = toks[k].v;
+      if (v === '(' || v === '[' || v === '{') depth++;
+      else if (v === ')' || v === ']' || v === '}') { depth--; if (depth === 0) return k; }
+    }
+    return toks.length - 1;
+  }
+
+  // template literals: transpile ${'$'}{...} parts that contain async/await
+  function fixTemplate(text) {
+    if (text.indexOf('await') < 0 && text.indexOf('async') < 0) return text;
+    var out = '', i = 0, n = text.length;
+    while (i < n) {
+      if (text.charAt(i) === '\\') { out += text.substr(i, 2); i += 2; continue; }
+      if (text.charAt(i) === '${'$'}' && text.charAt(i + 1) === '{') {
+        var depth = 1, j = i + 2;
+        while (j < n && depth > 0) {
+          var d = text.charAt(j);
+          if (d === '{') depth++; else if (d === '}') depth--;
+          else if (d === '"' || d === "'" || d === '`') { var q = d; j++; while (j < n && text.charAt(j) !== q) { if (text.charAt(j) === '\\') j++; j++; } }
+          j++;
+        }
+        out += '${'$'}{' + __nvTranspileExpr(text.substring(i + 2, j - 1)) + '}';
+        i = j; continue;
+      }
+      out += text.charAt(i); i++;
+    }
+    return out;
+  }
+
+  // end (exclusive token index) of the operand of an await starting at token i (first token after "await")
+  function operandEnd(i, end) {
+    var k = i;
+    for (;;) {
+      var t = toks[k];
+      if (t.t === 'p' && (t.v === '!' || t.v === '-' || t.v === '+' || t.v === '~')) { k = nextSig(k, end); continue; }
+      if (t.t === 'id' && (t.v === 'typeof' || t.v === 'void' || t.v === 'await' || t.v === 'new')) { k = nextSig(k, end); continue; }
+      break;
+    }
+    var t0 = toks[k];
+    if (t0.t === 'p' && (t0.v === '(' || t0.v === '[' || t0.v === '{')) k = matchClose(k);
+    else if (t0.t === 'id' && t0.v === 'function') {
+      k = nextSig(k, end);
+      while (k < end && !isP(k, '{')) { if (isP(k, '(')) k = matchClose(k); k = nextSig(k, end); }
+      k = matchClose(k);
+    }
+    // otherwise a single token (identifier, literal, template, regex)
+    for (;;) {
+      var nx = nextSig(k, end);
+      if (nx >= end) break;
+      var v = toks[nx].v, ty = toks[nx].t;
+      if (ty === 'p' && (v === '.' || v === '?.')) {
+        var after = nextSig(nx, end);
+        if (after < end && toks[after].t === 'p' && (toks[after].v === '(' || toks[after].v === '[')) { k = matchClose(after); }
+        else k = after;
+        continue;
+      }
+      if (ty === 'p' && (v === '(' || v === '[')) { k = matchClose(nx); continue; }
+      if (ty === 'tpl') { k = nx; continue; }
+      break;
+    }
+    return k + 1;
+  }
+
+  // end (exclusive) of an expression-bodied arrow function body starting at token i
+  function arrowExprEnd(i, end) {
+    var depth = 0;
+    for (var k = i; k < end; k++) {
+      var t = toks[k];
+      if (t.t !== 'p') continue;
+      if (t.v === '(' || t.v === '[' || t.v === '{') depth++;
+      else if (t.v === ')' || t.v === ']' || t.v === '}') { if (depth === 0) return k; depth--; }
+      else if ((t.v === ',' || t.v === ';') && depth === 0) return k;
+    }
+    return end;
+  }
+
+  function wrapBody(body) { return '{ return __nvAsync(this, arguments, function* () {' + body + '}); }'; }
+
+  // transpile tokens [from, to)
+  function walk(from, to) {
+    var out = '', i = from;
+    while (i < to) {
+      var t = toks[i];
+      if (t.t === 'tpl') { out += fixTemplate(t.v); i++; continue; }
+      if (t.t === 'id' && t.v === 'await') {
+        var a = nextSig(i, to);
+        if (a < to) {
+          var e = operandEnd(a, to);
+          if (e > to) e = to;
+          out += '(yield ' + walk(a, e) + ')';
+          i = e; continue;
+        }
+      }
+      if (t.t === 'id' && t.v === 'async') {
+        var p1 = nextSig(i, to);
+        // async function [name](params) { body }
+        if (p1 < to && isId(p1, 'function')) {
+          var q = nextSig(p1, to), name = '';
+          if (isP(q, '*')) { out += t.v; i++; continue; } // async generators: leave as is
+          if (toks[q].t === 'id') { name = toks[q].v; q = nextSig(q, to); }
+          if (isP(q, '(')) {
+            var pe = matchClose(q), b = nextSig(pe, to);
+            if (isP(b, '{')) {
+              var be = matchClose(b);
+              out += 'function ' + name + walk(q, pe + 1) + ' ' + wrapBody(walk(b + 1, be)) ;
+              i = be + 1; continue;
+            }
+          }
+        }
+        // async (params) => ... / async x => ...
+        else if (p1 < to && (isP(p1, '(') || (toks[p1].t === 'id' && isP(nextSig(p1, to), '=>')))) {
+          var params, arrow;
+          if (isP(p1, '(')) { var pe2 = matchClose(p1); params = walk(p1 + 1, pe2); arrow = nextSig(pe2, to); }
+          else { params = toks[p1].v; arrow = nextSig(p1, to); }
+          if (isP(arrow, '=>')) {
+            var bs = nextSig(arrow, to), res, endIdx;
+            if (isP(bs, '{')) {
+              endIdx = matchClose(bs);
+              res = '(function (' + params + ') ' + wrapBody(walk(bs + 1, endIdx)) + ').bind(this)';
+              i = endIdx + 1;
+            } else {
+              endIdx = arrowExprEnd(bs, to);
+              res = '(function (' + params + ') ' + wrapBody('return (' + walk(bs, endIdx) + ');') + ').bind(this)';
+              i = endIdx;
+            }
+            out += res; continue;
+          }
+        }
+        // async method: async name(params) { body }   (object literal / class)
+        else if (p1 < to && (toks[p1].t === 'id' || toks[p1].t === 'str' || toks[p1].t === 'num')) {
+          var m = nextSig(p1, to);
+          if (isP(m, '(')) {
+            var pe3 = matchClose(m), b3 = nextSig(pe3, to);
+            if (isP(b3, '{')) {
+              var be3 = matchClose(b3);
+              out += toks[p1].v + walk(m, pe3 + 1) + ' ' + wrapBody(walk(b3 + 1, be3));
+              i = be3 + 1; continue;
+            }
+          }
+        }
+      }
+      out += t.v; i++;
+    }
+    return out;
+  }
+
+  return walk(0, toks.length);
+}
+
+function __nvTranspileExpr(code) { return __nvTranspile(code); }
+
+"""
+
+internal val NUVIO_PRELUDE: String = listOf(PART_CORE, PART_WEB, PART_CHEERIO, PART_CRYPTO, PART_MODULES, PART_ASYNC).joinToString("\n")

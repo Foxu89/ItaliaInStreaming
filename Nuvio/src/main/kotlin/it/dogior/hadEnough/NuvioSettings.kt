@@ -455,9 +455,15 @@ class NuvioSettings(
         }
         toast("Lettura delle impostazioni…")
         uiScope.launch {
-            val bp = withContext(Dispatchers.IO) { manager.loadBlueprint(repo, s) }
-            if (bp == null) toast("Questo scraper non ha impostazioni", long = true)
-            else showSettingsForm(repo, s, bp)
+            val res = withContext(Dispatchers.IO) { manager.loadBlueprint(repo, s) }
+            val bp = res.items
+            if (bp == null) {
+                AlertDialog.Builder(ctx)
+                    .setTitle("${s.name} · impostazioni")
+                    .setMessage("Impossibile leggere le impostazioni di questo scraper.\n\nMotivo: ${res.error ?: "sconosciuto"}")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else showSettingsForm(repo, s, bp)
         }
     }
 
