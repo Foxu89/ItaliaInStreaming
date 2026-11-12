@@ -113,7 +113,6 @@ private class NuvioTimeoutError : Error("timeout")
 object NuvioJsEngine {
     class Result(val json: String?, val error: String?)
 
-    private val ASYNC_WORDS = Regex("\\b(async|await)\\b")
     private val transpiled = ConcurrentHashMap<Int, String>()
 
     private val httpPool = Executors.newCachedThreadPool { r ->
@@ -139,7 +138,7 @@ object NuvioJsEngine {
 
     /** Calls the optional onSettings() of a scraper and returns its blueprint as JSON. */
     fun settingsBlueprint(scraperName: String, code: String, settingsJson: String, client: OkHttpClient): Result =
-        execute(scraperName, code, settingsJson, "onSettings", "[]", 10_000L, client)
+        execute(scraperName, code, settingsJson, "onSettings", "[]", 20_000L, client)
 
     /** Runs any exported function of a scraper. Blocking. */
     fun execute(
@@ -151,7 +150,7 @@ object NuvioJsEngine {
         timeoutMs: Long,
         client: OkHttpClient,
     ): Result {
-        val deadline = System.nanoTime() + timeoutMs * 1_000_000L
+        var deadline = System.nanoTime() + timeoutMs * 1_000_000L
 
         val factory = object : ContextFactory() {
             override fun makeContext(): Context {
@@ -280,17 +279,18 @@ object NuvioJsEngine {
             val settings = try { JSONObject(settingsJson).toString() } catch (_: Exception) { "{}" }
             cx.evaluateString(scope, "globalThis.SCRAPER_SETTINGS = $settings;", "nuvio-settings", 1, null)
 
-            // Rhino has no async/await: if the script does not compile and uses them, rewrite it to generators.
+            // If the script does not compile (async/await, ?., ??, object spread), rewrite it to older syntax and retry.
             val compiled = try {
                 cx.compileString(code, scraperName, 1, null)
             } catch (e: RhinoException) {
-                if (!ASYNC_WORDS.containsMatchIn(code)) throw e
                 val rewritten = transpiled.getOrPut(code.hashCode()) {
                     Context.toString(callJs("__nvTranspile", code))
                 }
                 cx.compileString(rewritten, scraperName, 1, null)
             }
             compiled.exec(cx, scope)
+            // rewriting a big script is slow in the interpreter: the scraper's own time starts now
+            deadline = System.nanoTime() + timeoutMs * 1_000_000L
             callJs("__startCall", fnName, argsJson)
 
             // ── event loop ──

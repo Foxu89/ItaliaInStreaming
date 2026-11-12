@@ -1146,8 +1146,9 @@ function require(name) {
 """
 
 private const val PART_ASYNC = """
-// Part 6: async/await support for Rhino (which has generators but no async functions).
-// __nvTranspile(code) rewrites async functions / arrows / methods into generators driven by __nvAsync.
+// Part 6: syntax down-leveling for Rhino. __nvTranspile(code) rewrites
+//  - async functions / arrows / methods into generators driven by __nvAsync,
+//  - optional chaining (?.), nullish coalescing (??) and object spread ({...a}).
 // It is a token-level rewrite (strings, comments, regex and templates are respected), applied only
 // when the original script does not compile.
 
@@ -1165,12 +1166,25 @@ function __nvAsync(thisArg, args, genFn) {
   });
 }
 
+var __nvT;
+function __nvAssign() {
+  var t = {};
+  for (var i = 0; i < arguments.length; i++) {
+    var s = arguments[i];
+    if (s === null || s === undefined) continue;
+    if (typeof s === 'string') { for (var j = 0; j < s.length; j++) t[j] = s.charAt(j); continue; }
+    for (var k in s) if (Object.prototype.hasOwnProperty.call(s, k)) t[k] = s[k];
+  }
+  return t;
+}
+
 var __nvTokenize = (function () {
   var REGEX_AFTER = { 'return': 1, 'typeof': 1, 'void': 1, 'delete': 1, 'in': 1, 'of': 1, 'instanceof': 1, 'new': 1, 'case': 1, 'do': 1, 'else': 1, 'throw': 1, 'yield': 1, 'await': 1 };
   var PUNCT3 = ['>>>=', '...', '===', '!==', '**=', '<<=', '>>=', '>>>', '&&=', '||=', '??='];
   var PUNCT2 = ['=>', '==', '!=', '<=', '>=', '&&', '||', '??', '?.', '++', '--', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<', '>>', '**'];
-  function isIdStart(c) { return /[A-Za-z_${'$'}\u0080-￿]/.test(c); }
-  function isIdPart(c) { return /[A-Za-z0-9_${'$'}\u0080-￿]/.test(c); }
+  function isIdStart(c) { var x = c.charCodeAt(0); return (x >= 97 && x <= 122) || (x >= 65 && x <= 90) || x === 95 || x === 36 || x > 127; }
+  function isIdPart(c) { var x = c.charCodeAt(0); return (x >= 97 && x <= 122) || (x >= 65 && x <= 90) || (x >= 48 && x <= 57) || x === 95 || x === 36 || x > 127; }
+  function isWs(c) { var x = c.charCodeAt(0); return x === 32 || x === 10 || x === 13 || x === 9 || x === 160 || x === 8232 || x === 8233 || x === 65279 || x === 11 || x === 12; }
 
   return function (src) {
     var toks = [], i = 0, n = src.length, lastSig = null;
@@ -1184,7 +1198,7 @@ var __nvTokenize = (function () {
     }
     while (i < n) {
       var c = src.charAt(i), s = i;
-      if (/\s/.test(c)) { while (i < n && /\s/.test(src.charAt(i))) i++; push('ws', s, i); continue; }
+      if (isWs(c)) { while (i < n && isWs(src.charAt(i))) i++; push('ws', s, i); continue; }
       if (c === '/' && src.charAt(i + 1) === '/') { while (i < n && src.charAt(i) !== '\n') i++; push('cm', s, i); continue; }
       if (c === '/' && src.charAt(i + 1) === '*') { var e = src.indexOf('*/', i + 2); i = e < 0 ? n : e + 2; push('cm', s, i); continue; }
       if (c === '"' || c === "'") {
@@ -1251,9 +1265,9 @@ function __nvTranspile(src) {
 
   function isSig(t) { return t.t !== 'ws' && t.t !== 'cm'; }
   function nextSig(i, end) { i++; while (i < end && !isSig(toks[i])) i++; return i; }
+  function prevSig(i) { i--; while (i >= 0 && !isSig(toks[i])) i--; return i; }
   function isP(i, v) { return i >= 0 && i < toks.length && toks[i].t === 'p' && toks[i].v === v; }
   function isId(i, v) { return i >= 0 && i < toks.length && toks[i].t === 'id' && (v === undefined || toks[i].v === v); }
-  function closeOf(v) { return v === '(' ? ')' : v === '[' ? ']' : '}'; }
 
   function matchClose(i) {
     var depth = 0;
@@ -1265,10 +1279,20 @@ function __nvTranspile(src) {
     }
     return toks.length - 1;
   }
+  function matchOpen(i) {
+    var depth = 0;
+    for (var k = i; k >= 0; k--) {
+      if (toks[k].t !== 'p') continue;
+      var v = toks[k].v;
+      if (v === ')' || v === ']' || v === '}') depth++;
+      else if (v === '(' || v === '[' || v === '{') { depth--; if (depth === 0) return k; }
+    }
+    return 0;
+  }
 
-  // template literals: transpile ${'$'}{...} parts that contain async/await
+  // template literals: transpile ${'$'}{...} parts that need it
   function fixTemplate(text) {
-    if (text.indexOf('await') < 0 && text.indexOf('async') < 0) return text;
+    if (!/await|async|\?\.|\?\?|\.\.\./.test(text)) return text;
     var out = '', i = 0, n = text.length;
     while (i < n) {
       if (text.charAt(i) === '\\') { out += text.substr(i, 2); i += 2; continue; }
@@ -1280,7 +1304,7 @@ function __nvTranspile(src) {
           else if (d === '"' || d === "'" || d === '`') { var q = d; j++; while (j < n && text.charAt(j) !== q) { if (text.charAt(j) === '\\') j++; j++; } }
           j++;
         }
-        out += '${'$'}{' + __nvTranspileExpr(text.substring(i + 2, j - 1)) + '}';
+        out += '${'$'}{' + __nvTranspile(text.substring(i + 2, j - 1)) + '}';
         i = j; continue;
       }
       out += text.charAt(i); i++;
@@ -1288,7 +1312,26 @@ function __nvTranspile(src) {
     return out;
   }
 
-  // end (exclusive token index) of the operand of an await starting at token i (first token after "await")
+  // end (exclusive) of the postfix chain (.x, ?.x, (...), [...], `tpl`) that continues after token k
+  function postfixEnd(k, end) {
+    for (;;) {
+      var nx = nextSig(k, end);
+      if (nx >= end) break;
+      var v = toks[nx].v, ty = toks[nx].t;
+      if (ty === 'p' && (v === '.' || v === '?.')) {
+        var after = nextSig(nx, end);
+        if (after < end && toks[after].t === 'p' && (toks[after].v === '(' || toks[after].v === '[')) k = matchClose(after);
+        else k = after;
+        continue;
+      }
+      if (ty === 'p' && (v === '(' || v === '[')) { k = matchClose(nx); continue; }
+      if (ty === 'tpl') { k = nx; continue; }
+      break;
+    }
+    return k + 1;
+  }
+
+  // end (exclusive) of the operand of an await starting at token i
   function operandEnd(i, end) {
     var k = i;
     for (;;) {
@@ -1304,25 +1347,69 @@ function __nvTranspile(src) {
       while (k < end && !isP(k, '{')) { if (isP(k, '(')) k = matchClose(k); k = nextSig(k, end); }
       k = matchClose(k);
     }
-    // otherwise a single token (identifier, literal, template, regex)
-    for (;;) {
-      var nx = nextSig(k, end);
-      if (nx >= end) break;
-      var v = toks[nx].v, ty = toks[nx].t;
-      if (ty === 'p' && (v === '.' || v === '?.')) {
-        var after = nextSig(nx, end);
-        if (after < end && toks[after].t === 'p' && (toks[after].v === '(' || toks[after].v === '[')) { k = matchClose(after); }
-        else k = after;
-        continue;
-      }
-      if (ty === 'p' && (v === '(' || v === '[')) { k = matchClose(nx); continue; }
-      if (ty === 'tpl') { k = nx; continue; }
-      break;
-    }
-    return k + 1;
+    return postfixEnd(k, end);
   }
 
-  // end (exclusive) of an expression-bodied arrow function body starting at token i
+  // start token of the member/call chain that ends right before token i (used for a?.b)
+  function chainStart(i) {
+    var k = prevSig(i);
+    for (;;) {
+      if (k < 0) return -1;
+      var t = toks[k];
+      if (t.t === 'p' && (t.v === ')' || t.v === ']')) {
+        var o = matchOpen(k), pk = prevSig(o);
+        var postfix = pk >= 0 && (toks[pk].t === 'id' && !/^(return|typeof|void|delete|in|of|new|case|throw|else|do|await|yield)${'$'}/.test(toks[pk].v) || (toks[pk].t === 'p' && (toks[pk].v === ')' || toks[pk].v === ']')) || toks[pk].t === 'tpl');
+        if (t.v === ']' && !postfix) return o;      // array literal
+        if (t.v === ')' && !postfix) return o;      // parenthesised expression
+        if (pk >= 0 && toks[pk].t === 'id' && toks[pk].v === 'new') return pk;
+        k = pk; continue;
+      }
+      if (t.t === 'id' || t.t === 'num' || t.t === 'str' || t.t === 'tpl' || t.t === 're') {
+        var pp = prevSig(k);
+        if (pp >= 0 && toks[pp].t === 'p' && (toks[pp].v === '.' || toks[pp].v === '?.')) { k = prevSig(pp); continue; }
+        if (pp >= 0 && toks[pp].t === 'id' && toks[pp].v === 'new') return pp;
+        return k;
+      }
+      return -1;
+    }
+  }
+
+  var STOP_BACK = /^(return|throw|case|else|do|in|of|yield|typeof|void|delete)${'$'}/;
+  // start token of the whole expression that ends right before token i (left side of ??)
+  function exprStart(i) {
+    var k = prevSig(i), start = -1;
+    while (k >= 0) {
+      var t = toks[k];
+      if (t.t === 'p') {
+        var v = t.v;
+        if (v === ')' || v === ']') { k = matchOpen(k); start = k; k = prevSig(k); continue; }
+        if (v === '}') break;
+        if (v === '(' || v === '[' || v === '{' || v === ',' || v === ';' || v === '=>' || v === '?' || v === ':' || v === '&&' || v === '||' || v === '=' ||
+            /^[-+*\/%&|^]=${'$'}|^(<<|>>|>>>|\*\*|&&|\|\||\?\?)=${'$'}/.test(v)) break;
+        start = k; k = prevSig(k); continue;
+      }
+      if (t.t === 'id' && STOP_BACK.test(t.v)) {
+        if (t.v === 'typeof' || t.v === 'void' || t.v === 'delete') { start = k; k = prevSig(k); continue; }
+        break;
+      }
+      start = k; k = prevSig(k);
+    }
+    return start;
+  }
+  // end (exclusive) of the right side of ??
+  function rhsEnd(i, end) {
+    var depth = 0;
+    for (var k = i; k < end; k++) {
+      var t = toks[k];
+      if (t.t !== 'p') continue;
+      var v = t.v;
+      if (v === '(' || v === '[' || v === '{') depth++;
+      else if (v === ')' || v === ']' || v === '}') { if (depth === 0) return k; depth--; }
+      else if (depth === 0 && (v === ',' || v === ';' || v === ':' || v === '?' || v === '&&' || v === '||')) return k;
+    }
+    return end;
+  }
+
   function arrowExprEnd(i, end) {
     var depth = 0;
     for (var k = i; k < end; k++) {
@@ -1337,38 +1424,143 @@ function __nvTranspile(src) {
 
   function wrapBody(body) { return '{ return __nvAsync(this, arguments, function* () {' + body + '}); }'; }
 
+  var OBJ_BEFORE_ID = /^(return|typeof|yield|await|case|void|delete|in|of|instanceof)${'$'}/;
+  function isObjectLiteralAt(i) {
+    var p = prevSig(i);
+    if (p < 0) return false;
+    var t = toks[p];
+    if (t.t === 'id') return OBJ_BEFORE_ID.test(t.v);
+    if (t.t !== 'p') return false;
+    if (t.v === ')' || t.v === ';' || t.v === '}' || t.v === '{' || t.v === '=>') return false;
+    return true;
+  }
+  function hasTopLevelSpread(open, close) {
+    var depth = 0;
+    for (var k = open + 1; k < close; k++) {
+      var t = toks[k];
+      if (t.t !== 'p') continue;
+      if (t.v === '(' || t.v === '[' || t.v === '{') depth++;
+      else if (t.v === ')' || t.v === ']' || t.v === '}') depth--;
+      else if (t.v === '...' && depth === 0) return true;
+    }
+    return false;
+  }
+  // a destructuring pattern / parameter list rather than an object literal?
+  function looksLikePattern(open, close) {
+    var nx = nextSig(close, toks.length);
+    if (isP(nx, '=')) return true;
+    var p = prevSig(open);
+    if (isP(p, '(')) {
+      var pc = matchClose(p), after = nextSig(pc, toks.length);
+      if (isP(after, '=>')) return true;
+      var before = prevSig(p);
+      if (before >= 0 && toks[before].t === 'id' && (toks[before].v === 'function' || (prevSig(before) >= 0 && isId(prevSig(before), 'function')))) return true;
+    }
+    return false;
+  }
+  function objectSpread(open, close) {
+    var parts = [], group = [], depth = 0, entryStart = open + 1, k;
+    function flush(from, to) {
+      var a = from; while (a < to && !isSig(toks[a])) a++;
+      var b = to; while (b > a && !isSig(toks[b - 1])) b--;
+      if (a >= b) return;
+      if (isP(a, '...')) {
+        if (group.length) { parts.push('{' + group.join(',') + '}'); group = []; }
+        parts.push('(' + walk(a + 1, b) + ')');
+      } else group.push(walk(a, b));
+    }
+    for (k = open + 1; k < close; k++) {
+      var t = toks[k];
+      if (t.t !== 'p') continue;
+      if (t.v === '(' || t.v === '[' || t.v === '{') depth++;
+      else if (t.v === ')' || t.v === ']' || t.v === '}') depth--;
+      else if (t.v === ',' && depth === 0) { flush(entryStart, k); entryStart = k + 1; }
+    }
+    flush(entryStart, close);
+    if (group.length) parts.push('{' + group.join(',') + '}');
+    return '__nvAssign(' + parts.join(', ') + ')';
+  }
+
   // transpile tokens [from, to)
   function walk(from, to) {
-    var out = '', i = from;
+    var out = '', i = from, outLen = {};
     while (i < to) {
       var t = toks[i];
+      outLen[i] = out.length;
       if (t.t === 'tpl') { out += fixTemplate(t.v); i++; continue; }
+
+      if (t.t === 'p' && t.v === '{' && isObjectLiteralAt(i)) {
+        var oc = matchClose(i);
+        if (oc < to && hasTopLevelSpread(i, oc) && !looksLikePattern(i, oc)) {
+          out += objectSpread(i, oc); i = oc + 1; continue;
+        }
+      }
+
+      if (t.t === 'p' && t.v === '?.') {
+        var st = chainStart(i);
+        if (st >= from && outLen[st] !== undefined) {
+          var acc = out.substring(outLen[st]);
+          out = out.substring(0, outLen[st]);
+          var cur = i, endAll = i;
+          for (;;) {
+            var f0 = nextSig(cur, to);
+            var e = postfixEnd(toks[f0].t === 'p' && (toks[f0].v === '[' || toks[f0].v === '(') ? matchClose(f0) : f0, to);
+            var qn = -1, dd = 0, k2;
+            for (k2 = cur + 1; k2 < e; k2++) {
+              var tk = toks[k2];
+              if (tk.t !== 'p') continue;
+              if (tk.v === '(' || tk.v === '[' || tk.v === '{') dd++;
+              else if (tk.v === ')' || tk.v === ']' || tk.v === '}') dd--;
+              else if (tk.v === '?.' && dd === 0) { qn = k2; break; }
+            }
+            var segEnd = qn >= 0 ? qn : e;
+            var first = nextSig(cur, to);
+            var seg = walk(first, segEnd);
+            var conn = (toks[first].t === 'p' && (toks[first].v === '[' || toks[first].v === '(')) ? '' : '.';
+            acc = '((__nvT = ' + acc + ') == null ? void 0 : __nvT' + conn + seg + ')';
+            endAll = segEnd;
+            if (qn < 0) break;
+            cur = qn;
+          }
+          out += acc; i = endAll; continue;
+        }
+      }
+
+      if (t.t === 'p' && t.v === '??') {
+        var ls = exprStart(i);
+        if (ls >= from && outLen[ls] !== undefined) {
+          var re = rhsEnd(nextSig(i, to), to);
+          var left = out.substring(outLen[ls]);
+          out = out.substring(0, outLen[ls]);
+          out += '((__nvT = ' + left + ') != null ? __nvT : ' + walk(nextSig(i, to), re) + ')';
+          i = re; continue;
+        }
+      }
+
       if (t.t === 'id' && t.v === 'await') {
         var a = nextSig(i, to);
         if (a < to) {
-          var e = operandEnd(a, to);
-          if (e > to) e = to;
-          out += '(yield ' + walk(a, e) + ')';
-          i = e; continue;
+          var e2 = operandEnd(a, to);
+          if (e2 > to) e2 = to;
+          out += '(yield ' + walk(a, e2) + ')';
+          i = e2; continue;
         }
       }
       if (t.t === 'id' && t.v === 'async') {
         var p1 = nextSig(i, to);
-        // async function [name](params) { body }
         if (p1 < to && isId(p1, 'function')) {
           var q = nextSig(p1, to), name = '';
-          if (isP(q, '*')) { out += t.v; i++; continue; } // async generators: leave as is
+          if (isP(q, '*')) { out += t.v; i++; continue; }
           if (toks[q].t === 'id') { name = toks[q].v; q = nextSig(q, to); }
           if (isP(q, '(')) {
             var pe = matchClose(q), b = nextSig(pe, to);
             if (isP(b, '{')) {
               var be = matchClose(b);
-              out += 'function ' + name + walk(q, pe + 1) + ' ' + wrapBody(walk(b + 1, be)) ;
+              out += 'function ' + name + walk(q, pe + 1) + ' ' + wrapBody(walk(b + 1, be));
               i = be + 1; continue;
             }
           }
         }
-        // async (params) => ... / async x => ...
         else if (p1 < to && (isP(p1, '(') || (toks[p1].t === 'id' && isP(nextSig(p1, to), '=>')))) {
           var params, arrow;
           if (isP(p1, '(')) { var pe2 = matchClose(p1); params = walk(p1 + 1, pe2); arrow = nextSig(pe2, to); }
@@ -1387,7 +1579,6 @@ function __nvTranspile(src) {
             out += res; continue;
           }
         }
-        // async method: async name(params) { body }   (object literal / class)
         else if (p1 < to && (toks[p1].t === 'id' || toks[p1].t === 'str' || toks[p1].t === 'num')) {
           var m = nextSig(p1, to);
           if (isP(m, '(')) {
@@ -1407,8 +1598,6 @@ function __nvTranspile(src) {
 
   return walk(0, toks.length);
 }
-
-function __nvTranspileExpr(code) { return __nvTranspile(code); }
 
 """
 

@@ -42,6 +42,7 @@ import org.json.JSONObject
 class NuvioSettings(
     private val ctx: Context,
     private val manager: NuvioRepoManager,
+    private val pluginResources: android.content.res.Resources? = null,
 ) {
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var container: LinearLayout
@@ -96,8 +97,7 @@ class NuvioSettings(
         container.addView(label("Repository di scraper Nuvio", 17f, bold = true))
         container.addView(
             label(
-                "Incolla il link di un repository (github.com/utente/repo oppure il link raw). " +
-                        "Gli scraper vengono scaricati e usati per cercare gli stream.",
+                "Incolla il link di un repository Nuvio (GitHub o raw).",
                 12f, alpha = 0.65f
             )
         )
@@ -122,12 +122,10 @@ class NuvioSettings(
 
         container.addView(label("Impostazioni generali", 17f, bold = true, topDp = 22))
 
-        container.addView(label("Tempo massimo per scraper (secondi)", 13f, bold = true, topDp = 8))
+        container.addView(label("Timeout per scraper (secondi)", 13f, bold = true, topDp = 8))
         container.addView(
             label(
-                "Ogni scraper gira in parallelo agli altri. Se non risponde entro questo tempo viene interrotto " +
-                        "e gli altri continuano. Valore consigliato 45 (minimo 5, massimo 180). " +
-                        "Alzalo se i siti sono lenti, abbassalo se vuoi risultati piu' rapidi.",
+                "Dopo questo tempo lo scraper viene interrotto. Consigliato: 45.",
                 12f, alpha = 0.65f
             )
         )
@@ -138,14 +136,10 @@ class NuvioSettings(
         }
         container.addView(timeoutInput)
 
-        container.addView(label("Valori globali per gli scraper (JSON, opzionale)", 13f, bold = true, topDp = 12))
+        container.addView(label("Valori globali (JSON)", 13f, bold = true, topDp = 12))
         container.addView(
             label(
-                "Questi valori vengono passati a TUTTI gli scraper come variabile SCRAPER_SETTINGS. " +
-                        "Servono solo se uno scraper chiede un dato che non ha una sua scheda impostazioni " +
-                        "(per esempio un cookie o una chiave API). Esempio: {\"cookie\":\"ui=abc\"}. " +
-                        "Le impostazioni di un singolo scraper (icona ingranaggio nella sua scheda) hanno la priorita'. " +
-                        "Se non sai cosa scrivere, lascia {}.",
+                "Passati a tutti gli scraper come SCRAPER_SETTINGS. Di solito lascia {}.",
                 12f, alpha = 0.65f
             )
         )
@@ -261,8 +255,7 @@ class NuvioSettings(
         if (!repoOn) {
             container.addView(
                 label(
-                    "Questo repository e' disattivato: nessuno dei suoi scraper viene usato. " +
-                            "Riattivalo dalla schermata precedente.",
+                    "Repository disattivato: i suoi scraper non vengono usati.",
                     12f, alpha = 0.9f, topDp = 6
                 ).apply { setTextColor(ORANGE) }
             )
@@ -333,7 +326,6 @@ class NuvioSettings(
         val texts = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = dp(12)
                 rightMargin = dp(8)
             }
         }
@@ -350,7 +342,7 @@ class NuvioSettings(
                 text = "⚙"
                 textSize = 22f
                 gravity = Gravity.CENTER
-                background = focusBg(GREEN, 22)
+                background = roundBg()
                 isFocusable = true
                 isClickable = true
                 contentDescription = "Impostazioni di ${s.name}"
@@ -396,44 +388,31 @@ class NuvioSettings(
 
     // ── logo (loaded in background, initial letter as fallback) ──
 
+    /** Shows nothing (no space taken) unless the scraper has a logo that actually loads. */
     private fun logoView(s: NuvioScraper): View {
         val size = dp(44)
-        val frame = FrameLayout(ctx).apply {
-            layoutParams = LinearLayout.LayoutParams(size, size)
-            background = GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(Color.argb(60, 124, 255, 157))
-            }
+        val img = ImageView(ctx).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { rightMargin = dp(12) }
         }
-        frame.addView(TextView(ctx).apply {
-            text = s.name.trim().take(1).uppercase()
-            textSize = 18f
-            setTypeface(null, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(size, size)
-        })
         if (s.logo.startsWith("http")) {
-            val img = ImageView(ctx).apply {
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(dp(6), dp(6), dp(6), dp(6))
-                layoutParams = FrameLayout.LayoutParams(size, size)
-            }
             val cached = logoCache[s.logo]
             if (cached != null) {
                 img.setImageBitmap(cached)
-                frame.addView(img)
+                img.visibility = View.VISIBLE
             } else {
                 uiScope.launch {
                     val bmp = withContext(Dispatchers.IO) { downloadBitmap(s.logo) }
                     if (bmp != null) {
                         logoCache[s.logo] = bmp
                         img.setImageBitmap(bmp)
-                        frame.addView(img)
+                        img.visibility = View.VISIBLE
                     }
                 }
             }
         }
-        return frame
+        return img
     }
 
     private fun downloadBitmap(url: String): Bitmap? = try {
@@ -692,15 +671,46 @@ class NuvioSettings(
         addState(intArrayOf(), box(color, 20, 110, 2, radiusDp))
     }
 
-    /** Same plain platform Switch used by WatchParty (theme colours, no text, compact). */
-    private fun toggle(checked: Boolean) = android.widget.Switch(ctx).apply {
-        isChecked = checked
-        isFocusable = false
-        isClickable = false
-        minimumHeight = 0
-        showText = false
-        switchMinWidth = dp(28)
-        layoutParams = LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.WRAP_CONTENT)
+    /**
+     * Same toggle as the WatchParty settings: the Switch is declared in res/layout/nuvio_switch.xml and
+     * inflated with the app's own LayoutInflater, so it looks exactly like the ones in the app.
+     * If resources are not available it falls back to a plain Switch built in code.
+     */
+    private fun toggle(checked: Boolean): android.widget.CompoundButton {
+        var sw: android.widget.CompoundButton? = null
+        val res = pluginResources
+        if (res != null) {
+            try {
+                val id = res.getIdentifier("nuvio_switch", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
+                if (id != 0) {
+                    sw = android.view.LayoutInflater.from(ctx).inflate(res.getLayout(id), null, false)
+                        as? android.widget.CompoundButton
+                }
+            } catch (_: Exception) {
+            }
+        }
+        val s = sw ?: android.widget.Switch(ctx).apply {
+            minimumHeight = 0
+            showText = false
+            switchMinWidth = dp(28)
+        }
+        s.isChecked = checked
+        s.isFocusable = false
+        s.isClickable = false
+        s.layoutParams = LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.WRAP_CONTENT)
+        return s
+    }
+
+    /** Round, slightly stronger background than the card (no coloured border); yellow ring when focused. */
+    private fun roundBg() = StateListDrawable().apply {
+        fun circle(fill: Int, stroke: Int, strokeDp: Int) = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(fill)
+            if (strokeDp > 0) setStroke(dp(strokeDp), stroke)
+        }
+        addState(intArrayOf(android.R.attr.state_focused), circle(Color.argb(80, 255, 255, 255), FOCUS, 3))
+        addState(intArrayOf(android.R.attr.state_pressed), circle(Color.argb(90, 255, 255, 255), 0, 0))
+        addState(intArrayOf(), circle(Color.argb(45, 255, 255, 255), 0, 0))
     }
 
     private fun toast(msg: String, long: Boolean = false) {

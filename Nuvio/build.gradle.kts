@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.konan.properties.Properties
 
 // use an integer for version numbers
-version = 4
+version = 5
 
 android {
     defaultConfig {
@@ -41,6 +41,6 @@ cloudstream {
     )
 
     // The settings dialog is built in code, no XML resources needed
-    requiresResources = false
+    requiresResources = true
     iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/Nuvio/nuvio_icon.png"
 }
