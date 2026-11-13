@@ -40,26 +40,95 @@ import org.json.JSONObject
  * Every control is focusable and shows a clear highlight, so it can be used with a TV remote.
  */
 class NuvioSettings(
-    private val ctx: Context,
+    private val activityCtx: Context,
     private val manager: NuvioRepoManager,
     private val pluginResources: android.content.res.Resources? = null,
 ) {
-    private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** Context used for every view: the themed context of the bottom sheet (or of the fallback dialog). */
+    private var ctx: Context = activityCtx
+    private var sheetInflater: android.view.LayoutInflater? = null
+    private var closeAction: (() -> Unit)? = null
+    private var scrollTop: () -> Unit = {}
     private lateinit var container: LinearLayout
-    private lateinit var scroll: ScrollView
     private var busy = false
 
     /** Id of the repository whose scraper list is open, null for the main screen. */
     private var openRepoId: String? = null
     private var query = ""
 
+    /**
+     * Opens the settings as a bottom sheet, exactly like the WatchParty / Stremio settings, so every view
+     * (toggles included) is created by the same themed inflater. Falls back to a dialog without fragments.
+     */
     fun show() {
-        scroll = ScrollView(ctx).apply { isFillViewport = false }
+        val act = activityCtx as? androidx.fragment.app.FragmentActivity
+        if (act != null) {
+            NuvioSheet(this).show(act.supportFragmentManager, "NuvioSettings")
+        } else {
+            showAsDialog()
+        }
+    }
+
+    /** Called by the sheet: builds the whole UI with the sheet's own context and inflater. */
+    internal fun buildRoot(themedCtx: Context, inflater: android.view.LayoutInflater, dismiss: () -> Unit): View {
+        uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        ctx = themedCtx
+        sheetInflater = inflater
+        closeAction = dismiss
+        openRepoId = null
+        query = ""
+
+        container = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(16))
+        }
+        val nested = androidx.core.widget.NestedScrollView(ctx).apply {
+            isFillViewport = true
+            addView(container)
+        }
+        scrollTop = { nested.post { nested.scrollTo(0, 0) } }
+
+        val root = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+        root.addView(TextView(ctx).apply {
+            text = "Nuvio"
+            textSize = 24f
+            setTypeface(null, Typeface.BOLD)
+            setPadding(dp(16), dp(8), dp(16), dp(4))
+        })
+        root.addView(nested)
+        render()
+        return root
+    }
+
+    internal fun release() {
+        uiScope.cancel()
+        sheetInflater = null
+        closeAction = null
+    }
+
+    /** Back key: from a repository go to the main screen. Returns true if consumed. */
+    internal fun onBack(): Boolean {
+        if (openRepoId == null) return false
+        openRepoId = null
+        render()
+        return true
+    }
+
+    private fun showAsDialog() {
+        ctx = activityCtx
+        val scroll = ScrollView(ctx).apply { isFillViewport = false }
         container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(12))
         }
         scroll.addView(container)
+        scrollTop = { scroll.post { scroll.scrollTo(0, 0) } }
+        closeAction = null
 
         val dialog = AlertDialog.Builder(ctx)
             .setTitle("Nuvio")
@@ -68,11 +137,7 @@ class NuvioSettings(
             .create()
         dialog.setOnDismissListener { uiScope.cancel() }
         dialog.setOnKeyListener { _, keyCode, event ->
-            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP && openRepoId != null) {
-                openRepoId = null
-                render()
-                true
-            } else false
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) onBack() else false
         }
 
         render()
@@ -88,7 +153,8 @@ class NuvioSettings(
         } else {
             renderRepo(repo)
         }
-        scroll.post { scroll.scrollTo(0, 0) }
+        closeAction?.let { close -> container.addView(button("CHIUDI", GRAY) { close() }) }
+        scrollTop()
     }
 
     // ── main screen ──
@@ -683,7 +749,7 @@ class NuvioSettings(
             try {
                 val id = res.getIdentifier("nuvio_switch", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
                 if (id != 0) {
-                    sw = android.view.LayoutInflater.from(ctx).inflate(res.getLayout(id), null, false)
+                    sw = (sheetInflater ?: android.view.LayoutInflater.from(ctx)).inflate(res.getLayout(id), null, false)
                         as? android.widget.CompoundButton
                 }
             } catch (_: Exception) {
