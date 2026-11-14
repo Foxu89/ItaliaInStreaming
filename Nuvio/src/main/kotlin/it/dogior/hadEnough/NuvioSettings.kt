@@ -738,14 +738,17 @@ class NuvioSettings(
     }
 
     /**
-     * Same toggle as the WatchParty settings: the Switch is declared in res/layout/nuvio_switch.xml and
-     * inflated with the app's own LayoutInflater, so it looks exactly like the ones in the app.
-     * If resources are not available it falls back to a plain Switch built in code.
+     * The toggle of the app's Material 3 theme (the one WatchParty shows): a MaterialSwitch created with the
+     * sheet's themed context. Falls back to the layout-inflated Switch and then to a plain Switch.
      */
     private fun toggle(checked: Boolean): android.widget.CompoundButton {
         var sw: android.widget.CompoundButton? = null
+        try {
+            sw = com.google.android.material.materialswitch.MaterialSwitch(ctx)
+        } catch (_: Throwable) {
+        }
         val res = pluginResources
-        if (res != null) {
+        if (sw == null && res != null) {
             try {
                 val id = res.getIdentifier("nuvio_switch", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
                 if (id != 0) {
@@ -763,7 +766,7 @@ class NuvioSettings(
         s.isChecked = checked
         s.isFocusable = false
         s.isClickable = false
-        s.layoutParams = LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.WRAP_CONTENT)
+        s.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         return s
     }
 

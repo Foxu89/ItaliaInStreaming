@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Same Switch as the WatchParty settings, inflated through the app's own LayoutInflater so it gets the same look. -->
+<!-- Fallback Switch (the code first tries a MaterialSwitch, the Material 3 toggle used by the app and by WatchParty). -->
 <Switch xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="42dp"
     android:layout_height="wrap_content"
