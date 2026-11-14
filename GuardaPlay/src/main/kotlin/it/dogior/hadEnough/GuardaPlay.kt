@@ -93,6 +93,13 @@ class GuardaPlay : MainAPI() {
 
     // ------------------------------------------------------------- helpers
 
+    private fun absUrl(url: String): String = when {
+        url.startsWith("http") -> url
+        url.startsWith("//") -> "https:$url"
+        url.startsWith("/") -> mainUrl.trimEnd('/') + url
+        else -> mainUrl.trimEnd('/') + "/" + url
+    }
+
     private fun fixPoster(url: String?): String? {
         if (url.isNullOrBlank()) return null
         return if (url.startsWith("//")) "https:$url" else url
@@ -306,7 +313,7 @@ class GuardaPlay : MainAPI() {
             val f = div.selectFirst("iframe") ?: return@mapNotNull null
             val src = f.attr("data-src").ifBlank { f.attr("src") }.trim()
             if (src.isBlank()) return@mapNotNull null
-            Embed(names[div.id()].orEmpty().ifBlank { "Server" }, fixUrl(src))
+            Embed(names[div.id()].orEmpty().ifBlank { "Server" }, absUrl(src))
         }
     }
 
