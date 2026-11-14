@@ -27,6 +27,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 import it.dogior.hadEnough.extractors.LoadMExtractor
+import it.dogior.hadEnough.extractors.UqloadExtractor
 import it.dogior.hadEnough.extractors.VixSrcExtractor
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -349,6 +350,12 @@ class GuardaPlay : MainAPI() {
         when {
             "loadm" in t || "mload" in t || "abyss" in t || "mload" in n ->
                 LoadMExtractor().getUrl(target, "$mainUrl/", subtitleCallback, callback)
+            "uqload" in t || "uqload" in n -> {
+                // se il nostro estrattore non trova nulla, prova quello integrato di CloudStream
+                if (!UqloadExtractor().extract(target, "$mainUrl/", callback)) {
+                    loadExtractor(target, e.url, subtitleCallback, callback)
+                }
+            }
             "vixsrc" in t -> VixSrcExtractor().getUrl(target, mainUrl, subtitleCallback, callback)
             else -> loadExtractor(target, e.url, subtitleCallback, callback)
         }
