@@ -33,12 +33,6 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Settings UI built in code (no XML resources). Two screens inside one dialog:
- *  - main: add repositories, switch a whole repository on/off, general settings
- *  - repository: one card per scraper with an on/off switch, search, settings form
- * Every control is focusable and shows a clear highlight, so it can be used with a TV remote.
- */
 class NuvioSettings(
     private val activityCtx: Context,
     private val manager: NuvioRepoManager,
@@ -46,7 +40,7 @@ class NuvioSettings(
 ) {
     private var uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    /** Context used for every view: the themed context of the bottom sheet (or of the fallback dialog). */
+    
     private var ctx: Context = activityCtx
     private var sheetInflater: android.view.LayoutInflater? = null
     private var closeAction: (() -> Unit)? = null
@@ -54,14 +48,11 @@ class NuvioSettings(
     private lateinit var container: LinearLayout
     private var busy = false
 
-    /** Id of the repository whose scraper list is open, null for the main screen. */
+    
     private var openRepoId: String? = null
     private var query = ""
 
-    /**
-     * Opens the settings as a bottom sheet, exactly like the WatchParty / Stremio settings, so every view
-     * (toggles included) is created by the same themed inflater. Falls back to a dialog without fragments.
-     */
+    
     fun show() {
         val act = activityCtx as? androidx.fragment.app.FragmentActivity
         if (act != null) {
@@ -71,7 +62,7 @@ class NuvioSettings(
         }
     }
 
-    /** Called by the sheet: builds the whole UI with the sheet's own context and inflater. */
+    
     internal fun buildRoot(themedCtx: Context, inflater: android.view.LayoutInflater, dismiss: () -> Unit): View {
         uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         ctx = themedCtx
@@ -111,7 +102,7 @@ class NuvioSettings(
         closeAction = null
     }
 
-    /** Back key: from a repository go to the main screen. Returns true if consumed. */
+    
     internal fun onBack(): Boolean {
         if (openRepoId == null) return false
         openRepoId = null
@@ -169,7 +160,7 @@ class NuvioSettings(
         )
 
         val urlInput = EditText(ctx).apply {
-            hint = "https://github.com/utente/repository"
+            hint = "https://github.com/.../manifest.json"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
         }
@@ -191,7 +182,7 @@ class NuvioSettings(
         container.addView(label("Timeout per scraper (secondi)", 13f, bold = true, topDp = 8))
         container.addView(
             label(
-                "Dopo questo tempo lo scraper viene interrotto. Consigliato: 45.",
+                "Dopo questo tempo lo scraper viene interrotto. Consigliato: 45",
                 12f, alpha = 0.65f
             )
         )
@@ -274,7 +265,6 @@ class NuvioSettings(
         head.addView(sw)
         card.addView(head)
 
-        // the whole header toggles the repository: easy with a remote
         card.isFocusable = true
         card.isClickable = true
         card.setOnClickListener {
@@ -312,7 +302,7 @@ class NuvioSettings(
         return card
     }
 
-    // ── repository screen: one card per scraper ──
+    // ── repository screen, one card per scraper ──
 
     private fun renderRepo(repo: NuvioRepo) {
         val repoOn = manager.isRepoEnabled(repo.id)
@@ -452,9 +442,8 @@ class NuvioSettings(
         return card
     }
 
-    // ── logo (loaded in background, initial letter as fallback) ──
+    // ── logo ──
 
-    /** Shows nothing (no space taken) unless the scraper has a logo that actually loads. */
     private fun logoView(s: NuvioScraper): View {
         val size = dp(44)
         val img = ImageView(ctx).apply {
@@ -727,20 +716,12 @@ class NuvioSettings(
             )
         }
 
-    /**
-     * Background with three states. The focused state (D-pad / TV remote) has a thick, fully opaque
-     * border and a stronger fill, so the selected control is obvious from a distance.
-     */
     private fun focusBg(color: Int, radiusDp: Int) = StateListDrawable().apply {
         addState(intArrayOf(android.R.attr.state_focused), box(FOCUS, 70, 255, 4, radiusDp))
         addState(intArrayOf(android.R.attr.state_pressed), box(color, 70, 255, 2, radiusDp))
         addState(intArrayOf(), box(color, 20, 110, 2, radiusDp))
     }
 
-    /**
-     * The toggle of the app's Material 3 theme (the one WatchParty shows): a MaterialSwitch created with the
-     * sheet's themed context. Falls back to the layout-inflated Switch and then to a plain Switch.
-     */
     private fun toggle(checked: Boolean): android.widget.CompoundButton {
         var sw: android.widget.CompoundButton? = null
         try {
@@ -770,7 +751,6 @@ class NuvioSettings(
         return s
     }
 
-    /** Round, slightly stronger background than the card (no coloured border); yellow ring when focused. */
     private fun roundBg() = StateListDrawable().apply {
         fun circle(fill: Int, stroke: Int, strokeDp: Int) = GradientDrawable().apply {
             shape = GradientDrawable.OVAL

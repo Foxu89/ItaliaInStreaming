@@ -32,7 +32,6 @@ internal class NuvioHttpResult(
     val bytes: ByteArray,
 )
 
-/** Plain OkHttp call used by the JS fetch(). Runs on a worker thread, so blocking is fine. */
 internal object NuvioHttp {
     private const val DEFAULT_UA =
         "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -103,13 +102,7 @@ private class NuvioNativeFn(
 
 private class NuvioTimeoutError : Error("timeout")
 
-/**
- * Runs one Nuvio scraper (a JavaScript file exporting getStreams) inside Rhino.
- *
- * Everything happens on the calling thread, which runs a small event loop:
- * microtasks (Promise), timers (setTimeout) and HTTP completions coming from worker threads.
- * The scraper only sees the globals defined in NUVIO_PRELUDE: no Java access.
- */
+
 object NuvioJsEngine {
     class Result(val json: String?, val error: String?)
 
@@ -119,7 +112,7 @@ object NuvioJsEngine {
         Thread(r, "nuvio-http").apply { isDaemon = true }
     }
 
-    /** getStreams(tmdbId, mediaType, season, episode). Blocking: call it from a background dispatcher. */
+    
     fun run(
         scraperName: String,
         code: String,
@@ -136,11 +129,11 @@ object NuvioJsEngine {
         return execute(scraperName, code, settingsJson, "getStreams", args.toString(), timeoutMs, client)
     }
 
-    /** Calls the optional onSettings() of a scraper and returns its blueprint as JSON. */
+    
     fun settingsBlueprint(scraperName: String, code: String, settingsJson: String, client: OkHttpClient): Result =
         execute(scraperName, code, settingsJson, "onSettings", "[]", 20_000L, client)
 
-    /** Runs any exported function of a scraper. Blocking. */
+    
     fun execute(
         scraperName: String,
         code: String,
@@ -155,7 +148,6 @@ object NuvioJsEngine {
         val factory = object : ContextFactory() {
             override fun makeContext(): Context {
                 val cx = super.makeContext()
-                // Interpreted mode is mandatory on Android (no runtime bytecode generation).
                 cx.optimizationLevel = -1
                 cx.languageVersion = Context.VERSION_ES6
                 cx.instructionObserverThreshold = 20_000
@@ -169,7 +161,7 @@ object NuvioJsEngine {
 
         val cx = factory.enterContext()
         try {
-            // "Safe" objects: no Packages / java.* access for third-party scripts.
+            
             val scope: ScriptableObject = cx.initSafeStandardObjects()
 
             val completions = LinkedBlockingQueue<() -> Unit>()
@@ -279,7 +271,7 @@ object NuvioJsEngine {
             val settings = try { JSONObject(settingsJson).toString() } catch (_: Exception) { "{}" }
             cx.evaluateString(scope, "globalThis.SCRAPER_SETTINGS = $settings;", "nuvio-settings", 1, null)
 
-            // If the script does not compile (async/await, ?., ??, object spread), rewrite it to older syntax and retry.
+            
             val compiled = try {
                 cx.compileString(code, scraperName, 1, null)
             } catch (e: RhinoException) {
@@ -289,11 +281,11 @@ object NuvioJsEngine {
                 cx.compileString(rewritten, scraperName, 1, null)
             }
             compiled.exec(cx, scope)
-            // rewriting a big script is slow in the interpreter: the scraper's own time starts now
+            
             deadline = System.nanoTime() + timeoutMs * 1_000_000L
             callJs("__startCall", fnName, argsJson)
 
-            // ── event loop ──
+            
             var timedOut = false
             while (true) {
                 callJs("__drain")

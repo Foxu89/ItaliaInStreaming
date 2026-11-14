@@ -45,10 +45,6 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Catalogue from TMDB, streams from the Nuvio scrapers (JavaScript) the user installed.
- * Scrapers are read from the repo manager on every loadLinks, so changes in the settings apply immediately.
- */
 class NuvioProvider(private val manager: NuvioRepoManager) : MainAPI() {
     override var mainUrl = "https://www.themoviedb.org"
     override var name = "Nuvio"

@@ -7,7 +7,6 @@ import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/** JVM side of the JS crypto-js shim. Everything is exchanged as lowercase hex strings. */
 internal object NuvioCrypto {
     private val random = SecureRandom()
 
@@ -44,7 +43,6 @@ internal object NuvioCrypto {
         return hex(b)
     }
 
-    /** Returns hex, or null when the operation fails (bad key size, bad padding...). Padding is done by hand. */
     fun cipher(algo: String, op: String, mode: String, pad: String, hexKey: String, hexIv: String, hexData: String): String? {
         return try {
             val block = if (algo == "AES") 16 else 8

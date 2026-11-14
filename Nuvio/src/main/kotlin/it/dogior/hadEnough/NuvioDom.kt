@@ -9,12 +9,6 @@ import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 import java.util.IdentityHashMap
 
-/**
- * Jsoup side of the JS cheerio shim (see tools/js/prelude_cheerio.js).
- * The JS code only holds numeric node ids; every operation arrives here as call(op, idsJson, a, b)
- * and returns a JSON string (or null when there is nothing to return).
- * One instance per scraper run, so ids never leak between scrapers.
- */
 internal class NuvioDom {
     private val nodes = ArrayList<Element>()
     private val ids = IdentityHashMap<Element, Int>()
@@ -133,7 +127,7 @@ internal class NuvioDom {
                     }
                     out.addAll(if (b != null) r.filter { matches(it, b) } else r)
                 }
-                // prevAll keeps its "nearest first" order for index(); everything else is document order
+                
                 if (arg == "prevAll" && els.size == 1) JSONArray(out.map { idOf(it) }).toString() else idsJson(out)
             }
             "attr" -> els.firstOrNull()?.takeIf { it.hasAttr(arg) }?.let { quote(it.attr(arg)) }

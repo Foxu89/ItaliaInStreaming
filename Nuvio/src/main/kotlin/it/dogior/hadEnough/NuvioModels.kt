@@ -16,7 +16,7 @@ data class NuvioScraper(
     val limited: Boolean = false,
     val notes: String = "",
 ) {
-    /** mediaType is "movie" or "tv" (the values Nuvio scrapers receive). */
+    
     fun supports(mediaType: String): Boolean {
         if (types.isEmpty()) return true
         val wanted = if (mediaType == "movie") listOf("movie") else listOf("tv", "series")
@@ -26,7 +26,6 @@ data class NuvioScraper(
 
 data class NuvioRepo(
     val id: String,
-    /** Base URL, without the trailing /manifest.json. */
     val url: String,
     val name: String,
     val description: String = "",

@@ -9,7 +9,6 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-/** Bottom sheet host for [NuvioSettings], same pattern as the WatchParty and Stremio settings. */
 class NuvioSheet(private val settings: NuvioSettings) : BottomSheetDialogFragment() {
 
     override fun onStart() {
