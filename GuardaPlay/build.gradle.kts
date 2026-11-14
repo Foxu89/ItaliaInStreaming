@@ -1,7 +1,7 @@
-version = 9
+version = 10
 
 cloudstream {
-    description = "Film e Serie TV in Streaming da GuardaPlay"
+    description = "Film e Serie TV in Streaming da GuardaPlay !BETA!"
     authors = listOf("DieGon")
 
     status = 3

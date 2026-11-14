@@ -347,7 +347,8 @@ class GuardaPlay : MainAPI() {
         val t = target.lowercase()
         val n = e.name.lowercase()
         when {
-            "loadm" in t || "mload" in n -> LoadMExtractor().getUrl(target, e.url, subtitleCallback, callback)
+            "loadm" in t || "mload" in t || "abyss" in t || "mload" in n ->
+                LoadMExtractor().getUrl(target, "$mainUrl/", subtitleCallback, callback)
             "vixsrc" in t -> VixSrcExtractor().getUrl(target, mainUrl, subtitleCallback, callback)
             else -> loadExtractor(target, e.url, subtitleCallback, callback)
         }
