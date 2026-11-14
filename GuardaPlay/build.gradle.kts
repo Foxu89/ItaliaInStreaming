@@ -1,4 +1,4 @@
-version = 10
+version = 11
 
 cloudstream {
     description = "Film e Serie TV in Streaming da GuardaPlay !BETA!"
