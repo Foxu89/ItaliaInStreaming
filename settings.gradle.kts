@@ -8,6 +8,7 @@ include(
  //   "AltaDefinizione",
     "AnimeSaturn",
     "AnimeUnity",
+    "AnimeUnion",
 //    "AnimeWorld",
 //    "Arte",
     "AutoExtensions",

@@ -11,10 +11,6 @@ import com.lagradost.cloudstream3.utils.M3u8Helper
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 
-/**
- * uqload.* (es. uqload.vc). Prima prova a leggere il link direttamente dalla pagina;
- * se non c'e', apre la pagina in un WebView, fa partire il player e intercetta il master.m3u8.
- */
 class UqloadExtractor : ExtractorApi() {
     override val name = "Uqload"
     override val mainUrl = "https://uqload.vc"
@@ -24,7 +20,7 @@ class UqloadExtractor : ExtractorApi() {
         const val TAG = "UqloadExtractor"
         const val UA = WebViewSniffer.UA
 
-        // clicca play in tutti i modi possibili
+        
         val KICK = """
             (function(){try{
               if(window.jwplayer){try{jwplayer().play();}catch(e){}}
@@ -44,7 +40,6 @@ class UqloadExtractor : ExtractorApi() {
             return path.endsWith(".m3u8") || path.endsWith(".mp4")
         }
 
-        /** cerca un link video nel sorgente della pagina */
         fun findInHtml(html: String): List<String> {
             val text = html.replace("\\/", "/")
             val out = LinkedHashSet<String>()
@@ -64,7 +59,6 @@ class UqloadExtractor : ExtractorApi() {
         extract(url, referer, callback)
     }
 
-    /** Restituisce true se ha trovato almeno un link. */
     suspend fun extract(url: String, referer: String?, callback: (ExtractorLink) -> Unit): Boolean {
         val pageReferer = referer ?: "https://guardaplay.autos/"
         val host = url.substringAfter("://").substringBefore("/")

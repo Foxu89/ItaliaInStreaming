@@ -17,10 +17,6 @@ import kotlinx.coroutines.withContext
 import java.util.Collections
 import kotlin.coroutines.resume
 
-/**
- * Apre una pagina in un WebView, esegue uno script per far partire il player
- * e raccoglie gli indirizzi delle richieste che `accept` riconosce (es. .m3u8 / .mp4).
- */
 object WebViewSniffer {
     private const val TAG = "WebViewSniffer"
     const val UA =
@@ -84,7 +80,6 @@ object WebViewSniffer {
                 }
 
                 wv.webViewClient = object : WebViewClient() {
-                    // consente solo i salti ammessi (es. cambio di dominio dello stesso servizio), blocca i popup
                     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                         val target = request?.url?.toString().orEmpty()
                         val ok = allowNavigation(target)

@@ -21,24 +21,6 @@ import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * Supporto al player Abyss (mload.cam).
- *
- * 1. `datas` (base64) contiene slug/md5_id/user_id e `media` cifrato con AES-CTR;
- *    la chiave e' md5("user_id:slug:md5_id") in esadecimale (32 caratteri ASCII = chiave AES-256,
- *    i primi 16 byte sono anche il contatore iniziale).
- * 2. `media` elenca le qualita' (size, res_id, label, codec, sub), i domini dei server e i
- *    "primi dati" (fristDatas: un file con i primi MB del video su un server veloce).
- * 3. Ogni pezzo da `chunk` byte si scarica da https://{dominio}/sora/{size}/{token}, dove token e'
- *    il percorso "/mp4/{md5_id}/{res_id}/{size}/{chunk}/{n}" cifrato con AES-CTR
- *    (chiave = md5 dei VALORI delle cifre di size, non dei caratteri ASCII: e' un'anomalia
- *    della libreria md5 usata dal player) e codificato due volte in base64 senza padding.
- * 4. I primi 64 KB del file "primi dati" sono cifrati (chiave = md5 del nome del file). Lo usiamo
- *    solo se, dopo la decifratura, coincide byte per byte con lo stesso tratto preso dal server
- *    normale; altrimenti si scarica tutto dal server normale.
- * 5. ExoPlayer non sa parlare con questi pezzi: un piccolo server HTTP locale traduce le
- *    richieste Range in richieste ai pezzi, scaricandone alcuni in parallelo.
- */
 object AbyssProxy {
     private const val TAG = "AbyssProxy"
     private const val UA =
@@ -134,7 +116,6 @@ object AbyssProxy {
     }
 
     fun token(path: String, size: Long): String {
-        // il player calcola md5 su un numero: la libreria lo converte in stringa e usa i VALORI delle cifre
         val digits = size.toString().map { (it - '0').toByte() }.toByteArray()
         val key = md5Hex(digits).toByteArray(Charsets.UTF_8)
         val ct = aesCtr(Cipher.ENCRYPT_MODE, key, path.toByteArray(Charsets.UTF_8))
@@ -177,7 +158,7 @@ object AbyssProxy {
             .build()
     }
 
-    /** Scarica `expected` byte; timeout brevi e nuovi tentativi rapidi. Restituisce null se fallisce. */
+    /** Scarica `expected` byte; timeout brevi e nuovi tentativi rapidi. Null se fallisce. */
     private fun getBytes(url: String, range: String?, expected: Int, absStart: Long = 0L): ByteArray? {
         repeat(4) { attempt ->
             try {
@@ -217,7 +198,6 @@ object AbyssProxy {
         return null
     }
 
-    /** Controlla (una volta sola) se il file "primi dati" e' utilizzabile. */
     private fun verifyFirstData(src: Source) {
         try {
             val fdUrl = src.fdUrl
@@ -266,7 +246,6 @@ object AbyssProxy {
     private val pool = Executors.newCachedThreadPool { r -> Thread(r).apply { isDaemon = true } }
     @Volatile private var server: ServerSocket? = null
 
-    // pezzi recenti (condivisi tra connessioni, con deduplica dei download in corso)
     private val cache = object : LinkedHashMap<String, Future<ByteArray?>>(32, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Future<ByteArray?>>?): Boolean =
             size > CACHE_PARTS
@@ -299,7 +278,6 @@ object AbyssProxy {
         return s
     }
 
-    /** Registra una sorgente e restituisce l'indirizzo locale da dare al player. */
     fun register(source: Source): String {
         val s = ensureStarted()
         val id = UUID.randomUUID().toString().replace("-", "")
@@ -365,7 +343,6 @@ object AbyssProxy {
                 out.flush()
                 if (method == "HEAD") return
 
-                // se la verifica dei "primi dati" non e' ancora finita, aspetta poco
                 try {
                     src.fdChecked.await(8, TimeUnit.SECONDS)
                 } catch (_: InterruptedException) {
@@ -394,7 +371,7 @@ object AbyssProxy {
                 }
                 out.flush()
             } catch (_: Exception) {
-                // il player ha chiuso la connessione (seek): normale
+                
             }
         }
     }

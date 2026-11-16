@@ -35,7 +35,6 @@ import org.jsoup.select.Elements
 import java.util.concurrent.atomic.AtomicBoolean
 
 class GuardaPlay : MainAPI() {
-    // Il dominio cambia spesso (.store -> .autos): basta aggiornare questa riga.
     override var mainUrl = "https://guardaplay.autos"
     override var name = "GuardaPlay"
     override val supportedTypes =
@@ -44,7 +43,7 @@ class GuardaPlay : MainAPI() {
     override val hasMainPage = true
 
     override val mainPage = mainPageOf(
-        "$mainUrl/" to "Ultimi aggiunti",
+   //     "$mainUrl/" to "Ultimi aggiunti",
         "$mainUrl/movies/" to "Film",
         "$mainUrl/series/" to "Serie TV",
         "$mainUrl/category/animazione/" to "Animazione",
@@ -60,7 +59,7 @@ class GuardaPlay : MainAPI() {
         "$mainUrl/category/documentario/" to "Documentario",
         "$mainUrl/category/famiglia/" to "Famiglia",
         "$mainUrl/category/reality/" to "Reality",
-        "$mainUrl/category/kids/" to "Kids",
+   //     "$mainUrl/category/kids/" to "Kids",
     )
 
     private val cfKiller by lazy { CloudflareKiller() }
@@ -71,7 +70,6 @@ class GuardaPlay : MainAPI() {
 
     // ---------------------------------------------------------------- rete
 
-    /** GET normale; se Cloudflare risponde 403/503 riprova con CloudflareKiller. */
     private suspend fun fetch(url: String, referer: String? = null) = app.get(
         url,
         referer = referer ?: mainUrl,
@@ -248,7 +246,6 @@ class GuardaPlay : MainAPI() {
             .sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 }))
     }
 
-    /** Le stagioni diverse da quella mostrata arrivano via AJAX del tema; se fallisce si prova a indovinare gli URL. */
     private suspend fun fetchSeason(
         post: String,
         season: Int,
@@ -351,7 +348,7 @@ class GuardaPlay : MainAPI() {
             "loadm" in t || "mload" in t || "abyss" in t || "mload" in n ->
                 LoadMExtractor().getUrl(target, "$mainUrl/", subtitleCallback, callback)
             "uqload" in t || "uqload" in n -> {
-                // se il nostro estrattore non trova nulla, prova quello integrato di CloudStream
+                
                 if (!UqloadExtractor().extract(target, "$mainUrl/", callback)) {
                     loadExtractor(target, e.url, subtitleCallback, callback)
                 }
@@ -369,7 +366,7 @@ class GuardaPlay : MainAPI() {
     ): Boolean {
         var pageUrl = data
         val embeds: List<Embed> = when {
-            // dati della vecchia versione: lista JSON di URL embed
+            
             data.trim().startsWith("[") -> {
                 pageUrl = mainUrl
                 try {

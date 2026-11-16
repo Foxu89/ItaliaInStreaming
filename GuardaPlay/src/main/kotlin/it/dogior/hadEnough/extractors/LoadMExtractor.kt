@@ -9,10 +9,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 
-/**
- * Player "Mload" (mload.cam), basato su Abyss. Non serve piu' il WebView:
- * si legge `datas` dalla pagina, si decifra e si serve il video tramite un proxy locale (AbyssProxy).
- */
 class LoadMExtractor : ExtractorApi() {
     override val name = "Mload"
     override val mainUrl = "https://mload.cam"
@@ -55,7 +51,6 @@ class LoadMExtractor : ExtractorApi() {
         }
         Log.d(TAG, "sorgenti: ${sources.map { "${it.label}/${it.codec}@${it.domain}" }}")
 
-        // preferisci h264 (compatibile ovunque) e salta "origin" se ci sono altre qualita'
         val usable = sources
             .filter { it.codec.equals("h264", true) }
             .ifEmpty { sources.filter { !it.codec.equals("av1", true) } }
