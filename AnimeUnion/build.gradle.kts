@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "Anime Sub ITA e Dub ITA da AnimeUnion !BETA!"

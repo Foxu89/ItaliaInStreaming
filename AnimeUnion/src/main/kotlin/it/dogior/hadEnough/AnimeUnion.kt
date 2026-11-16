@@ -16,7 +16,6 @@ import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.ShowStatus
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
-import com.lagradost.cloudstream3.addDubStatus
 import com.lagradost.cloudstream3.addEpisodes
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.mainPageOf
@@ -107,11 +106,8 @@ class AnimeUnion : MainAPI() {
             val title = ps.firstOrNull()?.text()?.takeIf { it.isNotBlank() }
                 ?: img.attr("alt").takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
-            val isDub = href.contains("lang=DUB_ITA") ||
-                a.select("[title]").any { it.attr("title").startsWith("Audio italiano", true) }
             newAnimeSearchResponse(title, "$mainUrl/anime/$slug", typeOf(ps.getOrNull(1)?.text())) {
                 this.posterUrl = img.attr("src").takeIf { it.isNotBlank() }
-                addDubStatus(isDub)
             }
         }
     }
@@ -184,22 +180,21 @@ class AnimeUnion : MainAPI() {
             else -> TvType.OVA
         }
 
-        val langs = Regex("availableLanguages:\\[([^\\]]*)\\]").find(html)?.groupValues?.get(1)
-            ?.let { Regex("\"([A-Z_]+)\"").findAll(it).map { m -> m.groupValues[1] }.toList() }
-            .orEmpty()
-
         // episodi: link `/anime/<slug>/<n>` (non quelli delle card consigliate, che hanno class "group")
         val epLinks = doc.select("a[href^=\"/anime/$slug/\"]")
             .filter { !it.hasClass("group") && it.selectFirst("img") == null }
             .distinctBy { it.attr("href") }
 
-        fun episodesFor(language: String?) = epLinks.map { a ->
+        val episodes = epLinks.map { a ->
             val href = a.attr("href").substringBefore("?")
             val n = a.selectFirst("span.text-primary")?.text()?.trim()?.toIntOrNull()
                 ?: Regex("(\\d+)").find(href.substringAfterLast("/"))?.groupValues?.get(1)?.toIntOrNull()
-            newEpisode("$mainUrl$href" + (language?.let { "?lang=$it" } ?: "")) {
+            newEpisode("$mainUrl$href") {
                 this.episode = n
-                this.name = a.selectFirst("span.text-sm")?.text()?.takeIf { it.isNotBlank() }
+                // il numero lo aggiunge gia' l'app ("1. Episodio"): tolgo quello del sito
+                this.name = a.selectFirst("div.flex-1 span")?.text()
+                    ?.replace(Regex("\\s*\\d+\\s*$"), "")?.trim()
+                    ?.takeIf { it.isNotBlank() } ?: "Episodio"
             }
         }
 
@@ -224,14 +219,8 @@ class AnimeUnion : MainAPI() {
             num(seg, "malId")?.let { addMalId(it) }
             str(seg, "trailerUrl")?.takeIf { it.isNotBlank() }?.let { addTrailer(it) }
 
-            var any = false
-            if ("SUB_ITA" in langs) {
-                addEpisodes(DubStatus.Subbed, episodesFor("SUB_ITA")); any = true
-            }
-            if ("DUB_ITA" in langs) {
-                addEpisodes(DubStatus.Dubbed, episodesFor("DUB_ITA")); any = true
-            }
-            if (!any) addEpisodes(DubStatus.Subbed, episodesFor(null))
+            // una sola lista: Sub ITA e Dub ITA si scelgono dalle fonti
+            addEpisodes(DubStatus.Subbed, episodes)
         }
     }
 
@@ -280,7 +269,6 @@ class AnimeUnion : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
-        val lang = Regex("[?&]lang=([A-Z_]+)").find(data)?.groupValues?.get(1)
         val pageUrl = data.substringBefore("?")
         val html = fetch(pageUrl, referer = "$mainUrl/").text
 
@@ -288,12 +276,12 @@ class AnimeUnion : MainAPI() {
         if (streams.isEmpty()) {
             // ripiego: il tag <video src="..."> della pagina
             Jsoup.parse(html, mainUrl).selectFirst("video[src]")?.attr("src")?.takeIf { it.startsWith("http") }
-                ?.let { streams = listOf(Stream(it, "", lang.orEmpty(), "")) }
+                ?.let { streams = listOf(Stream(it, "", "", "")) }
         }
-        Log.d(tag, "stream trovati: ${streams.size} (lang=$lang)")
+        Log.d(tag, "stream trovati: ${streams.size}")
 
-        // la lingua scelta nell'app; se per questo episodio non c'e', mostro quello che c'e'
-        val chosen = streams.filter { lang == null || it.language == lang }.ifEmpty { streams }
+        // tutte le fonti, Sub ITA prima e Dub ITA dopo: si sceglie dal menu delle fonti
+        val chosen = streams.sortedBy { if (it.language == "SUB_ITA") 0 else 1 }
         val headers = mapOf("Referer" to "$mainUrl/", "User-Agent" to ua)
 
         var any = false
