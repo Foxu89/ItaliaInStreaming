@@ -17,6 +17,7 @@ import com.lagradost.cloudstream3.ShowStatus
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.addEpisodes
+import com.lagradost.cloudstream3.addDubStatus
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.network.CloudflareKiller
@@ -34,7 +35,7 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
-class AnimeUnion : MainAPI() {
+class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
     override var mainUrl = "https://animeunion.tv"
     override var name = "AnimeUnion"
     override var supportedTypes = setOf(TvType.Anime, TvType.AnimeMovie, TvType.OVA)
@@ -108,6 +109,13 @@ class AnimeUnion : MainAPI() {
                 ?: return@mapNotNull null
             newAnimeSearchResponse(title, "$mainUrl/anime/$slug", typeOf(ps.getOrNull(1)?.text())) {
                 this.posterUrl = img.attr("src").takeIf { it.isNotBlank() }
+                if (showLangTags) {
+                    // le card degli "Ultimi episodi" hanno i badge delle lingue; le altre liste no
+                    val titles = a.select("[title]").map { it.attr("title") }
+                    val dub = titles.any { it.contains("doppiato", true) }
+                    val sub = titles.any { it.contains("sottotitoli", true) }
+                    if (dub || sub) addDubStatus(dubExist = dub, subExist = sub)
+                }
             }
         }
     }
@@ -180,6 +188,8 @@ class AnimeUnion : MainAPI() {
             else -> TvType.OVA
         }
 
+        val langs = Regex("availableLanguages:\\[([^\\]]*)\\]").find(html)?.groupValues?.get(1).orEmpty()
+
         // episodi: link `/anime/<slug>/<n>` (non quelli delle card consigliate, che hanno class "group")
         val epLinks = doc.select("a[href^=\"/anime/$slug/\"]")
             .filter { !it.hasClass("group") && it.selectFirst("img") == null }
@@ -205,7 +215,13 @@ class AnimeUnion : MainAPI() {
             this.backgroundPosterUrl = str(seg, "bannerImage")
             this.year = num(seg, "seasonYear")
             this.plot = doc.selectFirst("p.whitespace-pre-line")?.text()
-            this.tags = doc.select("a[href^=\"/anime/genere/\"]").map { it.text() }
+            val genres = doc.select("a[href^=\"/anime/genere/\"]").map { it.text() }
+            this.tags = if (showLangTags) {
+                listOfNotNull(
+                    "Sottotitolato".takeIf { "SUB_ITA" in langs },
+                    "Doppiato".takeIf { "DUB_ITA" in langs },
+                ) + genres
+            } else genres
             this.showStatus = when (str(seg, "status")) {
                 "ONGOING" -> ShowStatus.Ongoing
                 "COMPLETED" -> ShowStatus.Completed

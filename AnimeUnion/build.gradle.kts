@@ -1,18 +1,28 @@
-version = 2
+version = 4
+
+android {
+    buildFeatures {
+        buildConfig = true
+    }
+}
+
+dependencies {
+    implementation("com.google.android.material:material:1.13.0")
+}
 
 cloudstream {
-    description = "Anime Sub ITA e Dub ITA da AnimeUnion !BETA!"
+    description = "Anime da AnimeUnion"
     authors = listOf("DieGon")
 
     /**
      * 0: Down, 1: Ok, 2: Slow, 3: Beta only
      */
-    status = 3
+    status = 1
 
     tvTypes = listOf("Anime", "AnimeMovie", "OVA")
 
-    requiresResources = false
+    requiresResources = true
     language = "it"
 
-    iconUrl = "https://animeunion.tv/icons/icon-192.png"
+    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/AnimeUnity/animeunion_icon.png"
 }
