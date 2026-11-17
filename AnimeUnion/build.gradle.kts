@@ -1,4 +1,4 @@
-version = 4
+version = 5
 
 android {
     buildFeatures {
@@ -24,5 +24,5 @@ cloudstream {
     requiresResources = true
     language = "it"
 
-    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/AnimeUnity/animeunion_icon.png"
+    iconUrl = "https://raw.githubusercontent.com/Foxu89/ItaliaInStreaming/master/AnimeUnion/animeunion_icon.png"
 }
