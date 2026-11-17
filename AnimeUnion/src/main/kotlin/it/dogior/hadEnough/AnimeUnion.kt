@@ -42,7 +42,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
     override var lang = "it"
     override val hasMainPage = true
 
-    // data = parte del titolo della sezione nella home, name = nome mostrato nell'app
     override val mainPage = mainPageOf(
         "Ultimi episodi" to "Ultimi episodi rilasciati",
         "viste oggi" to "Più viste oggi",
@@ -63,7 +62,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
 
     // ---------------------------------------------------------------- rete
 
-    /** GET normale; se Cloudflare risponde 403/503 riprova con CloudflareKiller. */
     private suspend fun fetch(url: String, referer: String? = null) = app.get(
         url, referer = referer, headers = mapOf("User-Agent" to ua)
     ).let { r ->
@@ -94,7 +92,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
         }
     }
 
-    /** Legge le card `<a href="/anime/slug...">` (home, liste, ricerca). */
     private fun parseCards(root: Element): List<SearchResponse> {
         val seen = HashSet<String>()
         return root.select("a[href^=\"/anime/\"]").mapNotNull { a ->
@@ -110,7 +107,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
             newAnimeSearchResponse(title, "$mainUrl/anime/$slug", typeOf(ps.getOrNull(1)?.text())) {
                 this.posterUrl = img.attr("src").takeIf { it.isNotBlank() }
                 if (showLangTags) {
-                    // le card degli "Ultimi episodi" hanno i badge delle lingue; le altre liste no
                     val titles = a.select("[title]").map { it.attr("title") }
                     val dub = titles.any { it.contains("doppiato", true) }
                     val sub = titles.any { it.contains("sottotitoli", true) }
@@ -137,11 +133,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
     private fun norm(s: String) = s.lowercase().replace(Regex("[^a-z0-9 ]"), " ")
         .replace(Regex("\\s+"), " ").trim()
 
-    /**
-     * ATTENZIONE: l'indirizzo della ricerca non e' ancora verificato. Provo alcuni parametri
-     * comuni e tengo solo le card che contengono tutte le parole cercate, cosi' se il sito
-     * ignora il parametro non restituisco la lista generica.
-     */
     override suspend fun search(query: String): List<SearchResponse> {
         val words = norm(query).split(" ").filter { it.isNotBlank() }
         if (words.isEmpty()) return emptyList()
@@ -176,7 +167,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
         val doc = Jsoup.parse(html, mainUrl)
         val slug = pageUrl.substringAfter("/anime/").substringBefore("/")
 
-        // oggetto "anime:{...}" incorporato nella pagina (finisce dove inizia "genres:[")
         val seg = html.substringAfter("anime:{id:\"", "").substringBefore("genres:[")
 
         val title = doc.selectFirst("h1")?.text()?.takeIf { it.isNotBlank() }
@@ -201,7 +191,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
                 ?: Regex("(\\d+)").find(href.substringAfterLast("/"))?.groupValues?.get(1)?.toIntOrNull()
             newEpisode("$mainUrl$href") {
                 this.episode = n
-                // il numero lo aggiunge gia' l'app ("1. Episodio"): tolgo quello del sito
                 this.name = a.selectFirst("div.flex-1 span")?.text()
                     ?.replace(Regex("\\s*\\d+\\s*$"), "")?.trim()
                     ?.takeIf { it.isNotBlank() } ?: "Episodio"
@@ -235,7 +224,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
             num(seg, "malId")?.let { addMalId(it) }
             str(seg, "trailerUrl")?.takeIf { it.isNotBlank() }?.let { addTrailer(it) }
 
-            // una sola lista: Sub ITA e Dub ITA si scelgono dalle fonti
             addEpisodes(DubStatus.Subbed, episodes)
         }
     }
@@ -290,13 +278,12 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
 
         var streams = parseStreams(html)
         if (streams.isEmpty()) {
-            // ripiego: il tag <video src="..."> della pagina
+            // tag <video src="..."> della pagina
             Jsoup.parse(html, mainUrl).selectFirst("video[src]")?.attr("src")?.takeIf { it.startsWith("http") }
                 ?.let { streams = listOf(Stream(it, "", "", "")) }
         }
         Log.d(tag, "stream trovati: ${streams.size}")
 
-        // tutte le fonti, Sub ITA prima e Dub ITA dopo: si sceglie dal menu delle fonti
         val chosen = streams.sortedBy { if (it.language == "SUB_ITA") 0 else 1 }
         val headers = mapOf("Referer" to "$mainUrl/", "User-Agent" to ua)
 
@@ -320,7 +307,6 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
                 )
                 any = true
             } else {
-                // altri server (embed): provo gli estrattori di CloudStream
                 if (loadExtractor(s.url, "$mainUrl/", subtitleCallback, callback)) any = true
             }
         }

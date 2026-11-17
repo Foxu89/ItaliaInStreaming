@@ -51,7 +51,6 @@
             android:text="@string/tags_label"
             android:textSize="16sp" />
 
-        <!-- lo switch lo crea il codice (MaterialSwitch, come in Nuvio) -->
         <FrameLayout
             android:id="@+id/tags_switch_container"
             android:layout_width="wrap_content"

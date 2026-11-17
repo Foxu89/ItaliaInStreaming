@@ -18,7 +18,6 @@ import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.CommonActivity.showToast
 
-/** Impostazioni di AnimeUnion (stesso schema di StreamingCommunity: icona salva + popup di riavvio). */
 class AnimeUnionSettings(
     private val plugin: AnimeUnionPlugin,
     private val sharedPref: SharedPreferences?,
@@ -62,7 +61,6 @@ class AnimeUnionSettings(
         return if (layoutId != 0) inflater.inflate(res.getLayout(layoutId), container, false) else null
     }
 
-    /** Lo switch Material 3 dell'app (lo stesso di Nuvio); se non c'e' ripiega su un Switch normale. */
     private fun makeSwitch(checked: Boolean): CompoundButton {
         val ctx = requireContext()
         val sw: CompoundButton = try {

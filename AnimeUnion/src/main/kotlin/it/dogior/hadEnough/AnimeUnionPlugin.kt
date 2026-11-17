@@ -14,8 +14,8 @@ class AnimeUnionPlugin : Plugin() {
 
     override fun load(context: Context) {
         val sharedPref = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        // disattivato di default
-        val showTags = sharedPref.getBoolean(KEY_LANG_TAGS, false)
+        // attivo di default
+        val showTags = sharedPref.getBoolean(KEY_LANG_TAGS, true)
 
         registerMainAPI(AnimeUnion(showTags))
 
