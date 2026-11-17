@@ -39,7 +39,7 @@ class VixCloudExtractor : ExtractorApi() {
                 url = playlistUrl,
                 type = ExtractorLinkType.M3U8
             ) {
-                this.referer = referer
+                this.referer = referer ?: ""
                 this.headers = h
             }
         )
