@@ -83,6 +83,21 @@ class AnimeUnity : MainAPI() {
         return if (path.startsWith("/anime/")) mainUrl + path else url
     }
 
+    private fun parseVideoUrl(url: String): Triple<Int, String, Int>? {
+        val path = url.toHttpUrlOrNull()?.encodedPath ?: return null
+        val match = Regex("""^/anime/(\d+)-([^/]+)/(\d+)/?$""").find(path) ?: return null
+        val animeId = match.groupValues[1].toIntOrNull() ?: return null
+        val slug = match.groupValues[2]
+        val videoId = match.groupValues[3].toIntOrNull() ?: return null
+        return Triple(animeId, slug, videoId)
+    }
+
+    private fun languageLabel(language: String?): String? = when (language?.lowercase()) {
+        "ita" -> "Italiano"
+        "jpn" -> "Giapponese"
+        else -> null
+    }
+
     private fun animeTitle(anime: AuAnime): String =
         anime.titleIt?.takeIf { it.isNotBlank() }
             ?: anime.title?.takeIf { it.isNotBlank() }
@@ -202,27 +217,42 @@ class AnimeUnity : MainAPI() {
         return episodes.distinctBy { it.id }
     }
 
+    private val episodesCache = java.util.concurrent.ConcurrentHashMap<Int, List<AuEpisodeDto>>()
+
+    private suspend fun episodesFor(animeId: Int): List<AuEpisodeDto> {
+        episodesCache[animeId]?.let { return it }
+        return loadEpisodes(animeId).also { episodesCache[animeId] = it }
+    }
+
     private fun buildEpisodeList(
         animeUrl: String,
         episodes: List<AuEpisodeDto>,
-        language: String,
-    ): List<Episode> = episodes
-        .mapNotNull { episode ->
-            val video = episode.videos.orEmpty().firstOrNull {
-                it.id != null && !it.isHidden && it.language.equals(language, true)
-            } ?: return@mapNotNull null
-            val number = episode.number?.trim().orEmpty()
-            if (number.isEmpty()) return@mapNotNull null
+    ): List<Episode> {
+        val byNumber = LinkedHashMap<String, MutableList<AuVideo>>()
 
-            Triple(number, video.id!!, parseEpisodeNumber(number))
+        episodes.forEach { episode ->
+            val number = episode.number?.trim().orEmpty()
+            if (number.isEmpty()) return@forEach
+
+            val videos = episode.videos.orEmpty()
+                .filter { it.id != null && !it.isHidden && languageLabel(it.language) != null }
+            if (videos.isNotEmpty()) byNumber.getOrPut(number) { mutableListOf() }.addAll(videos)
         }
-        .sortedBy { it.third ?: Double.MAX_VALUE }
-        .map { (number, videoId) ->
-            newEpisode("$animeUrl/$videoId") {
-                this.episode = number.toIntOrNull()
-                if (this.episode == null) this.name = "Episodio $number"
+
+        return byNumber.entries
+            .sortedBy { (number, _) -> parseEpisodeNumber(number) ?: Double.MAX_VALUE }
+            .mapNotNull { (number, videos) ->
+                val video = videos.firstOrNull { it.language.equals("jpn", true) }
+                    ?: videos.firstOrNull { it.language.equals("ita", true) }
+                    ?: videos.first()
+                val videoId = video.id ?: return@mapNotNull null
+
+                newEpisode("$animeUrl/$videoId") {
+                    this.episode = number.toIntOrNull()
+                    if (this.episode == null) this.name = "Episodio $number"
+                }
             }
-        }
+    }
 
     override suspend fun load(url: String): LoadResponse {
         val pageUrl = normalizeUrl(url)
@@ -231,12 +261,15 @@ class AnimeUnity : MainAPI() {
         val animeId = anime.id ?: error("AnimeUnity: id anime mancante")
         val animeUrl = "$mainUrl/anime/$animeId-${anime.slug.orEmpty()}"
 
-        val allEpisodes = loadEpisodes(animeId)
-        val subEpisodes = buildEpisodeList(animeUrl, allEpisodes, "jpn")
-        val dubEpisodes = buildEpisodeList(animeUrl, allEpisodes, "ita")
-        val hasSub = subEpisodes.isNotEmpty()
-        val hasDub = dubEpisodes.isNotEmpty()
-        if (!hasSub && !hasDub) Log.w(TAG, "nessun episodio trovato per $animeUrl")
+        val allEpisodes = episodesFor(animeId)
+        val episodeList = buildEpisodeList(animeUrl, allEpisodes)
+        val hasSub = allEpisodes.any { episode ->
+            episode.videos.orEmpty().any { it.language.equals("jpn", true) && !it.isHidden }
+        }
+        val hasDub = allEpisodes.any { episode ->
+            episode.videos.orEmpty().any { it.language.equals("ita", true) && !it.isHidden }
+        }
+        if (episodeList.isEmpty()) Log.w(TAG, "nessun episodio trovato per $animeUrl")
 
         return newAnimeLoadResponse(animeTitle(anime), animeUrl, animeTvType(anime)) {
             posterUrl = anime.images?.poster
@@ -264,8 +297,7 @@ class AnimeUnity : MainAPI() {
             }
             tags = listOf(audioTag) + anime.genres.orEmpty().mapNotNull { it.name }
 
-            if (hasSub) addEpisodes(DubStatus.Subbed, subEpisodes)
-            if (hasDub) addEpisodes(DubStatus.Dubbed, dubEpisodes)
+            if (episodeList.isNotEmpty()) addEpisodes(DubStatus.Subbed, episodeList)
 
             recommendations = props.relatedAnimes.orEmpty()
                 .filter { it.id != animeId }
@@ -304,24 +336,46 @@ class AnimeUnity : MainAPI() {
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         val pageUrl = normalizeUrl(data)
-        val embedUrl = try {
-            pageProps(pageUrl).embedUrl?.takeIf { it.isNotBlank() }
+        val parsed = parseVideoUrl(pageUrl) ?: return false
+        val (animeId, slug, videoId) = parsed
+        val animeUrl = "$mainUrl/anime/$animeId-$slug"
+
+        val videos = try {
+            episodesFor(animeId)
+                .firstOrNull { episode -> episode.videos.orEmpty().any { it.id == videoId } }
+                ?.videos.orEmpty()
+                ?.filter { it.id != null && !it.isHidden && languageLabel(it.language) != null }
+                ?.distinctBy { it.id }
+                ?: return false
         } catch (e: Exception) {
             Log.e(TAG, "loadLinks($pageUrl): ${e.message}")
-            null
-        } ?: return false
-
-        return try {
-            VixCloudExtractor().getUrl(
-                url = embedUrl,
-                referer = "$mainUrl/",
-                subtitleCallback = subtitleCallback,
-                callback = callback
-            )
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "VixCloud($embedUrl): ${e.message}")
-            false
+            return false
         }
+
+        var found = false
+        for (video in videos) {
+            val label = languageLabel(video.language) ?: continue
+            val id = video.id ?: continue
+            val embedUrl = try {
+                pageProps("$animeUrl/$id").embedUrl?.takeIf { it.isNotBlank() }
+            } catch (e: Exception) {
+                Log.e(TAG, "embedUrl($id): ${e.message}")
+                null
+            } ?: continue
+
+            try {
+                VixCloudExtractor(label).getUrl(
+                    url = embedUrl,
+                    referer = "$mainUrl/",
+                    subtitleCallback = subtitleCallback,
+                    callback = callback
+                )
+                found = true
+            } catch (e: Exception) {
+                Log.e(TAG, "VixCloud($embedUrl): ${e.message}")
+            }
+        }
+
+        return found
     }
 }
