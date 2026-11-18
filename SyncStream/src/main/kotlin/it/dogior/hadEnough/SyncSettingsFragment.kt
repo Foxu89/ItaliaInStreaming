@@ -325,7 +325,7 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
         loginJob = CoroutineScope(Dispatchers.IO).launch {
             val code = GoogleDriveApi.requestDeviceCode()
             if (code == null) {
-                withContext(Dispatchers.Main) { showToast("Impossibile contattare Google, riprova") }
+                withContext(Dispatchers.Main) { showToast("Google ha risposto: ${GoogleDriveApi.lastError ?: "errore sconosciuto"}") }
                 return@launch
             }
             val url = code.verificationUrl ?: "https://www.google.com/device"

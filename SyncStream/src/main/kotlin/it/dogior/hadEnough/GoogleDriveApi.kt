@@ -27,6 +27,7 @@ data class GDeviceCodeRes(
     @JsonProperty("expires_in") val expiresIn: Int? = null,
     @JsonProperty("interval") val interval: Int? = null,
     @JsonProperty("error") val error: String? = null,
+    @JsonProperty("error_description") val errorDescription: String? = null,
 )
 
 data class GTokenRes(
@@ -59,6 +60,10 @@ object GoogleDriveApi {
     private const val UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
 
     private val lock = Mutex()
+
+    /** Ultimo errore di requestDeviceCode (mostrato all'utente per capire cosa non va). */
+    @Volatile
+    var lastError: String? = null
 
     fun isConfigured(): Boolean =
         BuildConfig.GOOGLE_CLIENT_ID.isNotBlank() && BuildConfig.GOOGLE_CLIENT_SECRET.isNotBlank()
@@ -94,12 +99,18 @@ object GoogleDriveApi {
             .add("client_id", BuildConfig.GOOGLE_CLIENT_ID)
             .add("scope", SCOPE)
             .build()
-        val (_, text) = call(Request.Builder().url(DEVICE_URL).post(body).build())
+        val (httpCode, text) = call(Request.Builder().url(DEVICE_URL).post(body).build())
         val res = parse<GDeviceCodeRes>(text)
         if (res?.deviceCode == null || res.userCode == null) {
-            Log.w(TAG, "device code: $text")
+            Log.w(TAG, "device code: HTTP $httpCode $text")
+            lastError = when {
+                httpCode == -1 -> "nessuna connessione a Google"
+                res?.error != null -> res.error + (res.errorDescription?.let { ": $it" } ?: "")
+                else -> "HTTP $httpCode"
+            }
             return null
         }
+        lastError = null
         return res
     }
 
