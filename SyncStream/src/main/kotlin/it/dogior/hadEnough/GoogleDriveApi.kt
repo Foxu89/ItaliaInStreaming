@@ -52,7 +52,8 @@ data class DriveRead(val ok: Boolean, val content: String?)
  */
 object GoogleDriveApi {
     private const val TAG = "SyncStream"
-    private const val SCOPE = "https://www.googleapis.com/auth/drive.appdata"
+    private const val SCOPE_APPDATA = "https://www.googleapis.com/auth/drive.appdata"
+    private const val SCOPE_FILE = "https://www.googleapis.com/auth/drive.file"
     private const val FILE_NAME = "syncstream_backup.json"
     private const val DEVICE_URL = "https://oauth2.googleapis.com/device/code"
     private const val TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -75,6 +76,7 @@ object GoogleDriveApi {
         setKey("gdrive_access_token", "")
         setKey("gdrive_access_expires", 0L)
         setKey("gdrive_file_id", "")
+        setKey("gdrive_scope", "")
     }
 
     private inline fun <reified T> parse(s: String): T? = try {
@@ -94,10 +96,34 @@ object GoogleDriveApi {
 
     // ------------------------------------------------------------ accesso
 
+    /** Scope per cui e' stato ottenuto l'ultimo codice (salvato al termine del login). */
+    @Volatile
+    private var pendingScope: String = SCOPE_APPDATA
+
+    /**
+     * Prova prima la cartella nascosta dell'app (drive.appdata); se Google rifiuta quell'ambito
+     * nel flusso con codice, ripiega su drive.file (un file "syncstream_backup.json" nel Drive).
+     */
     suspend fun requestDeviceCode(): GDeviceCodeRes? {
+        val first = requestDeviceCode(SCOPE_APPDATA)
+        if (first != null) {
+            pendingScope = SCOPE_APPDATA
+            return first
+        }
+        if (lastError?.startsWith("invalid_scope") == true) {
+            val second = requestDeviceCode(SCOPE_FILE)
+            if (second != null) {
+                pendingScope = SCOPE_FILE
+                return second
+            }
+        }
+        return null
+    }
+
+    private suspend fun requestDeviceCode(scope: String): GDeviceCodeRes? {
         val body = FormBody.Builder()
             .add("client_id", BuildConfig.GOOGLE_CLIENT_ID)
-            .add("scope", SCOPE)
+            .add("scope", scope)
             .build()
         val (httpCode, text) = call(Request.Builder().url(DEVICE_URL).post(body).build())
         val res = parse<GDeviceCodeRes>(text)
@@ -133,6 +159,7 @@ object GoogleDriveApi {
                 setKey("gdrive_access_token", res.accessToken)
                 setKey("gdrive_access_expires", System.currentTimeMillis() + (res.expiresIn ?: 3600) * 1000L)
                 setKey("gdrive_file_id", "")
+                setKey("gdrive_scope", pendingScope)
                 return true to "ok"
             }
             when (res.error) {
@@ -177,6 +204,9 @@ object GoogleDriveApi {
 
     private class Found(val ok: Boolean, val id: String?)
 
+    /** true = cartella nascosta dell'app; false = file normale nel Drive (ambito drive.file). */
+    private fun useAppData(): Boolean = getKey<String>("gdrive_scope") != SCOPE_FILE
+
     private fun cachedId(): String? = getKey<String>("gdrive_file_id")?.takeIf { it.isNotBlank() }
 
     private fun auth(token: String) = "Bearer $token"
@@ -185,7 +215,7 @@ object GoogleDriveApi {
         // il piu' vecchio: se due dispositivi creassero il file insieme, tutti scelgono lo stesso
         val url = FILES_URL.toHttpUrlOrNull()
             ?.newBuilder()
-            ?.addQueryParameter("spaces", "appDataFolder")
+            ?.addQueryParameter("spaces", if (useAppData()) "appDataFolder" else "drive")
             ?.addQueryParameter("q", "name='$FILE_NAME' and trashed=false")
             ?.addQueryParameter("orderBy", "createdTime")
             ?.addQueryParameter("fields", "files(id)")
@@ -200,7 +230,8 @@ object GoogleDriveApi {
     }
 
     private suspend fun createFile(token: String): String? {
-        val meta = """{"name":"$FILE_NAME","parents":["appDataFolder"]}"""
+        val meta = if (useAppData()) """{"name":"$FILE_NAME","parents":["appDataFolder"]}"""
+        else """{"name":"$FILE_NAME"}"""
         val (code, text) = call(
             Request.Builder().url("$FILES_URL?fields=id")
                 .header("Authorization", auth(token))
