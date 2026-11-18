@@ -93,8 +93,8 @@ class AnimeUnity : MainAPI() {
     }
 
     private fun languageLabel(language: String?): String? = when (language?.lowercase()) {
-        "ita" -> "Italiano"
-        "jpn" -> "Giapponese"
+        "ita" -> "VixCloud - Doppiato"
+        "jpn" -> "VixCloud - Sottotitolato"
         else -> null
     }
 

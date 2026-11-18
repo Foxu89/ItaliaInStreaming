@@ -60,7 +60,7 @@
                 android:id="@+id/login_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Login"
+                android:text="Configura SyncStream"
                 android:textSize="17sp"
                 android:textStyle="bold" />
 
@@ -70,7 +70,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:alpha="0.8"
-                android:text="Collega il dispositivo al tuo progetto GitHub"
+                android:text="Scegli dove sincronizzare: Google Drive o GitHub"
                 android:textSize="13sp" />
         </LinearLayout>
 

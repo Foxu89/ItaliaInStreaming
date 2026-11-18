@@ -45,7 +45,13 @@ object ApiUtils {
         }
     }
 
+    /** "github" (predefinito, come prima) oppure "gdrive". */
+    fun provider(): String = getKey<String>("sync_provider")?.takeIf { it.isNotBlank() } ?: "github"
+
+    fun isDrive(): Boolean = provider() == "gdrive"
+
     fun isLoggedIn(): Boolean {
+        if (isDrive()) return GoogleDriveApi.isLoggedIn()
         val token = getKey<String>("sync_token")
         val projectNum = getKey<String>("sync_project_num")
         val projectId = getKey<String>("sync_project_id")
@@ -208,7 +214,36 @@ object ApiUtils {
         return true to "Dispositivo registrato correttamente"
     }
 
+    /**
+     * Collegamento a Google Drive: se su Drive c'e' gia' un backup lo ripristina (se "recupera" e' attivo),
+     * altrimenti crea il backup di questo dispositivo (se "backup" e' attivo).
+     */
+    suspend fun syncDriveDetails(context: Context?): Pair<Boolean, String?> {
+        val read = GoogleDriveApi.readBackup()
+        if (!read.ok) return false to "Impossibile leggere Google Drive"
+        val content = read.content
+        if (!content.isNullOrBlank()) {
+            if (getKey<String>("restore_device") == "true") {
+                restoreFromDevice(
+                    context,
+                    SyncDevice("drive", "drive", "drive", content, envelopeUpdatedAt(content) ?: 0L)
+                )
+            }
+            return true to "Google Drive collegato"
+        }
+        if (getKey<String>("backup_device") != "true") {
+            return false to "Su Drive non c'e' ancora un backup: attiva il backup per crearlo"
+        }
+        val backup = BackupUtils.getBackup(context, getResumeWatching())
+            ?: return false to "Backup non disponibile"
+        val envelope = SyncEnvelope(System.currentTimeMillis(), backup)
+        val result = GoogleDriveApi.writeBackup(envelope.toJson())
+        if (result.first) setKey("sync_last_restore_at", envelope.updatedAt)
+        return if (result.first) true to "Google Drive collegato" else result
+    }
+
     suspend fun syncThisDevice(envelopeJson: String): Pair<Boolean, String?> {
+        if (isDrive()) return GoogleDriveApi.writeBackup(envelopeJson)
         val failure = false to "Error sync this device id: ${getKey<String>("device_id")}"
         if (!isLoggedIn()) return failure
         val deviceId = getKey<String>("sync_device_id")
@@ -228,6 +263,13 @@ object ApiUtils {
      */
     suspend fun fetchDevices(): List<SyncDevice>? {
         if (!isLoggedIn()) return null
+        if (isDrive()) {
+            val read = GoogleDriveApi.readBackup()
+            if (!read.ok) return null
+            val raw = read.content
+            if (raw.isNullOrBlank()) return emptyList()
+            return listOf(SyncDevice("drive", "drive", "drive", raw, envelopeUpdatedAt(raw) ?: 0L))
+        }
         val projectNum = getKey<String>("sync_project_num")
         val query = """ query User { viewer { projectV2(number: ${projectNum}) { id items(first: 100) { nodes { id content { __typename ... on DraftIssue { id title bodyText updatedAt } } } } } } } """
         val res = apiCall(query.toStringData()) ?: return null

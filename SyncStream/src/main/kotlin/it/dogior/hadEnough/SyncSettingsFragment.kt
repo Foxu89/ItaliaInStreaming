@@ -4,6 +4,9 @@ package it.dogior.hadEnough
 
 import android.graphics.Color
 import android.graphics.drawable.Drawable
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -83,12 +86,13 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        val providerName = if (ApiUtils.isDrive()) "Google Drive" else "GitHub"
         val status = when {
             !ApiUtils.isLoggedIn() -> "Non configurato"
-            getKey<String>("backup_device") == "true" && getKey<String>("restore_device") == "true" -> "Backup e ripristino attivi"
-            getKey<String>("backup_device") == "true" -> "Backup attivo"
-            getKey<String>("restore_device") == "true" -> "Ripristino attivo"
-            else -> "Configurato"
+            getKey<String>("backup_device") == "true" && getKey<String>("restore_device") == "true" -> "$providerName · backup e ripristino attivi"
+            getKey<String>("backup_device") == "true" -> "$providerName · backup attivo"
+            getKey<String>("restore_device") == "true" -> "$providerName · ripristino attivo"
+            else -> "$providerName · configurato"
         }
         view.findView<TextView>("header_status").text = status
 
@@ -97,7 +101,14 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
         view.findView<View>("guide_card").applyOutlineBackground()
 
         view.findView<View>("login_card").setOnClickListener {
-            SyncLoginFragment().show(requireActivity().supportFragmentManager, "Login")
+            val fm = requireActivity().supportFragmentManager
+            AlertDialog.Builder(requireContext())
+                .setTitle("Dove vuoi sincronizzare?")
+                .setItems(arrayOf("Google Drive (più semplice)", "GitHub")) { _, which ->
+                    if (which == 0) SyncDriveFragment().show(fm, "Drive")
+                    else SyncLoginFragment().show(fm, "Login")
+                }
+                .show()
         }
 
         view.findView<View>("guide_card").setOnClickListener {
@@ -203,6 +214,7 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
             showToast("Please fill in all information")
             return
         }
+        setKey("sync_provider", "github")
         setKey("sync_token", token)
         setKey("sync_project_num", prNum)
         setKey("backup_device", "${backupSwitch.isChecked}")
@@ -240,5 +252,145 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
     private fun inflateLoading(): View {
         val id = res.getIdentifier("loading", "layout", BuildConfig.LIBRARY_PACKAGE_NAME)
         return LayoutInflater.from(requireContext()).inflate(res.getLayout(id), null, false)
+    }
+}
+
+
+/** Configurazione della sincronizzazione con Google Drive (accesso con codice su google.com/device). */
+class SyncDriveFragment : SyncBaseSettingsFragment() {
+
+    override val layoutName: String = "drive"
+
+    private var loginJob: Job? = null
+
+    override fun onDestroyView() {
+        loginJob?.cancel()
+        super.onDestroyView()
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        view.findView<View>("drive_card").applyOutlineBackground()
+        val statusTv = view.findView<TextView>("drive_status")
+        val loginBtn = view.findView<TextView>("drive_login_btn")
+        val backupSwitch = view.findView<Switch>("backup_device")
+        val restoreSwitch = view.findView<Switch>("restore_device")
+
+        backupSwitch.text = "Backup dei dati sul cloud"
+        restoreSwitch.text = "Recupera dati dal cloud"
+        // alla prima configurazione sono entrambi attivi
+        backupSwitch.isChecked = (getKey<String>("backup_device") ?: "true") == "true"
+        restoreSwitch.isChecked = (getKey<String>("restore_device") ?: "true") == "true"
+
+        fun refresh() {
+            val logged = ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()
+            statusTv.text = when {
+                !GoogleDriveApi.isConfigured() -> "Google Drive non è configurato in questa versione del plugin"
+                logged -> "Collegato a Google Drive"
+                else -> "Non collegato"
+            }
+            loginBtn.text = if (logged) "ACCEDI DI NUOVO" else "ACCEDI CON GOOGLE"
+        }
+        refresh()
+
+        loginBtn.applyOutlineBackground()
+        loginBtn.setOnClickListener { startLogin(backupSwitch.isChecked, restoreSwitch.isChecked) { refresh() } }
+
+        setupSaveButton(view) {
+            setKey("backup_device", "${backupSwitch.isChecked}")
+            setKey("restore_device", "${restoreSwitch.isChecked}")
+            showToast(if (ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()) "Impostazioni salvate" else "Salvato. Ora accedi con Google")
+            if (ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()) dismiss()
+        }
+
+        val resetBtn = view.findView<TextView>("reset_btn")
+        val dangerDrawable = getDrawable("outline_danger")
+        if (dangerDrawable != null) resetBtn.background = dangerDrawable else resetBtn.applyOutlineBackground()
+        resetBtn.setTextColor(Color.parseColor("#FFFF7F7F"))
+        resetBtn.setOnClickListener {
+            GoogleDriveApi.logout()
+            showToast("Disconnesso da Google Drive")
+            dismiss()
+        }
+    }
+
+    private fun startLogin(backup: Boolean, restore: Boolean, onDone: () -> Unit) {
+        if (!GoogleDriveApi.isConfigured()) {
+            showToast("Google Drive non è configurato in questa versione del plugin")
+            return
+        }
+        val ctx = requireContext()
+        loginJob?.cancel()
+        loginJob = CoroutineScope(Dispatchers.IO).launch {
+            val code = GoogleDriveApi.requestDeviceCode()
+            if (code == null) {
+                withContext(Dispatchers.Main) { showToast("Impossibile contattare Google, riprova") }
+                return@launch
+            }
+            val url = code.verificationUrl ?: "https://www.google.com/device"
+            val userCode = code.userCode ?: ""
+
+            var dialog: AlertDialog? = null
+            withContext(Dispatchers.Main) {
+                val d = AlertDialog.Builder(ctx)
+                    .setTitle("Accedi con Google")
+                    .setMessage(
+                        "1. Apri $url (anche da un altro dispositivo)\n" +
+                            "2. Inserisci questo codice:\n\n$userCode\n\n" +
+                            "3. Accedi con il tuo account Google e consenti l'accesso.\n\n" +
+                            "In attesa dell'autorizzazione..."
+                    )
+                    .setPositiveButton("Apri link", null)
+                    .setNeutralButton("Copia codice", null)
+                    .setNegativeButton("Annulla") { _, _ -> loginJob?.cancel() }
+                    .setCancelable(false)
+                    .create()
+                d.show()
+                // i pulsanti non chiudono la finestra
+                d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    } catch (e: Exception) {
+                        showToast("Apri $url dal browser")
+                    }
+                }
+                d.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("Codice Google", userCode))
+                    showToast("Codice copiato")
+                }
+                dialog = d
+            }
+
+            val auth = try {
+                GoogleDriveApi.pollToken(code)
+            } finally {
+                withContext(NonCancellable + Dispatchers.Main) { dialog?.dismiss() }
+            }
+            if (!auth.first) {
+                withContext(Dispatchers.Main) { showToast(auth.second ?: "Accesso non riuscito") }
+                return@launch
+            }
+
+            setKey("sync_provider", "gdrive")
+            setKey("backup_device", "$backup")
+            setKey("restore_device", "$restore")
+            val result = try {
+                ApiUtils.syncDriveDetails(ctx)
+            } catch (e: Exception) {
+                false to "Errore: ${e.message}"
+            }
+            withContext(Dispatchers.Main) {
+                if (result.first) {
+                    (plugin as? SyncPlugin)?.onLoginCompleted()
+                    showToast(result.second)
+                    dismiss()
+                } else {
+                    showToast(result.second ?: "Errore di sincronizzazione")
+                    onDone()
+                }
+            }
+        }
     }
 }

@@ -7,13 +7,22 @@ dependencies {
 }
 
 // use an integer for version numbers
-version = 10
+version = 11
 
 
 android {
     buildFeatures {
         buildConfig = true
         viewBinding = true
+    }
+    defaultConfig {
+        // Client OAuth di Google Drive: stanno in secrets.properties (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).
+        // Se mancano la build funziona lo stesso, ma l'opzione Google Drive risulta "non configurata".
+        val secrets = Properties()
+        val secretsFile = project.rootProject.file("secrets.properties")
+        if (secretsFile.exists()) secrets.load(secretsFile.inputStream())
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${secrets.getProperty("GOOGLE_CLIENT_ID") ?: ""}\"")
+        buildConfigField("String", "GOOGLE_CLIENT_SECRET", "\"${secrets.getProperty("GOOGLE_CLIENT_SECRET") ?: ""}\"")
     }
 }
 

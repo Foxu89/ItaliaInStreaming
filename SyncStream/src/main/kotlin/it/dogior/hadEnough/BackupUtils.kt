@@ -88,6 +88,8 @@ object BackupUtils {
         "bluphim_token",
         "device_id",
         "sync_token",
+        "sync_provider",
+        "gdrive_",
         "sync_project_num",
         "sync_project_id",
         "sync_item_id",
