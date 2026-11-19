@@ -95,8 +95,7 @@ class SyncPlugin : Plugin() {
         if (getKey<String>("backup_device") != "true") return
         if (!ApiUtils.isLoggedIn()) return
         try {
-            val backup = BackupUtils.getBackup(context, getResumeWatching()) ?: return
-            val envelope = SyncEnvelope(System.currentTimeMillis(), backup)
+            val envelope = ApiUtils.buildEnvelope(context, getResumeWatching()) ?: return
             Log.i(TAG, "📤 invio backup...")
             val result = ApiUtils.syncThisDevice(envelope.toJson())
             if (result.first) {

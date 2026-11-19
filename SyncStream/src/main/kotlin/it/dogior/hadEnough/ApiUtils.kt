@@ -116,7 +116,7 @@ object ApiUtils {
                 return false
             }
             BackupUtils.restore(context, backup, true, true)
-            reconcileResumeWatching(context, backup)
+            if (BackupUtils.catEnabled(BackupUtils.CAT_RESUME)) reconcileResumeWatching(context, backup)
             setKey("sync_last_restore_at", if (updatedAt > 0L) updatedAt else System.currentTimeMillis())
             Log.i(TAG, "📥 restore applicato ✅ (updatedAt=$updatedAt)")
             return true
@@ -196,9 +196,8 @@ object ApiUtils {
             }
         } else if (getKey<String>("backup_device") == "true") {
             // nessun nodo valido: lo creiamo come nuova "nuvola"
-            val backup = BackupUtils.getBackup(context, getResumeWatching())
+            val envelope = buildEnvelope(context, getResumeWatching())
                 ?: return false to "Backup non disponibile"
-            val envelope = SyncEnvelope(System.currentTimeMillis(), backup)
             val data = Base64.encodeToString(envelope.toJson().toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP)
             val query = """ mutation AddProjectV2DraftIssue { addProjectV2DraftIssue( input: { projectId: "$projectId", title: "${getKey<String>("device_id")}", body: "$data" } ) { projectItem { id content { ... on DraftIssue { id } } } } } """
             val res = apiCall(query.toStringData()) ?: return failureToken
@@ -234,12 +233,23 @@ object ApiUtils {
         if (getKey<String>("backup_device") != "true") {
             return false to "Su Drive non c'e' ancora un backup: attiva il backup per crearlo"
         }
-        val backup = BackupUtils.getBackup(context, getResumeWatching())
+        val envelope = buildEnvelope(context, getResumeWatching())
             ?: return false to "Backup non disponibile"
-        val envelope = SyncEnvelope(System.currentTimeMillis(), backup)
         val result = GoogleDriveApi.writeBackup(envelope.toJson())
         if (result.first) setKey("sync_last_restore_at", envelope.updatedAt)
         return if (result.first) true to "Google Drive collegato" else result
+    }
+
+    /** Costruisce lo snapshot da caricare, mantenendo nel cloud le categorie disattivate qui. */
+    suspend fun buildEnvelope(context: Context?, resume: List<com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult>?): SyncEnvelope? {
+        val local = BackupUtils.getBackup(context, resume) ?: return null
+        val cats = BackupUtils.enabledCats()
+        var merged = local
+        if (cats.size < BackupUtils.ALL_CATS.size) {
+            val raw = fetchDevices()?.firstOrNull()?.syncedData
+            merged = BackupUtils.carryOver(local, parseEnvelope(raw)?.backup, cats)
+        }
+        return SyncEnvelope(System.currentTimeMillis(), merged, cats)
     }
 
     suspend fun syncThisDevice(envelopeJson: String): Pair<Boolean, String?> {

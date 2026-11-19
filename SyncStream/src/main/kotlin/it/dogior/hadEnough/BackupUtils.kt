@@ -3,6 +3,8 @@ package it.dogior.hadEnough
 import android.content.Context
 import android.content.SharedPreferences
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStore.getDefaultSharedPrefs
 import com.lagradost.cloudstream3.utils.DataStore.getSharedPrefs
@@ -99,6 +101,7 @@ object BackupUtils {
         "sync_last_restore_at",
         "auto_pull_enabled",
         "auto_pull_seconds",
+        "sync_cat_",
         "download_info",
         "download_resume",
         "download_q_resume",
@@ -144,11 +147,79 @@ object BackupUtils {
         return check
     }
 
+    // ---- categorie sincronizzabili ----
+    const val CAT_SETTINGS = "settings"
+    const val CAT_RESUME = "resume"
+    const val CAT_LIBRARY = "library"
+    val ALL_CATS = listOf(CAT_SETTINGS, CAT_RESUME, CAT_LIBRARY)
+
+    fun catEnabled(cat: String): Boolean = getKey<Boolean>("sync_cat_$cat") ?: true
+
+    fun setCat(cat: String, v: Boolean) = setKey("sync_cat_$cat", v)
+
+    fun enabledCats(): List<String> = ALL_CATS.filter { catEnabled(it) }
+
+    private val resumeMarkers = listOf(
+        "video_pos_dur", "resume_watching", "result_season", "result_dub",
+        "result_episode", "download_header_cache"
+    )
+
+    /** Categoria di una chiave: impostazioni app, continua a guardare, preferiti/liste. */
+    fun catOf(key: String, isSettings: Boolean): String = when {
+        isSettings -> CAT_SETTINGS
+        resumeMarkers.any { key.contains(it) } -> CAT_RESUME
+        else -> CAT_LIBRARY
+    }
+
+    private fun filterCats(m: Map<String, Any?>, isSettings: Boolean, cats: Collection<String>) =
+        m.filter { catOf(it.key, isSettings) in cats }
+
+    private fun BackupVars.pick(f: (Map<String, Any?>) -> Map<String, Any?>): BackupVars {
+        @Suppress("UNCHECKED_CAST")
+        return BackupVars(
+            bool?.let { f(it) as Map<String, Boolean> },
+            int?.let { f(it) as Map<String, Int> },
+            string?.let { f(it) as Map<String, String> },
+            float?.let { f(it) as Map<String, Float> },
+            long?.let { f(it) as Map<String, Long> },
+            stringSet?.let { f(it) as Map<String, Set<String>?> },
+        )
+    }
+
+    private fun BackupVars.plus(o: BackupVars) = BackupVars(
+        (bool.orEmpty() + o.bool.orEmpty()),
+        (int.orEmpty() + o.int.orEmpty()),
+        (string.orEmpty() + o.string.orEmpty()),
+        (float.orEmpty() + o.float.orEmpty()),
+        (long.orEmpty() + o.long.orEmpty()),
+        (stringSet.orEmpty() + o.stringSet.orEmpty()),
+    )
+
+    /**
+     * Le categorie disattivate su questo dispositivo non vengono toccate nel cloud:
+     * si riprendono dallo snapshot già presente, così un dispositivo con meno
+     * categorie attive non cancella i dati degli altri.
+     */
+    fun carryOver(local: BackupFile, cloud: BackupFile?, cats: Collection<String>): BackupFile {
+        if (cloud == null) return local
+        val off = ALL_CATS.filter { it !in cats }
+        if (off.isEmpty()) return local
+        return BackupFile(
+            local.datastore.plus(cloud.datastore.pick { filterCats(it, false, off) }),
+            local.settings.plus(cloud.settings.pick { filterCats(it, true, off) })
+        )
+    }
+
     fun getBackup(context: Context?, resumeWatching: List<DataStoreHelper.ResumeWatchingResult>?): BackupFile? {
         if (context == null) return null
+        val cats = enabledCats()
 
-        val allData = context.getSharedPrefs().all.filter { it.key.isBackup(resumeWatching) }
-        val allSettings = context.getDefaultSharedPrefs().all.filter { it.key.isBackup(resumeWatching) }
+        val allData = context.getSharedPrefs().all.filter {
+            it.key.isBackup(resumeWatching) && catOf(it.key, false) in cats
+        }
+        val allSettings = if (CAT_SETTINGS in cats)
+            context.getDefaultSharedPrefs().all.filter { it.key.isBackup(resumeWatching) }
+        else emptyMap()
 
         val allDataSorted = BackupVars(
             allData.filter { it.value is Boolean } as? Map<String, Boolean>,
@@ -199,6 +270,13 @@ object BackupUtils {
         restoreDataStore: Boolean
     ) {
         if (context == null) return
+        val cats = enabledCats()
+        val backupFile = backupFile.let { b ->
+            BackupFile(
+                b.datastore.pick { filterCats(it, false, cats) },
+                if (CAT_SETTINGS in cats) b.settings else b.settings.pick { emptyMap() }
+            )
+        }
         if (restoreSettings) {
             context.restoreMap(backupFile.settings.bool, true)
             context.restoreMap(backupFile.settings.int, true)

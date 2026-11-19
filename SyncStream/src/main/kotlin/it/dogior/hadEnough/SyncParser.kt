@@ -22,7 +22,8 @@ data class BackupFile(
  */
 data class SyncEnvelope(
     @JsonProperty("updatedAt") val updatedAt: Long,
-    @JsonProperty("backup") val backup: BackupFile
+    @JsonProperty("backup") val backup: BackupFile,
+    @JsonProperty("categories") val categories: List<String>? = null
 )
 
 data class APIRes(

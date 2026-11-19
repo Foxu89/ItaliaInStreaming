@@ -13,7 +13,12 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.graphics.Typeface
+import android.view.Gravity
+import android.widget.CompoundButton
 import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ImageButton
 import android.widget.Switch
 import android.widget.TextView
@@ -71,6 +76,101 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
         this.background = getDrawable("outline")
     }
 
+
+    /** Interruttore nuovo stile (MaterialSwitch, come Nuvio); se non disponibile usa il Switch classico. */
+    protected fun makeSwitch(ctx: Context): CompoundButton {
+        return try {
+            Class.forName("com.google.android.material.materialswitch.MaterialSwitch")
+                .getConstructor(Context::class.java).newInstance(ctx) as CompoundButton
+        } catch (e: Throwable) {
+            Switch(ctx)
+        }
+    }
+
+    protected fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    /** Riga "testo + interruttore" aggiunta a [parent]. */
+    protected fun addSwitchRow(parent: LinearLayout, label: String, initial: Boolean, onChange: (Boolean) -> Unit): CompoundButton {
+        val ctx = parent.context
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(8), dp(4), dp(8))
+        }
+        val tv = TextView(ctx).apply {
+            text = label
+            textSize = 15f
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val sw = makeSwitch(ctx).apply {
+            isChecked = initial
+            setOnCheckedChangeListener { _, c -> onChange(c) }
+        }
+        row.addView(tv)
+        row.addView(sw)
+        row.setOnClickListener { if (sw.isEnabled) sw.toggle() }
+        parent.addView(row)
+        return sw
+    }
+
+    /** Aggiornamento continuo: interruttore + scelta dell'intervallo (10/15/30/60 s). */
+    protected fun addAutoUpdate(parent: LinearLayout) {
+        val ctx = parent.context
+        val intervals = listOf(10_000L, 15_000L, 30_000L, 60_000L)
+        val options = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(4), 0, dp(4), dp(4)) }
+        val chips = intervals.map { ms ->
+            TextView(ctx).apply {
+                text = "${ms / 1000}s"
+                gravity = Gravity.CENTER
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) }
+            }
+        }
+        fun refresh() {
+            val cur = getKey<Long>("auto_pull_seconds") ?: 30_000L
+            chips.forEachIndexed { i, tv ->
+                tv.background = getDrawable("outline")
+                tv.alpha = if (intervals[i] == cur) 1f else 0.45f
+                tv.setTypeface(null, if (intervals[i] == cur) Typeface.BOLD else Typeface.NORMAL)
+            }
+        }
+        chips.forEachIndexed { i, tv ->
+            tv.setOnClickListener {
+                if (!tv.isEnabled) return@setOnClickListener
+                setKey("auto_pull_seconds", intervals[i]); refresh()
+            }
+            options.addView(tv)
+        }
+        refresh()
+        val on = getKey<Boolean>("auto_pull_enabled") ?: false
+        options.visibility = if (on) View.VISIBLE else View.GONE
+        addSwitchRow(parent, "Aggiornamento automatico (controlla i cambiamenti ogni pochi secondi)", on) {
+            setKey("auto_pull_enabled", it)
+            options.visibility = if (it) View.VISIBLE else View.GONE
+        }
+        parent.addView(options)
+    }
+
+    /** Rende tutto grigio e non toccabile (servizio non attivo). */
+    protected fun disableAll(v: View) {
+        v.alpha = 0.4f
+        lock(v)
+    }
+
+    private fun lock(v: View) {
+        v.isEnabled = false
+        v.isClickable = false
+        v.isFocusable = false
+        if (v is ViewGroup) for (i in 0 until v.childCount) lock(v.getChildAt(i))
+    }
+
+    protected fun showDisabledBanner(view: View, text: String) {
+        val b = view.findView<TextView>("disabled_banner")
+        b.text = text
+        b.visibility = View.VISIBLE
+        b.applyOutlineBackground()
+    }
+
     protected fun setupSaveButton(view: View, onClick: () -> Unit) {
         val saveBtn: ImageButton? = view.findView("save_btn")
         saveBtn?.applyOutlineBackground()
@@ -86,83 +186,49 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val providerName = if (ApiUtils.isDrive()) "Google Drive" else "GitHub"
-        val status = when {
-            !ApiUtils.isLoggedIn() -> "Non configurato"
-            getKey<String>("backup_device") == "true" && getKey<String>("restore_device") == "true" -> "$providerName · backup e ripristino attivi"
-            getKey<String>("backup_device") == "true" -> "$providerName · backup attivo"
-            getKey<String>("restore_device") == "true" -> "$providerName · ripristino attivo"
-            else -> "$providerName · configurato"
-        }
-        view.findView<TextView>("header_status").text = status
+        val driveOn = ApiUtils.isLoggedIn() && ApiUtils.isDrive()
+        val githubOn = ApiUtils.isLoggedIn() && !ApiUtils.isDrive()
 
-        view.findView<View>("login_card").applyOutlineBackground()
-        view.findView<View>("prefs_card").applyOutlineBackground()
-        view.findView<View>("guide_card").applyOutlineBackground()
-
-        view.findView<View>("login_card").setOnClickListener {
-            val fm = requireActivity().supportFragmentManager
-            AlertDialog.Builder(requireContext())
-                .setTitle("Dove vuoi sincronizzare?")
-                .setItems(arrayOf("Google Drive (più semplice)", "GitHub")) { _, which ->
-                    if (which == 0) SyncDriveFragment().show(fm, "Drive")
-                    else SyncLoginFragment().show(fm, "Login")
-                }
-                .show()
+        view.findView<TextView>("header_status").text = when {
+            driveOn -> "Sincronizzazione attiva con Google Drive"
+            githubOn -> "Sincronizzazione attiva con GitHub"
+            else -> "Scegli dove sincronizzare"
         }
 
-        view.findView<View>("guide_card").setOnClickListener {
+        val driveCard = view.findView<View>("drive_card")
+        val githubCard = view.findView<View>("github_card")
+        val guideCard = view.findView<View>("guide_card")
+        driveCard.applyOutlineBackground()
+        githubCard.applyOutlineBackground()
+        guideCard.applyOutlineBackground()
+
+        view.findView<ImageView>("drive_icon_view").setImageDrawable(getDrawable("drive_icon"))
+        val ghIcon = view.findView<ImageView>("github_icon_view")
+        ghIcon.setImageDrawable(getDrawable("github_icon"))
+        // l'icona GitHub è bianca: la coloriamo come il testo del tema
+        ghIcon.setColorFilter(view.findView<TextView>("github_title").currentTextColor)
+
+        view.findView<TextView>("drive_summary").text = when {
+            driveOn -> "Collegato · tocca per gestire"
+            githubOn -> "Disattivato: esci da GitHub per usarlo"
+            else -> "Backup sul tuo Google Drive, senza token"
+        }
+        view.findView<TextView>("github_summary").text = when {
+            githubOn -> "Collegato · tocca per gestire"
+            driveOn -> "Disattivato: esci da Google Drive per usarlo"
+            else -> "Backup tramite progetto GitHub (token)"
+        }
+        // il servizio non attivo appare grigio ma resta apribile
+        if (githubOn) driveCard.alpha = 0.4f
+        if (driveOn) githubCard.alpha = 0.4f
+
+        val fm = requireActivity().supportFragmentManager
+        driveCard.setOnClickListener { SyncDriveFragment().show(fm, "Drive") }
+        githubCard.setOnClickListener { SyncLoginFragment().show(fm, "Login") }
+        guideCard.setOnClickListener {
             val url = "https://github.com/DieGon7771/ItaliaInStreaming/blob/master/guide/README_SyncStream.md"
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }
-
-        view.findView<View>("prefs_card").setOnClickListener {
-            SyncPrefsFragment().show(requireActivity().supportFragmentManager, "Prefs")
-        }
-    }
-}
-
-class SyncPrefsFragment : SyncBaseSettingsFragment() {
-
-    override val layoutName: String = "prefs"
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        view.findView<View>("prefs_body_card").applyOutlineBackground()
-
-        val intervals = listOf(10_000L, 15_000L, 30_000L, 60_000L)
-        val autoPullSwitch = view.findView<Switch>("auto_pull_switch")
-        val prefsOptions = view.findView<View>("auto_pull_options")
-
-        fun refreshPrefsUI() {
-            val enabled = getKey<Boolean>("auto_pull_enabled") ?: false
-            autoPullSwitch.isChecked = enabled
-            prefsOptions.visibility = if (enabled) View.VISIBLE else View.GONE
-            val current = getKey<Long>("auto_pull_seconds") ?: 30_000L
-            intervals.forEach { sec ->
-                view.findView<TextView>("auto_pull_${sec / 1000}_check").text =
-                    if (sec == current) "✓" else ""
-            }
-        }
-
-        refreshPrefsUI()
-
-        autoPullSwitch.setOnCheckedChangeListener { _, isChecked ->
-            setKey("auto_pull_enabled", isChecked)
-            prefsOptions.visibility = if (isChecked) View.VISIBLE else View.GONE
-        }
-
-        intervals.forEach { sec ->
-            view.findView<View>("auto_pull_${sec / 1000}_row").setOnClickListener {
-                setKey("auto_pull_seconds", sec)
-                refreshPrefsUI()
-            }
-        }
-
-        val closeBtn = view.findView<TextView>("close_btn")
-        closeBtn.background = getDrawable("outline")
-        closeBtn.setOnClickListener { dismiss() }
     }
 }
 
@@ -190,6 +256,10 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
             save(tokenInput, prNumInput, backupSwitch, restoreSwitch)
         }
 
+        val extra = view.findView<LinearLayout>("github_extra")
+        extra.applyOutlineBackground()
+        addAutoUpdate(extra)
+
         val resetBtn = view.findView<TextView>("reset_btn")
         val dangerDrawable = getDrawable("outline_danger")
         if (dangerDrawable != null) resetBtn.background = dangerDrawable else resetBtn.applyOutlineBackground()
@@ -197,8 +267,19 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
         resetBtn.setOnClickListener {
             setKey("sync_token", "")
             setKey("sync_project_num", "")
-            showToast("Credentials removed")
+            setKey("sync_project_id", "")
+            showToast("Disconnesso da GitHub")
             dismiss()
+        }
+
+        // se è attivo Google Drive, questa scheda è tutta grigia e non toccabile
+        if (ApiUtils.isLoggedIn() && ApiUtils.isDrive()) {
+            showDisabledBanner(view, "Stai usando Google Drive. Per usare GitHub esci prima da Google Drive.")
+            val root = view as ViewGroup
+            for (i in 0 until root.childCount) {
+                val c = root.getChildAt(i)
+                if (c.id != res.getIdentifier("disabled_banner", "id", BuildConfig.LIBRARY_PACKAGE_NAME)) disableAll(c)
+            }
         }
     }
 
@@ -273,15 +354,30 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
 
         view.findView<View>("drive_card").applyOutlineBackground()
         val statusTv = view.findView<TextView>("drive_status")
-        val loginBtn = view.findView<TextView>("drive_login_btn")
-        val backupSwitch = view.findView<Switch>("backup_device")
-        val restoreSwitch = view.findView<Switch>("restore_device")
+        val loginBtn = view.findView<LinearLayout>("drive_login_btn")
+        val loginText = view.findView<TextView>("drive_login_text")
+        val loginIcon = view.findView<ImageView>("drive_login_icon")
+        val box = view.findView<LinearLayout>("drive_switch_container")
+        loginIcon.setImageDrawable(getDrawable("google_icon"))
 
-        backupSwitch.text = "Backup dei dati sul cloud"
-        restoreSwitch.text = "Recupera dati dal cloud"
-        // alla prima configurazione sono entrambi attivi
-        backupSwitch.isChecked = (getKey<String>("backup_device") ?: "true") == "true"
-        restoreSwitch.isChecked = (getKey<String>("restore_device") ?: "true") == "true"
+        // valori correnti (alla prima configurazione tutto attivo)
+        var backupOn = (getKey<String>("backup_device") ?: "true") == "true"
+        var restoreOn = (getKey<String>("restore_device") ?: "true") == "true"
+        val cats = BackupUtils.ALL_CATS.associateWith { BackupUtils.catEnabled(it) }.toMutableMap()
+
+        addSwitchRow(box, "Backup dei dati su Drive", backupOn) { backupOn = it }
+        addSwitchRow(box, "Recupera dati da Drive", restoreOn) { restoreOn = it }
+        val title = TextView(requireContext()).apply {
+            text = "Cosa sincronizzare"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setPadding(dp(4), dp(14), dp(4), dp(2))
+        }
+        box.addView(title)
+        addSwitchRow(box, "Continua a guardare e progressi", cats.getValue(BackupUtils.CAT_RESUME)) { cats[BackupUtils.CAT_RESUME] = it }
+        addSwitchRow(box, "Preferiti e liste", cats.getValue(BackupUtils.CAT_LIBRARY)) { cats[BackupUtils.CAT_LIBRARY] = it }
+        addSwitchRow(box, "Impostazioni dell'app", cats.getValue(BackupUtils.CAT_SETTINGS)) { cats[BackupUtils.CAT_SETTINGS] = it }
+        addAutoUpdate(box)
 
         fun refresh() {
             val logged = ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()
@@ -290,18 +386,23 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
                 logged -> "Collegato a Google Drive"
                 else -> "Non collegato"
             }
-            loginBtn.text = if (logged) "ACCEDI DI NUOVO" else "ACCEDI CON GOOGLE"
+            loginText.text = if (logged) "ACCEDI DI NUOVO" else "ACCEDI CON GOOGLE"
         }
         refresh()
 
         loginBtn.applyOutlineBackground()
-        loginBtn.setOnClickListener { startLogin(backupSwitch.isChecked, restoreSwitch.isChecked) { refresh() } }
+        fun saveAll() {
+            setKey("backup_device", "$backupOn")
+            setKey("restore_device", "$restoreOn")
+            cats.forEach { (k, v) -> BackupUtils.setCat(k, v) }
+        }
+        loginBtn.setOnClickListener { saveAll(); startLogin(backupOn, restoreOn) { refresh() } }
 
         setupSaveButton(view) {
-            setKey("backup_device", "${backupSwitch.isChecked}")
-            setKey("restore_device", "${restoreSwitch.isChecked}")
-            showToast(if (ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()) "Impostazioni salvate" else "Salvato. Ora accedi con Google")
-            if (ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()) dismiss()
+            saveAll()
+            val logged = ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()
+            showToast(if (logged) "Impostazioni salvate" else "Salvato. Ora accedi con Google")
+            if (logged) dismiss()
         }
 
         val resetBtn = view.findView<TextView>("reset_btn")
@@ -312,6 +413,17 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
             GoogleDriveApi.logout()
             showToast("Disconnesso da Google Drive")
             dismiss()
+        }
+
+        // se è attivo GitHub, questa scheda è tutta grigia e non toccabile
+        if (ApiUtils.isLoggedIn() && !ApiUtils.isDrive()) {
+            showDisabledBanner(view, "Stai usando GitHub. Per usare Google Drive esci prima da GitHub.")
+            val root = view as ViewGroup
+            val bannerId = res.getIdentifier("disabled_banner", "id", BuildConfig.LIBRARY_PACKAGE_NAME)
+            for (i in 0 until root.childCount) {
+                val c = root.getChildAt(i)
+                if (c.id != bannerId) disableAll(c)
+            }
         }
     }
 
