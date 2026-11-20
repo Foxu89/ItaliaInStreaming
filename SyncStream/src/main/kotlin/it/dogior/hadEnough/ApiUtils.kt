@@ -116,7 +116,7 @@ object ApiUtils {
                 return false
             }
             BackupUtils.restore(context, backup, true, true)
-            if (BackupUtils.catEnabled(BackupUtils.CAT_RESUME)) reconcileResumeWatching(context, backup)
+            if (BackupUtils.catEnabled(BackupUtils.CAT_RESUME, false)) reconcileResumeWatching(context, backup)
             setKey("sync_last_restore_at", if (updatedAt > 0L) updatedAt else System.currentTimeMillis())
             Log.i(TAG, "📥 restore applicato ✅ (updatedAt=$updatedAt)")
             return true

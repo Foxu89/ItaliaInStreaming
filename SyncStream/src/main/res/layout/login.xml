@@ -88,7 +88,7 @@
             android:id="@+id/backup_device"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Backup dei dati sul cloud"
+            android:text="Backup (invia i dati)"
             android:textSize="17sp"
             android:padding="5dp"
             android:layout_marginTop="10dp"
@@ -98,7 +98,7 @@
             android:id="@+id/restore_device"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Recupera dati dal cloud"
+            android:text="Ripristino (ricevi i dati)"
             android:textSize="17sp"
             android:padding="5dp"
             android:layout_marginBottom="10dp"
@@ -124,6 +124,6 @@
         android:minHeight="48dp"
         android:paddingHorizontal="18dp"
         android:paddingVertical="12dp"
-        android:text="RIMUOVI CREDENZIALI"
+        android:text="ESCI DA GITHUB"
         android:textStyle="bold" />
 </LinearLayout>

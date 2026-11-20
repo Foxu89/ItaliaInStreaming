@@ -102,10 +102,8 @@ object BackupUtils {
         "auto_pull_enabled",
         "auto_pull_seconds",
         "sync_cat_",
-        "download_info",
         "download_resume",
         "download_q_resume",
-        "download_episode_cache",
         "prerelease_update",
         "data_store_helper/account_key_index",
         "VERSION_NAME",
@@ -151,13 +149,25 @@ object BackupUtils {
     const val CAT_SETTINGS = "settings"
     const val CAT_RESUME = "resume"
     const val CAT_LIBRARY = "library"
-    val ALL_CATS = listOf(CAT_SETTINGS, CAT_RESUME, CAT_LIBRARY)
+    const val CAT_SEARCH = "search"
+    const val CAT_SUBS = "subtitles"
+    const val CAT_DOWNLOADS = "downloads"
+    const val CAT_EXT = "extensions"
+    val ALL_CATS = listOf(CAT_RESUME, CAT_LIBRARY, CAT_SEARCH, CAT_SUBS, CAT_SETTINGS, CAT_DOWNLOADS, CAT_EXT)
 
-    fun catEnabled(cat: String): Boolean = getKey<Boolean>("sync_cat_$cat") ?: true
+    /** Categorie sperimentali: spente di default e con avviso prima dell'attivazione. */
+    val EXPERIMENTAL_CATS = setOf(CAT_DOWNLOADS, CAT_EXT)
 
-    fun setCat(cat: String, v: Boolean) = setKey("sync_cat_$cat", v)
+    /** Ogni categoria ha due interruttori: backup (invia) e ripristino (ricevi). */
+    fun catEnabled(cat: String, backup: Boolean): Boolean =
+        getKey<Boolean>("sync_cat_${if (backup) "b" else "r"}_$cat")
+            ?: getKey<Boolean>("sync_cat_$cat") // vecchio valore unico (v14)
+            ?: (CAT_EXT !in setOf(cat) && CAT_DOWNLOADS !in setOf(cat)) // sperimentali: spente
 
-    fun enabledCats(): List<String> = ALL_CATS.filter { catEnabled(it) }
+    fun setCat(cat: String, backup: Boolean, v: Boolean) =
+        setKey("sync_cat_${if (backup) "b" else "r"}_$cat", v)
+
+    fun enabledCats(backup: Boolean = true): List<String> = ALL_CATS.filter { catEnabled(it, backup) }
 
     private val resumeMarkers = listOf(
         "video_pos_dur", "resume_watching", "result_season", "result_dub",
@@ -165,8 +175,15 @@ object BackupUtils {
     )
 
     /** Categoria di una chiave: impostazioni app, continua a guardare, preferiti/liste. */
+    private val subsMarkers = listOf("subtitle", "subs_", "sub_")
+
+    /** Categoria di una chiave. */
     fun catOf(key: String, isSettings: Boolean): String = when {
+        subsMarkers.any { key.contains(it, ignoreCase = true) } -> CAT_SUBS
         isSettings -> CAT_SETTINGS
+        key.contains("download_info") || key.contains("download_episode_cache") -> CAT_DOWNLOADS
+        key.contains("REPOSITORIES_KEY") -> CAT_EXT
+        key.contains("search_history") -> CAT_SEARCH
         resumeMarkers.any { key.contains(it) } -> CAT_RESUME
         else -> CAT_LIBRARY
     }
@@ -217,9 +234,9 @@ object BackupUtils {
         val allData = context.getSharedPrefs().all.filter {
             it.key.isBackup(resumeWatching) && catOf(it.key, false) in cats
         }
-        val allSettings = if (CAT_SETTINGS in cats)
-            context.getDefaultSharedPrefs().all.filter { it.key.isBackup(resumeWatching) }
-        else emptyMap()
+        val allSettings = context.getDefaultSharedPrefs().all.filter {
+            it.key.isBackup(resumeWatching) && catOf(it.key, true) in cats
+        }
 
         val allDataSorted = BackupVars(
             allData.filter { it.value is Boolean } as? Map<String, Boolean>,
@@ -270,11 +287,11 @@ object BackupUtils {
         restoreDataStore: Boolean
     ) {
         if (context == null) return
-        val cats = enabledCats()
+        val cats = enabledCats(false)
         val backupFile = backupFile.let { b ->
             BackupFile(
                 b.datastore.pick { filterCats(it, false, cats) },
-                if (CAT_SETTINGS in cats) b.settings else b.settings.pick { emptyMap() }
+                b.settings.pick { filterCats(it, true, cats) }
             )
         }
         if (restoreSettings) {

@@ -17,6 +17,7 @@ import android.graphics.Typeface
 import android.view.Gravity
 import android.widget.CompoundButton
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ImageButton
@@ -113,21 +114,94 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
         return sw
     }
 
+
+    /** Tabella "cosa sincronizzare": per ogni categoria un interruttore Backup e uno Ripristino. */
+    protected fun addCategoryTable(parent: LinearLayout) {
+        val ctx = parent.context
+        val title = TextView(ctx).apply {
+            text = "Cosa sincronizzare"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setPadding(dp(4), dp(14), dp(4), dp(2))
+        }
+        parent.addView(title)
+        fun head(t: String, w: Float, g: Int) = TextView(ctx).apply {
+            text = t; textSize = 12f; alpha = 0.7f; gravity = g
+            layoutParams = LinearLayout.LayoutParams(if (w == 0f) dp(64) else 0, ViewGroup.LayoutParams.WRAP_CONTENT, w)
+        }
+        val header = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(4), dp(2), dp(4), dp(0))
+            addView(head("", 1f, Gravity.START))
+            addView(head("Backup", 0f, Gravity.CENTER))
+            addView(head("Ripristino", 0f, Gravity.CENTER))
+        }
+        parent.addView(header)
+        val names = mapOf(
+            BackupUtils.CAT_RESUME to "Continua a guardare e progressi",
+            BackupUtils.CAT_LIBRARY to "Preferiti e liste",
+            BackupUtils.CAT_SEARCH to "Cronologia ricerche",
+            BackupUtils.CAT_SUBS to "Impostazioni sottotitoli",
+            BackupUtils.CAT_SETTINGS to "Impostazioni dell'app",
+            BackupUtils.CAT_DOWNLOADS to "Download (sperimentale)",
+            BackupUtils.CAT_EXT to "Estensioni: repository (sperimentale)"
+        )
+        val warnings = mapOf(
+            BackupUtils.CAT_DOWNLOADS to "Sincronizza solo l'elenco dei download, non i file video. Sugli altri dispositivi possono comparire download senza file.",
+            BackupUtils.CAT_EXT to "Sincronizza l'elenco dei repository di estensioni. I plugin vanno poi installati a mano su ogni dispositivo."
+        )
+        BackupUtils.ALL_CATS.forEach { cat ->
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(4), dp(6), dp(4), dp(6))
+            }
+            row.addView(TextView(ctx).apply {
+                text = names.getValue(cat); textSize = 15f
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            listOf(true, false).forEach { isBackup ->
+                val box = FrameLayout(ctx).apply { layoutParams = LinearLayout.LayoutParams(dp(64), ViewGroup.LayoutParams.WRAP_CONTENT) }
+                val sw = makeSwitch(ctx).apply {
+                    isChecked = BackupUtils.catEnabled(cat, isBackup)
+                    var silent = false
+                    setOnCheckedChangeListener { b, c ->
+                        if (silent) return@setOnCheckedChangeListener
+                        if (c && cat in BackupUtils.EXPERIMENTAL_CATS) {
+                            AlertDialog.Builder(ctx)
+                                .setTitle("Funzione sperimentale")
+                                .setMessage("Questa opzione è instabile e ancora in prova.\n\n${warnings[cat]}\n\nVuoi attivarla?")
+                                .setPositiveButton("Attiva") { _, _ -> BackupUtils.setCat(cat, isBackup, true) }
+                                .setNegativeButton("Annulla") { _, _ -> silent = true; b.isChecked = false; silent = false }
+                                .setCancelable(false)
+                                .show()
+                        } else BackupUtils.setCat(cat, isBackup, c)
+                    }
+                    layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+                }
+                box.addView(sw)
+                row.addView(box)
+            }
+            parent.addView(row)
+        }
+    }
+
     /** Aggiornamento continuo: interruttore + scelta dell'intervallo (10/15/30/60 s). */
     protected fun addAutoUpdate(parent: LinearLayout) {
         val ctx = parent.context
-        val intervals = listOf(10_000L, 15_000L, 30_000L, 60_000L)
+        val intervals = listOf(20_000L, 30_000L, 60_000L)
         val options = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(4), 0, dp(4), dp(4)) }
         val chips = intervals.map { ms ->
             TextView(ctx).apply {
-                text = "${ms / 1000}s"
+                text = if (ms >= 60_000L) "1 min" else "${ms / 1000} sec"
                 gravity = Gravity.CENTER
                 setPadding(dp(14), dp(10), dp(14), dp(10))
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) }
             }
         }
         fun refresh() {
-            val cur = getKey<Long>("auto_pull_seconds") ?: 30_000L
+            var cur = getKey<Long>("auto_pull_seconds") ?: 30_000L
+            if (cur !in intervals) { cur = 20_000L; setKey("auto_pull_seconds", cur) } // 10/15 s non più disponibili
             chips.forEachIndexed { i, tv ->
                 tv.background = getDrawable("outline")
                 tv.alpha = if (intervals[i] == cur) 1f else 0.45f
@@ -144,7 +218,7 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
         refresh()
         val on = getKey<Boolean>("auto_pull_enabled") ?: false
         options.visibility = if (on) View.VISIBLE else View.GONE
-        addSwitchRow(parent, "Aggiornamento automatico (controlla i cambiamenti ogni pochi secondi)", on) {
+        addSwitchRow(parent, "Aggiornamento automatico", on) {
             setKey("auto_pull_enabled", it)
             options.visibility = if (it) View.VISIBLE else View.GONE
         }
@@ -246,10 +320,10 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
         val prNumInput = view.findView<EditText>("project_num")
         prNumInput.setText(getKey<String>("sync_project_num"))
         val backupSwitch = view.findView<Switch>("backup_device")
-        backupSwitch.text = "Backup dei dati sul cloud"
+        backupSwitch.text = "Backup su GitHub (invia i dati di questo dispositivo)"
         backupSwitch.isChecked = getKey<String>("backup_device") == "true"
         val restoreSwitch = view.findView<Switch>("restore_device")
-        restoreSwitch.text = "Recupera dati dal cloud"
+        restoreSwitch.text = "Ripristino da GitHub (ricevi i dati degli altri dispositivi)"
         restoreSwitch.isChecked = getKey<String>("restore_device") == "true"
 
         setupSaveButton(view) {
@@ -258,6 +332,7 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
 
         val extra = view.findView<LinearLayout>("github_extra")
         extra.applyOutlineBackground()
+        addCategoryTable(extra)
         addAutoUpdate(extra)
 
         val resetBtn = view.findView<TextView>("reset_btn")
@@ -292,7 +367,7 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
         val token = tokenInput.text.trim().toString()
         val prNum = prNumInput.text.toString()
         if (token.isEmpty() || prNum.isEmpty()) {
-            showToast("Please fill in all information")
+            showToast("Inserisci token e numero del progetto")
             return
         }
         setKey("sync_provider", "github")
@@ -324,7 +399,7 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     loadingDialog.dismiss()
-                    showToast("Error syncing: ${e.message}")
+                    showToast("Errore di sincronizzazione: ${e.message}")
                 }
             }
         }
@@ -363,20 +438,10 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
         // valori correnti (alla prima configurazione tutto attivo)
         var backupOn = (getKey<String>("backup_device") ?: "true") == "true"
         var restoreOn = (getKey<String>("restore_device") ?: "true") == "true"
-        val cats = BackupUtils.ALL_CATS.associateWith { BackupUtils.catEnabled(it) }.toMutableMap()
 
-        addSwitchRow(box, "Backup dei dati su Drive", backupOn) { backupOn = it }
-        addSwitchRow(box, "Recupera dati da Drive", restoreOn) { restoreOn = it }
-        val title = TextView(requireContext()).apply {
-            text = "Cosa sincronizzare"
-            textSize = 14f
-            setTypeface(null, Typeface.BOLD)
-            setPadding(dp(4), dp(14), dp(4), dp(2))
-        }
-        box.addView(title)
-        addSwitchRow(box, "Continua a guardare e progressi", cats.getValue(BackupUtils.CAT_RESUME)) { cats[BackupUtils.CAT_RESUME] = it }
-        addSwitchRow(box, "Preferiti e liste", cats.getValue(BackupUtils.CAT_LIBRARY)) { cats[BackupUtils.CAT_LIBRARY] = it }
-        addSwitchRow(box, "Impostazioni dell'app", cats.getValue(BackupUtils.CAT_SETTINGS)) { cats[BackupUtils.CAT_SETTINGS] = it }
+        addSwitchRow(box, "Backup su Drive (invia i dati di questo dispositivo)", backupOn) { backupOn = it }
+        addSwitchRow(box, "Ripristino da Drive (ricevi i dati degli altri dispositivi)", restoreOn) { restoreOn = it }
+        addCategoryTable(box)
         addAutoUpdate(box)
 
         fun refresh() {
@@ -394,7 +459,6 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
         fun saveAll() {
             setKey("backup_device", "$backupOn")
             setKey("restore_device", "$restoreOn")
-            cats.forEach { (k, v) -> BackupUtils.setCat(k, v) }
         }
         loginBtn.setOnClickListener { saveAll(); startLogin(backupOn, restoreOn) { refresh() } }
 
