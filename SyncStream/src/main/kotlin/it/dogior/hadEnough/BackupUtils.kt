@@ -156,13 +156,13 @@ object BackupUtils {
     val ALL_CATS = listOf(CAT_RESUME, CAT_LIBRARY, CAT_SEARCH, CAT_SUBS, CAT_SETTINGS, CAT_DOWNLOADS, CAT_EXT)
 
     /** Categorie sperimentali: spente di default e con avviso prima dell'attivazione. */
-    val EXPERIMENTAL_CATS = setOf(CAT_DOWNLOADS, CAT_EXT)
+    val EXPERIMENTAL_CATS = setOf(CAT_DOWNLOADS)
 
     /** Ogni categoria ha due interruttori: backup (invia) e ripristino (ricevi). */
     fun catEnabled(cat: String, backup: Boolean): Boolean =
         getKey<Boolean>("sync_cat_${if (backup) "b" else "r"}_$cat")
             ?: getKey<Boolean>("sync_cat_$cat") // vecchio valore unico (v14)
-            ?: (CAT_EXT !in setOf(cat) && CAT_DOWNLOADS !in setOf(cat)) // sperimentali: spente
+            ?: (cat != CAT_DOWNLOADS) // solo i download sono spenti di default
 
     fun setCat(cat: String, backup: Boolean, v: Boolean) =
         setKey("sync_cat_${if (backup) "b" else "r"}_$cat", v)

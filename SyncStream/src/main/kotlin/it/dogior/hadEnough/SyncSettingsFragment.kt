@@ -144,11 +144,10 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
             BackupUtils.CAT_SUBS to "Impostazioni sottotitoli",
             BackupUtils.CAT_SETTINGS to "Impostazioni dell'app",
             BackupUtils.CAT_DOWNLOADS to "Download (sperimentale)",
-            BackupUtils.CAT_EXT to "Estensioni: repository (sperimentale)"
+            BackupUtils.CAT_EXT to "Repository"
         )
         val warnings = mapOf(
-            BackupUtils.CAT_DOWNLOADS to "Sincronizza solo l'elenco dei download, non i file video. Sugli altri dispositivi possono comparire download senza file.",
-            BackupUtils.CAT_EXT to "Sincronizza l'elenco dei repository di estensioni. I plugin vanno poi installati a mano su ogni dispositivo."
+            BackupUtils.CAT_DOWNLOADS to "Sincronizza solo l'elenco dei download, non i file video. Sugli altri dispositivi possono comparire download senza file."
         )
         BackupUtils.ALL_CATS.forEach { cat ->
             val row = LinearLayout(ctx).apply {
@@ -319,15 +318,14 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
         tokenInput.setText(getKey<String>("sync_token"))
         val prNumInput = view.findView<EditText>("project_num")
         prNumInput.setText(getKey<String>("sync_project_num"))
-        val backupSwitch = view.findView<Switch>("backup_device")
-        backupSwitch.text = "Backup su GitHub (invia i dati di questo dispositivo)"
-        backupSwitch.isChecked = getKey<String>("backup_device") == "true"
-        val restoreSwitch = view.findView<Switch>("restore_device")
-        restoreSwitch.text = "Ripristino da GitHub (ricevi i dati degli altri dispositivi)"
-        restoreSwitch.isChecked = getKey<String>("restore_device") == "true"
+        val deviceBox = view.findView<LinearLayout>("device_switch_container")
+        var backupOn = getKey<String>("backup_device") == "true"
+        var restoreOn = getKey<String>("restore_device") == "true"
+        addSwitchRow(deviceBox, "Backup su GitHub (invia i dati di questo dispositivo)", backupOn) { backupOn = it }
+        addSwitchRow(deviceBox, "Ripristino da GitHub (ricevi i dati degli altri dispositivi)", restoreOn) { restoreOn = it }
 
         setupSaveButton(view) {
-            save(tokenInput, prNumInput, backupSwitch, restoreSwitch)
+            save(tokenInput, prNumInput, backupOn, restoreOn)
         }
 
         val extra = view.findView<LinearLayout>("github_extra")
@@ -361,8 +359,8 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
     private fun save(
         tokenInput: EditText,
         prNumInput: EditText,
-        backupSwitch: Switch,
-        restoreSwitch: Switch
+        backupOn: Boolean,
+        restoreOn: Boolean
     ) {
         val token = tokenInput.text.trim().toString()
         val prNum = prNumInput.text.toString()
@@ -373,8 +371,8 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
         setKey("sync_provider", "github")
         setKey("sync_token", token)
         setKey("sync_project_num", prNum)
-        setKey("backup_device", "${backupSwitch.isChecked}")
-        setKey("restore_device", "${restoreSwitch.isChecked}")
+        setKey("backup_device", "$backupOn")
+        setKey("restore_device", "$restoreOn")
 
         val ctx = requireContext()
         val loadingDialog = AlertDialog.Builder(ctx)
