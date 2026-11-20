@@ -45,7 +45,6 @@ object ApiUtils {
         }
     }
 
-    /** "github" (predefinito, come prima) oppure "gdrive". */
     fun provider(): String = getKey<String>("sync_provider")?.takeIf { it.isNotBlank() } ?: "github"
 
     fun isDrive(): Boolean = provider() == "gdrive"
@@ -59,7 +58,6 @@ object ApiUtils {
         return !(token.isNullOrEmpty() || projectNum.isNullOrEmpty() || projectId.isNullOrEmpty())
     }
 
-    /** Envelope valido solo se ha un updatedAt reale e un backup non nullo. */
     private fun parseEnvelope(raw: String?): SyncEnvelope? {
         if (raw.isNullOrBlank()) return null
         return try {
@@ -70,7 +68,6 @@ object ApiUtils {
         }
     }
 
-    /** Backup nel vecchio formato (prima dell'introduzione dell'envelope). */
     private fun parseLegacyBackup(raw: String?): BackupFile? {
         if (raw.isNullOrBlank()) return null
         return try {
@@ -95,11 +92,6 @@ object ApiUtils {
         }
     }
 
-    /**
-     * Ripristina (non distruttivo) il backup dal cloud: il backup viene applicato
-     * solo se il JSON è valido e più recente dell'ultimo restore locale, senza
-     * cancellare nulla in anticipo.
-     */
     fun restoreFromDevice(context: Context?, device: SyncDevice): Boolean {
         if (context == null) return false
         try {
@@ -126,23 +118,12 @@ object ApiUtils {
         }
     }
 
-    /**
-     * Riconciliazione a snapshot del "Continua a guardare": dopo il restore (che
-     * è solo-merge e non elimina mai), rimuove localmente i resume item che non
-     * sono più presenti nel backup. Così le cancellazioni si propagano a tutti
-     * i dispositivi. Elimina anche le relative chiavi stagione/episodio/dub.
-     *
-     * Lavora direttamente sulle SharedPreferences (come BackupUtils) usando le
-     * stringhe delle cartelle, senza dipendere da costanti interne non esposte
-     * dall'artefatto pre-release di CloudStream su cui compila il plugin.
-     */
     private fun reconcileResumeWatching(context: Context, backup: BackupFile) {
         val resumeFolder = "result_resume_watching_2"
         val seasonFolder = "result_season"
         val episodeFolder = "result_episode"
         val dubFolder = "result_dub"
 
-        // account -> id presenti nel backup (chiavi "account/folder/id")
         val backupIdsByAccount = mutableMapOf<String, Set<Int>>()
         backup.datastore.string?.keys?.forEach { key ->
             val parts = key.split("/")
@@ -184,8 +165,6 @@ object ApiUtils {
         val projectId = res.data?.viewer?.projectV2?.id ?: return failure
         setKey("sync_project_id", projectId)
 
-        // Modello "nodo unico condiviso": tutti i dispositivi usano il nodo
-        // DraftIssue più recente del progetto come "nuvola".
         val devices: List<SyncDevice>? = fetchDevices()
         val node: SyncDevice? = devices?.firstOrNull()
         if (node != null) {
@@ -195,7 +174,6 @@ object ApiUtils {
                 restoreFromDevice(context, node)
             }
         } else if (getKey<String>("backup_device") == "true") {
-            // nessun nodo valido: lo creiamo come nuova "nuvola"
             val envelope = buildEnvelope(context, getResumeWatching())
                 ?: return false to "Backup non disponibile"
             val data = Base64.encodeToString(envelope.toJson().toByteArray(), Base64.URL_SAFE or Base64.NO_WRAP)
@@ -213,10 +191,6 @@ object ApiUtils {
         return true to "Dispositivo registrato correttamente"
     }
 
-    /**
-     * Collegamento a Google Drive: se su Drive c'e' gia' un backup lo ripristina (se "recupera" e' attivo),
-     * altrimenti crea il backup di questo dispositivo (se "backup" e' attivo).
-     */
     suspend fun syncDriveDetails(context: Context?): Pair<Boolean, String?> {
         val read = GoogleDriveApi.readBackup()
         if (!read.ok) return false to "Impossibile leggere Google Drive"
@@ -240,7 +214,6 @@ object ApiUtils {
         return if (result.first) true to "Google Drive collegato" else result
     }
 
-    /** Costruisce lo snapshot da caricare, mantenendo nel cloud le categorie disattivate qui. */
     suspend fun buildEnvelope(context: Context?, resume: List<com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult>?): SyncEnvelope? {
         val local = BackupUtils.getBackup(context, resume) ?: return null
         val cats = BackupUtils.enabledCats()
@@ -266,11 +239,6 @@ object ApiUtils {
         return true to "Sync success"
     }
 
-    /**
-     * Ritorna la lista dei DraftIssue del progetto, difensivo: salta i nodi che
-     * non sono DraftIssue e quelli il cui body non è base64 decodificabile.
-     * Ordinati dal più recente al meno recente.
-     */
     suspend fun fetchDevices(): List<SyncDevice>? {
         if (!isLoggedIn()) return null
         if (isDrive()) {

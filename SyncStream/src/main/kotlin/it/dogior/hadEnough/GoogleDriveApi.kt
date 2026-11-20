@@ -42,14 +42,8 @@ data class GFile(@JsonProperty("id") val id: String? = null)
 
 data class GFiles(@JsonProperty("files") val files: List<GFile>? = null)
 
-/** Risultato di una lettura: ok=false = errore di rete/accesso; ok=true e content=null = nessun backup su Drive. */
 data class DriveRead(val ok: Boolean, val content: String?)
 
-/**
- * Sincronizzazione tramite Google Drive.
- * Accesso con il "device flow" (codice + google.com/device) e permesso drive.appdata:
- * il backup sta nella cartella nascosta dell'app nel Drive dell'utente.
- */
 object GoogleDriveApi {
     private const val TAG = "SyncStream"
     private const val SCOPE_APPDATA = "https://www.googleapis.com/auth/drive.appdata"
@@ -62,7 +56,6 @@ object GoogleDriveApi {
 
     private val lock = Mutex()
 
-    /** Ultimo errore di requestDeviceCode (mostrato all'utente per capire cosa non va). */
     @Volatile
     var lastError: String? = null
 
@@ -94,16 +87,9 @@ object GoogleDriveApi {
         }
     }
 
-    // ------------------------------------------------------------ accesso
-
-    /** Scope per cui e' stato ottenuto l'ultimo codice (salvato al termine del login). */
     @Volatile
     private var pendingScope: String = SCOPE_APPDATA
 
-    /**
-     * Prova prima la cartella nascosta dell'app (drive.appdata); se Google rifiuta quell'ambito
-     * nel flusso con codice, ripiega su drive.file (un file "syncstream_backup.json" nel Drive).
-     */
     suspend fun requestDeviceCode(): GDeviceCodeRes? {
         val first = requestDeviceCode(SCOPE_APPDATA)
         if (first != null) {
@@ -140,7 +126,6 @@ object GoogleDriveApi {
         return res
     }
 
-    /** Aspetta che l'utente autorizzi su google.com/device. Si interrompe se la coroutine viene annullata. */
     suspend fun pollToken(code: GDeviceCodeRes): Pair<Boolean, String?> {
         var interval = (code.interval ?: 5).coerceAtLeast(5)
         val deadline = System.currentTimeMillis() + (code.expiresIn ?: 600) * 1000L
@@ -200,11 +185,8 @@ object GoogleDriveApi {
         }
     }
 
-    // ------------------------------------------------------------ file su Drive
-
     private class Found(val ok: Boolean, val id: String?)
 
-    /** true = cartella nascosta dell'app; false = file normale nel Drive (ambito drive.file). */
     private fun useAppData(): Boolean = getKey<String>("gdrive_scope") != SCOPE_FILE
 
     private fun cachedId(): String? = getKey<String>("gdrive_file_id")?.takeIf { it.isNotBlank() }
@@ -212,7 +194,6 @@ object GoogleDriveApi {
     private fun auth(token: String) = "Bearer $token"
 
     private suspend fun findFile(token: String): Found {
-        // il piu' vecchio: se due dispositivi creassero il file insieme, tutti scelgono lo stesso
         val url = FILES_URL.toHttpUrlOrNull()
             ?.newBuilder()
             ?.addQueryParameter("spaces", if (useAppData()) "appDataFolder" else "drive")
@@ -259,7 +240,6 @@ object GoogleDriveApi {
                 .build()
         ).first
 
-    /** Legge il backup da Drive. */
     suspend fun readBackup(): DriveRead {
         val token = accessToken() ?: return DriveRead(false, null)
         cachedId()?.let { id ->
@@ -276,7 +256,6 @@ object GoogleDriveApi {
         return if (code == 200) DriveRead(true, body) else DriveRead(false, null)
     }
 
-    /** Scrive il backup su Drive (crea il file se non esiste). */
     suspend fun writeBackup(content: String): Pair<Boolean, String?> {
         val token = accessToken() ?: return false to "Accesso a Google non valido: rifai il login"
         repeat(2) {

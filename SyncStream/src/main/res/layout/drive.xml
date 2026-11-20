@@ -105,7 +105,6 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <!-- gli interruttori li crea il codice (stesso stile di Nuvio) -->
                 <LinearLayout
                     android:id="@+id/drive_switch_container"
                     android:layout_width="match_parent"

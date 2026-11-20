@@ -84,7 +84,6 @@ object BackupUtils {
         "library_folder",
         "result_resume_watching_migrated",
         "jsdelivr_proxy_key",
-        //custom
         "fshare_setup",
         "fshare_token",
         "bluphim_token",
@@ -145,7 +144,6 @@ object BackupUtils {
         return check
     }
 
-    // ---- categorie sincronizzabili ----
     const val CAT_SETTINGS = "settings"
     const val CAT_RESUME = "resume"
     const val CAT_LIBRARY = "library"
@@ -155,14 +153,12 @@ object BackupUtils {
     const val CAT_EXT = "extensions"
     val ALL_CATS = listOf(CAT_RESUME, CAT_LIBRARY, CAT_SEARCH, CAT_SUBS, CAT_SETTINGS, CAT_DOWNLOADS, CAT_EXT)
 
-    /** Categorie sperimentali: spente di default e con avviso prima dell'attivazione. */
     val EXPERIMENTAL_CATS = setOf(CAT_DOWNLOADS)
 
-    /** Ogni categoria ha due interruttori: backup (invia) e ripristino (ricevi). */
     fun catEnabled(cat: String, backup: Boolean): Boolean =
         getKey<Boolean>("sync_cat_${if (backup) "b" else "r"}_$cat")
-            ?: getKey<Boolean>("sync_cat_$cat") // vecchio valore unico (v14)
-            ?: (cat != CAT_DOWNLOADS) // solo i download sono spenti di default
+            ?: getKey<Boolean>("sync_cat_$cat")
+            ?: (cat != CAT_DOWNLOADS)
 
     fun setCat(cat: String, backup: Boolean, v: Boolean) =
         setKey("sync_cat_${if (backup) "b" else "r"}_$cat", v)
@@ -174,10 +170,8 @@ object BackupUtils {
         "result_episode", "download_header_cache"
     )
 
-    /** Categoria di una chiave: impostazioni app, continua a guardare, preferiti/liste. */
     private val subsMarkers = listOf("subtitle", "subs_", "sub_")
 
-    /** Categoria di una chiave. */
     fun catOf(key: String, isSettings: Boolean): String = when {
         subsMarkers.any { key.contains(it, ignoreCase = true) } -> CAT_SUBS
         isSettings -> CAT_SETTINGS
@@ -212,11 +206,6 @@ object BackupUtils {
         (stringSet.orEmpty() + o.stringSet.orEmpty()),
     )
 
-    /**
-     * Le categorie disattivate su questo dispositivo non vengono toccate nel cloud:
-     * si riprendono dallo snapshot già presente, così un dispositivo con meno
-     * categorie attive non cancella i dati degli altri.
-     */
     fun carryOver(local: BackupFile, cloud: BackupFile?, cats: Collection<String>): BackupFile {
         if (cloud == null) return local
         val off = ALL_CATS.filter { it !in cats }

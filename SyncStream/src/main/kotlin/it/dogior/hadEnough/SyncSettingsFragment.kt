@@ -3,7 +3,10 @@
 package it.dogior.hadEnough
 
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -20,6 +23,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.KeyEvent
 import android.graphics.Typeface
 import android.view.Gravity
 import android.widget.CompoundButton
@@ -86,8 +90,19 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
         this.background = getDrawable("outline")
     }
 
+    protected fun focusBackground(): Drawable {
+        val focused = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(12).toFloat()
+            setColor(0x22FFFFFF)
+            setStroke(dp(2), 0x88FFFFFF.toInt())
+        }
+        return StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_focused), focused)
+            addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
+        }
+    }
 
-    /** Interruttore nuovo stile (MaterialSwitch, come Nuvio); se non disponibile usa il Switch classico. */
     protected fun makeSwitch(ctx: Context): CompoundButton {
         return try {
             Class.forName("com.google.android.material.materialswitch.MaterialSwitch")
@@ -99,13 +114,15 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
 
     protected fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    /** Riga "testo + interruttore" aggiunta a [parent]. */
     protected fun addSwitchRow(parent: LinearLayout, label: String, initial: Boolean, onChange: (Boolean) -> Unit): CompoundButton {
         val ctx = parent.context
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(4), dp(8), dp(4), dp(8))
+            isFocusable = true
+            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            background = focusBackground()
         }
         val tv = TextView(ctx).apply {
             text = label
@@ -123,8 +140,6 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
         return sw
     }
 
-
-    /** Tabella "cosa sincronizzare": per ogni categoria un interruttore Backup e uno Ripristino. */
     protected fun addCategoryTable(parent: LinearLayout) {
         val ctx = parent.context
         val title = TextView(ctx).apply {
@@ -172,6 +187,7 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
                 val box = FrameLayout(ctx).apply { layoutParams = LinearLayout.LayoutParams(dp(64), ViewGroup.LayoutParams.WRAP_CONTENT) }
                 val sw = makeSwitch(ctx).apply {
                     isChecked = BackupUtils.catEnabled(cat, isBackup)
+                    background = focusBackground()
                     var silent = false
                     setOnCheckedChangeListener { b, c ->
                         if (silent) return@setOnCheckedChangeListener
@@ -194,7 +210,6 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
         }
     }
 
-    /** Aggiornamento continuo: interruttore + scelta dell'intervallo (10/15/30/60 s). */
     protected fun addAutoUpdate(parent: LinearLayout) {
         val ctx = parent.context
         val intervals = listOf(20_000L, 30_000L, 60_000L)
@@ -204,12 +219,13 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
                 text = if (ms >= 60_000L) "1 min" else "${ms / 1000} sec"
                 gravity = Gravity.CENTER
                 setPadding(dp(14), dp(10), dp(14), dp(10))
+                isFocusable = true
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) }
             }
         }
         fun refresh() {
             var cur = getKey<Long>("auto_pull_seconds") ?: 30_000L
-            if (cur !in intervals) { cur = 20_000L; setKey("auto_pull_seconds", cur) } // 10/15 s non più disponibili
+            if (cur !in intervals) { cur = 20_000L; setKey("auto_pull_seconds", cur) }
             chips.forEachIndexed { i, tv ->
                 tv.background = getDrawable("outline")
                 tv.alpha = if (intervals[i] == cur) 1f else 0.45f
@@ -233,7 +249,6 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
         parent.addView(options)
     }
 
-    /** Rende tutto grigio e non toccabile (servizio non attivo). */
     protected fun disableAll(v: View) {
         v.alpha = 0.4f
         lock(v)
@@ -293,7 +308,6 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
         view.findView<ImageView>("drive_icon_view").setImageDrawable(getDrawable("drive_icon"))
         val ghIcon = view.findView<ImageView>("github_icon_view")
         ghIcon.setImageDrawable(getDrawable("github_icon"))
-        // l'icona GitHub è bianca: la coloriamo come il testo del tema
         ghIcon.setColorFilter(view.findView<TextView>("github_title").currentTextColor)
 
         view.findView<TextView>("drive_summary").text = when {
@@ -306,7 +320,6 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
             driveOn -> "Disattivato: esci da Google Drive per usarlo"
             else -> "Backup tramite progetto GitHub (token)"
         }
-        // il servizio non attivo appare grigio ma resta apribile
         if (githubOn) driveCard.alpha = 0.4f
         if (driveOn) githubCard.alpha = 0.4f
 
@@ -370,6 +383,7 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
             movementMethod = LinkMovementMethod.getInstance()
         }
         val scroll = ScrollView(ctx).apply {
+            isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 (resources.displayMetrics.heightPixels * 0.62f).toInt()
@@ -382,8 +396,17 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
-        // contenitore esterno: l'AlertDialog sovrascrive i parametri della view radice,
-        // così l'altezza fissa resta sullo ScrollView interno e la guida scorre sempre
+        scroll.setOnKeyListener { _, keyCode, event ->
+            val dir = when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_DOWN -> 1
+                KeyEvent.KEYCODE_DPAD_UP -> -1
+                else -> 0
+            }
+            if (event.action != KeyEvent.ACTION_DOWN || dir == 0) return@setOnKeyListener false
+            if (!scroll.canScrollVertically(dir)) return@setOnKeyListener false
+            scroll.smoothScrollBy(0, dir * dp(140))
+            true
+        }
         val content = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(
@@ -396,12 +419,13 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
         val cached = guideCache
         text.text = cached?.let { renderGuide(it) } ?: "Caricamento guida…"
 
-        AlertDialog.Builder(ctx)
+        val dialog = AlertDialog.Builder(ctx)
             .setTitle("Guida rapida")
             .setView(content)
             .setPositiveButton("Chiudi", null)
             .create()
-            .show()
+        dialog.show()
+        scroll.nextFocusDownId = android.R.id.button1
 
         if (cached != null) return
 
@@ -466,7 +490,6 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
         addCategoryTable(extra)
         addAutoUpdate(extra)
 
-        // se è attivo Google Drive, questa scheda è tutta grigia e non toccabile
         if (ApiUtils.isLoggedIn() && ApiUtils.isDrive()) {
             showDisabledBanner(view, "Stai usando Google Drive. Per usare GitHub esci prima da Google Drive.")
             val root = view as ViewGroup
@@ -537,8 +560,6 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
     }
 }
 
-
-/** Configurazione della sincronizzazione con Google Drive (accesso con codice su google.com/device). */
 class SyncDriveFragment : SyncBaseSettingsFragment() {
 
     override val layoutName: String = "drive"
@@ -561,7 +582,6 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
         val box = view.findView<LinearLayout>("drive_switch_container")
         loginIcon.setImageDrawable(getDrawable("google_icon"))
 
-        // valori correnti (alla prima configurazione tutto attivo)
         var backupOn = (getKey<String>("backup_device") ?: "true") == "true"
         var restoreOn = (getKey<String>("restore_device") ?: "true") == "true"
 
@@ -606,7 +626,6 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
             if (logged) dismiss()
         }
 
-        // se è attivo GitHub, questa scheda è tutta grigia e non toccabile
         if (ApiUtils.isLoggedIn() && !ApiUtils.isDrive()) {
             showDisabledBanner(view, "Stai usando GitHub. Per usare Google Drive esci prima da GitHub.")
             val root = view as ViewGroup
@@ -650,7 +669,6 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
                     .setCancelable(false)
                     .create()
                 d.show()
-                // i pulsanti non chiudono la finestra
                 d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))

@@ -30,7 +30,6 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- Google Drive -->
     <LinearLayout
         android:id="@+id/drive_card"
         android:layout_width="match_parent"
@@ -82,7 +81,6 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- GitHub -->
     <LinearLayout
         android:id="@+id/github_card"
         android:layout_width="match_parent"
@@ -134,7 +132,6 @@
             android:textStyle="bold" />
     </LinearLayout>
 
-    <!-- Guida rapida -->
     <LinearLayout
         android:id="@+id/guide_card"
         android:layout_width="match_parent"
