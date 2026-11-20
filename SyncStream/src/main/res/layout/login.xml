@@ -125,7 +125,8 @@
                 android:paddingHorizontal="18dp"
                 android:paddingVertical="12dp"
                 android:text="ESCI DA GITHUB"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:visibility="gone" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

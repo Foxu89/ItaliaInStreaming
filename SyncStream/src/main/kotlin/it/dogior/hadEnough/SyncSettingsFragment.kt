@@ -10,6 +10,13 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.method.LinkMovementMethod
+import android.text.util.Linkify
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -21,6 +28,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ImageButton
+import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
@@ -28,6 +36,7 @@ import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
@@ -254,6 +263,12 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
 
 class SyncSettingsFragment : SyncBaseSettingsFragment() {
 
+    companion object {
+        private const val GUIDE_URL =
+            "https://raw.githubusercontent.com/DieGon7771/ItaliaInStreaming/master/guide/README_SyncStream.md"
+        private var guideCache: String? = null
+    }
+
     override val layoutName: String = "settings"
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -298,9 +313,113 @@ class SyncSettingsFragment : SyncBaseSettingsFragment() {
         val fm = requireActivity().supportFragmentManager
         driveCard.setOnClickListener { SyncDriveFragment().show(fm, "Drive") }
         githubCard.setOnClickListener { SyncLoginFragment().show(fm, "Login") }
-        guideCard.setOnClickListener {
-            val url = "https://github.com/DieGon7771/ItaliaInStreaming/blob/master/guide/README_SyncStream.md"
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        guideCard.setOnClickListener { showGuide() }
+    }
+
+    private fun cleanInline(line: String): String = line
+        .replace(Regex("\\*\\*(.+?)\\*\\*")) { it.groupValues[1] }
+        .replace(Regex("`([^`]+)`")) { it.groupValues[1] }
+        .replace(Regex("\\[([^\\]]+)]\\(([^)]+)\\)")) { "${it.groupValues[1]} (${it.groupValues[2]})" }
+
+    private fun renderGuide(markdown: String): CharSequence {
+        val out = SpannableStringBuilder()
+        val heading = Regex("^#{1,6}\\s+")
+        var lastBlank = true
+
+        markdown.lines().forEach { raw ->
+            val line = raw.trim()
+            when {
+                line.startsWith("```") -> Unit
+                line.isEmpty() || line == "---" || line == "***" -> {
+                    if (!lastBlank) {
+                        out.append('\n')
+                        lastBlank = true
+                    }
+                }
+                heading.containsMatchIn(line) -> {
+                    if (!lastBlank) out.append('\n')
+                    val start = out.length
+                    out.append(cleanInline(line.replace(heading, "")))
+                    out.setSpan(StyleSpan(Typeface.BOLD), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    out.setSpan(RelativeSizeSpan(1.15f), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    out.append('\n')
+                    lastBlank = false
+                }
+                else -> {
+                    val body = cleanInline(line)
+                    if (body.startsWith("- ") || body.startsWith("* ")) {
+                        out.append("• ").append(body.substring(2))
+                    } else {
+                        out.append(body)
+                    }
+                    out.append('\n')
+                    lastBlank = false
+                }
+            }
+        }
+        return out
+    }
+
+    private fun showGuide() {
+        val ctx = requireContext()
+        val text = TextView(ctx).apply {
+            textSize = 14f
+            setLineSpacing(dp(4).toFloat(), 1f)
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+            autoLinkMask = Linkify.WEB_URLS
+            movementMethod = LinkMovementMethod.getInstance()
+        }
+        val scroll = ScrollView(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (resources.displayMetrics.heightPixels * 0.62f).toInt()
+            )
+        }
+        scroll.addView(
+            text,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+        // contenitore esterno: l'AlertDialog sovrascrive i parametri della view radice,
+        // così l'altezza fissa resta sullo ScrollView interno e la guida scorre sempre
+        val content = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            addView(scroll)
+        }
+
+        val cached = guideCache
+        text.text = cached?.let { renderGuide(it) } ?: "Caricamento guida…"
+
+        AlertDialog.Builder(ctx)
+            .setTitle("Guida rapida")
+            .setView(content)
+            .setPositiveButton("Chiudi", null)
+            .create()
+            .show()
+
+        if (cached != null) return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val body = try {
+                app.get(GUIDE_URL).text
+            } catch (e: Exception) {
+                Log.e(TAG, "guida: ${e.message}")
+                null
+            }
+            withContext(Dispatchers.Main) {
+                if (body.isNullOrBlank()) {
+                    text.text = "Impossibile scaricare la guida. Controlla la connessione e tocca di nuovo la card."
+                } else {
+                    guideCache = body
+                    text.text = renderGuide(body)
+                }
+            }
         }
     }
 }
@@ -324,19 +443,11 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
         addSwitchRow(deviceBox, "Backup su GitHub (invia i dati di questo dispositivo)", backupOn) { backupOn = it }
         addSwitchRow(deviceBox, "Ripristino da GitHub (ricevi i dati degli altri dispositivi)", restoreOn) { restoreOn = it }
 
-        setupSaveButton(view) {
-            save(tokenInput, prNumInput, backupOn, restoreOn)
-        }
-
-        val extra = view.findView<LinearLayout>("github_extra")
-        extra.applyOutlineBackground()
-        addCategoryTable(extra)
-        addAutoUpdate(extra)
-
         val resetBtn = view.findView<TextView>("reset_btn")
         val dangerDrawable = getDrawable("outline_danger")
         if (dangerDrawable != null) resetBtn.background = dangerDrawable else resetBtn.applyOutlineBackground()
         resetBtn.setTextColor(Color.parseColor("#FFFF7F7F"))
+        resetBtn.visibility = if (canResetGithub()) View.VISIBLE else View.GONE
         resetBtn.setOnClickListener {
             setKey("sync_token", "")
             setKey("sync_project_num", "")
@@ -344,6 +455,16 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
             showToast("Disconnesso da GitHub")
             dismiss()
         }
+
+        setupSaveButton(view) {
+            save(tokenInput, prNumInput, backupOn, restoreOn)
+            resetBtn.visibility = if (canResetGithub()) View.VISIBLE else View.GONE
+        }
+
+        val extra = view.findView<LinearLayout>("github_extra")
+        extra.applyOutlineBackground()
+        addCategoryTable(extra)
+        addAutoUpdate(extra)
 
         // se è attivo Google Drive, questa scheda è tutta grigia e non toccabile
         if (ApiUtils.isLoggedIn() && ApiUtils.isDrive()) {
@@ -354,6 +475,13 @@ class SyncLoginFragment : SyncBaseSettingsFragment() {
                 if (c.id != res.getIdentifier("disabled_banner", "id", BuildConfig.LIBRARY_PACKAGE_NAME)) disableAll(c)
             }
         }
+    }
+
+    private fun canResetGithub(): Boolean {
+        val token = getKey<String>("sync_token")
+        val num = getKey<String>("sync_project_num")
+        if (token.isNullOrEmpty() || num.isNullOrEmpty()) return false
+        return !(ApiUtils.isLoggedIn() && ApiUtils.isDrive())
     }
 
     private fun save(
@@ -442,6 +570,16 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
         addCategoryTable(box)
         addAutoUpdate(box)
 
+        val resetBtn = view.findView<TextView>("reset_btn")
+        val dangerDrawable = getDrawable("outline_danger")
+        if (dangerDrawable != null) resetBtn.background = dangerDrawable else resetBtn.applyOutlineBackground()
+        resetBtn.setTextColor(Color.parseColor("#FFFF7F7F"))
+        resetBtn.setOnClickListener {
+            GoogleDriveApi.logout()
+            showToast("Disconnesso da Google Drive")
+            dismiss()
+        }
+
         fun refresh() {
             val logged = ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()
             statusTv.text = when {
@@ -450,6 +588,7 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
                 else -> "Non collegato"
             }
             loginText.text = if (logged) "ACCEDI DI NUOVO" else "ACCEDI CON GOOGLE"
+            resetBtn.visibility = if (logged) View.VISIBLE else View.GONE
         }
         refresh()
 
@@ -465,16 +604,6 @@ class SyncDriveFragment : SyncBaseSettingsFragment() {
             val logged = ApiUtils.isDrive() && GoogleDriveApi.isLoggedIn()
             showToast(if (logged) "Impostazioni salvate" else "Salvato. Ora accedi con Google")
             if (logged) dismiss()
-        }
-
-        val resetBtn = view.findView<TextView>("reset_btn")
-        val dangerDrawable = getDrawable("outline_danger")
-        if (dangerDrawable != null) resetBtn.background = dangerDrawable else resetBtn.applyOutlineBackground()
-        resetBtn.setTextColor(Color.parseColor("#FFFF7F7F"))
-        resetBtn.setOnClickListener {
-            GoogleDriveApi.logout()
-            showToast("Disconnesso da Google Drive")
-            dismiss()
         }
 
         // se è attivo GitHub, questa scheda è tutta grigia e non toccabile
