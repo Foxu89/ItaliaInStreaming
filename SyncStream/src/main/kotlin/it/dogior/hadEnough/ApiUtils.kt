@@ -214,6 +214,38 @@ object ApiUtils {
         return if (result.first) true to "Google Drive collegato" else result
     }
 
+    private val hashMapper by lazy {
+        mapper.copy().configure(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
+    }
+
+    /** Impronta dei dati locali che sincronizziamo (senza data), per non caricare due volte lo stesso contenuto. */
+    fun localHash(context: Context?, resume: List<com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult>?): String? {
+        val backup = BackupUtils.getBackup(context, resume) ?: return null
+        return try {
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest(hashMapper.writeValueAsBytes(backup))
+                .joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Se nel cloud c'è un backup più recente di quello che questo dispositivo ha già applicato lo
+     * restituisce, altrimenti null. Su Drive prima chiede solo la data di modifica (richiesta leggera).
+     */
+    suspend fun remoteNewerNode(): SyncDevice? {
+        var mtime: String? = null
+        if (isDrive()) {
+            mtime = GoogleDriveApi.modifiedTime()
+            if (mtime != null && mtime == getKey<String>("gdrive_last_mtime")) return null
+        }
+        val node = fetchDevices()?.firstOrNull() ?: return null
+        if (isDrive() && mtime != null) setKey("gdrive_last_mtime", mtime)
+        val lastRestore = getKey<Long>("sync_last_restore_at") ?: 0L
+        return if (node.updatedAt > lastRestore) node else null
+    }
+
     suspend fun buildEnvelope(context: Context?, resume: List<com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult>?): SyncEnvelope? {
         val local = BackupUtils.getBackup(context, resume) ?: return null
         val cats = BackupUtils.enabledCats()
