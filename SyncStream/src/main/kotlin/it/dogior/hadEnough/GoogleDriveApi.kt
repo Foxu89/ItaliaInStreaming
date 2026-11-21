@@ -51,7 +51,7 @@ object GoogleDriveApi {
     private const val TAG = "SyncStream"
     private const val SCOPE_APPDATA = "https://www.googleapis.com/auth/drive.appdata"
     private const val SCOPE_FILE = "https://www.googleapis.com/auth/drive.file"
-    private const val FILE_NAME = "syncstream_backup.json"
+    private const val FILE_NAME = "syncstream_backup_v2.json"
     private const val DEVICE_URL = "https://oauth2.googleapis.com/device/code"
     private const val TOKEN_URL = "https://oauth2.googleapis.com/token"
     private const val FILES_URL = "https://www.googleapis.com/drive/v3/files"
@@ -71,9 +71,9 @@ object GoogleDriveApi {
         setKey("gdrive_refresh_token", "")
         setKey("gdrive_access_token", "")
         setKey("gdrive_access_expires", 0L)
-        setKey("gdrive_file_id", "")
+        setKey("gdrive_file_id2", "")
         setKey("gdrive_scope", "")
-        setKey("gdrive_last_mtime", "")
+        setKey("gdrive_last_mtime2", "")
     }
 
     private inline fun <reified T> parse(s: String): T? = try {
@@ -147,7 +147,7 @@ object GoogleDriveApi {
                 setKey("gdrive_refresh_token", res.refreshToken)
                 setKey("gdrive_access_token", res.accessToken)
                 setKey("gdrive_access_expires", System.currentTimeMillis() + (res.expiresIn ?: 3600) * 1000L)
-                setKey("gdrive_file_id", "")
+                setKey("gdrive_file_id2", "")
                 setKey("gdrive_scope", pendingScope)
                 return true to "ok"
             }
@@ -193,7 +193,7 @@ object GoogleDriveApi {
 
     private fun useAppData(): Boolean = getKey<String>("gdrive_scope") != SCOPE_FILE
 
-    private fun cachedId(): String? = getKey<String>("gdrive_file_id")?.takeIf { it.isNotBlank() }
+    private fun cachedId(): String? = getKey<String>("gdrive_file_id2")?.takeIf { it.isNotBlank() }
 
     private fun auth(token: String) = "Bearer $token"
 
@@ -252,13 +252,13 @@ object GoogleDriveApi {
             val found = findFile(token)
             if (!found.ok) return null
             id = found.id ?: return null
-            setKey("gdrive_file_id", id)
+            setKey("gdrive_file_id2", id)
         }
         val (code, text) = call(
             Request.Builder().url("$FILES_URL/$id?fields=modifiedTime")
                 .header("Authorization", auth(token)).get().build()
         )
-        if (code == 404) { setKey("gdrive_file_id", ""); return null }
+        if (code == 404) { setKey("gdrive_file_id2", ""); return null }
         if (code != 200) return null
         return parse<GFile>(text)?.modifiedTime
     }
@@ -269,12 +269,12 @@ object GoogleDriveApi {
             val (code, body) = download(token, id)
             if (code == 200) return DriveRead(true, body)
             if (code != 404) return DriveRead(false, null)
-            setKey("gdrive_file_id", "")
+            setKey("gdrive_file_id2", "")
         }
         val found = findFile(token)
         if (!found.ok) return DriveRead(false, null)
         val id = found.id ?: return DriveRead(true, null)
-        setKey("gdrive_file_id", id)
+        setKey("gdrive_file_id2", id)
         val (code, body) = download(token, id)
         return if (code == 200) DriveRead(true, body) else DriveRead(false, null)
     }
@@ -287,16 +287,16 @@ object GoogleDriveApi {
                 val found = findFile(token)
                 if (!found.ok) return false to "Google Drive non raggiungibile"
                 id = found.id ?: createFile(token) ?: return false to "Impossibile creare il file su Drive"
-                setKey("gdrive_file_id", id)
+                setKey("gdrive_file_id2", id)
             }
             val (code, text) = upload(token, id, content)
             if (code in 200..299) {
                 // ricordiamo la versione che abbiamo scritto, così non la riscarichiamo come "novità"
-                parse<GFile>(text)?.modifiedTime?.let { setKey("gdrive_last_mtime", it) }
+                parse<GFile>(text)?.modifiedTime?.let { setKey("gdrive_last_mtime2", it) }
                 return true to "Sync success"
             }
             if (code == 404) {
-                setKey("gdrive_file_id", "")
+                setKey("gdrive_file_id2", "")
                 return@repeat
             }
             return false to "Errore Drive ($code)"

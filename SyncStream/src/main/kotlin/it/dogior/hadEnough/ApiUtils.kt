@@ -92,25 +92,30 @@ object ApiUtils {
         }
     }
 
-    fun restoreFromDevice(context: Context?, device: SyncDevice, reconcile: Boolean = true): Boolean {
+    suspend fun restoreFromDevice(context: Context?, device: SyncDevice, reconcile: Boolean = true): Boolean {
         if (context == null) return false
         try {
             val raw = device.syncedData ?: return false
             val envelope = parseEnvelope(raw)
-            val backup = envelope?.backup ?: parseLegacyBackup(raw) ?: run {
+            if (envelope != null) {
+                // formato attuale: unione chiave per chiave (idempotente, quindi sempre sicura da rifare)
+                val res = SyncMerge.merge(context, envelope, BackupUtils.enabledCats(false))
+                setKey("sync_last_restore_at", maxOf(envelope.updatedAt, getKey<Long>("sync_last_restore_at") ?: 0L))
+                // se i dati locali ora coincidono col cloud non serve ricaricare nulla
+                val h = if (res.needsUpload) "" else (localHash(context, getResumeWatching()) ?: "")
+                setKey("sync_last_hash", h)
+                Log.i(TAG, "📥 unione applicata (modifiche=${res.applied}, da inviare=${res.needsUpload})")
+                return res.applied
+            }
+            val backup = parseLegacyBackup(raw) ?: run {
                 Log.w(TAG, "backup non valido, restore saltato")
                 return false
             }
-            val updatedAt = envelope?.updatedAt ?: 0L
-            val lastRestore = getKey<Long>("sync_last_restore_at") ?: 0L
-            if (updatedAt > 0L && updatedAt <= lastRestore) {
-                Log.i(TAG, "backup non più recente del locale, restore saltato")
-                return false
-            }
+            SyncMerge.refresh(context, System.currentTimeMillis())
             BackupUtils.restore(context, backup, true, true)
             if (reconcile && BackupUtils.catEnabled(BackupUtils.CAT_RESUME, false)) reconcileResumeWatching(context, backup)
-            setKey("sync_last_restore_at", if (updatedAt > 0L) updatedAt else System.currentTimeMillis())
-            Log.i(TAG, "📥 restore applicato ✅ (updatedAt=$updatedAt)")
+            setKey("sync_last_restore_at", System.currentTimeMillis())
+            Log.i(TAG, "📥 restore (formato vecchio) applicato ✅")
             return true
         } catch (e: Exception) {
             Log.w(TAG, "📥 restore fallito ❌: ${e.message}")
@@ -238,23 +243,50 @@ object ApiUtils {
         var mtime: String? = null
         if (isDrive()) {
             mtime = GoogleDriveApi.modifiedTime()
-            if (mtime != null && mtime == getKey<String>("gdrive_last_mtime")) return null
+            if (mtime != null && mtime == getKey<String>("gdrive_last_mtime2")) return null
         }
         val node = fetchDevices()?.firstOrNull() ?: return null
-        if (isDrive() && mtime != null) setKey("gdrive_last_mtime", mtime)
+        if (isDrive() && mtime != null) {
+            setKey("gdrive_last_mtime2", mtime)
+            return node // l'orario di Drive e' cambiato: l'ha scritto un altro dispositivo (l'unione e' sicura da rifare)
+        }
         val lastRestore = getKey<Long>("sync_last_restore_at") ?: 0L
         return if (node.updatedAt > lastRestore) node else null
     }
 
     suspend fun buildEnvelope(context: Context?, resume: List<com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult>?): SyncEnvelope? {
-        val local = BackupUtils.getBackup(context, resume) ?: return null
+        val ctx = context ?: return null
+        val now = System.currentTimeMillis()
+        val meta = SyncMerge.refresh(ctx, now)
+        val local = BackupUtils.getBackup(ctx, resume) ?: return null
         val cats = BackupUtils.enabledCats()
+        val localKeys = SyncMerge.flatBackup(local).keys
+
+        val metaOut = HashMap<String, KeyMeta>()
+        for ((k, m) in meta) {
+            if (SyncMerge.catOfFull(k) !in cats) continue
+            if (m.del) {
+                if (m.t <= 1 || now - m.t <= SyncMerge.TOMBSTONE_TTL) metaOut[k] = KeyMeta(m.t, true)
+            } else if (k in localKeys) {
+                metaOut[k] = KeyMeta(m.t)
+            }
+        }
+
         var merged = local
         if (cats.size < BackupUtils.ALL_CATS.size) {
-            val raw = fetchDevices()?.firstOrNull()?.syncedData
-            merged = BackupUtils.carryOver(local, parseEnvelope(raw)?.backup, cats)
+            // categorie disattivate qui: restano nel cloud come sono (valori e date)
+            val cloud = parseEnvelope(fetchDevices()?.firstOrNull()?.syncedData)
+            if (cloud != null) {
+                merged = BackupUtils.carryOver(local, cloud.backup, cats)
+                val cloudKeys = SyncMerge.flatBackup(cloud.backup).keys
+                val cm = cloud.meta ?: emptyMap()
+                for (k in cloudKeys + cm.keys) {
+                    if (SyncMerge.catOfFull(k) in cats) continue
+                    metaOut[k] = cm[k] ?: KeyMeta(cloud.updatedAt)
+                }
+            }
         }
-        return SyncEnvelope(System.currentTimeMillis(), merged, cats)
+        return SyncEnvelope(now, merged, cats, metaOut, 2)
     }
 
     suspend fun syncThisDevice(envelopeJson: String): Pair<Boolean, String?> {

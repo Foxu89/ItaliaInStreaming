@@ -111,6 +111,7 @@ class SyncPlugin : Plugin() {
                             handler.post { MainActivity.bookmarksUpdatedEvent(true) }
                         }
                         hash = ApiUtils.localHash(context, getResumeWatching()) ?: return
+                        if (hash == getKey<String>("sync_last_hash")) return // dopo l'unione coincide col cloud
                     }
                 }
 
@@ -168,7 +169,6 @@ class SyncPlugin : Plugin() {
             }
             if (ApiUtils.restoreFromDevice(context, node)) {
                 // i dati locali ora coincidono col cloud: non va ricaricato nulla
-                ApiUtils.localHash(context, getResumeWatching())?.let { setKey("sync_last_hash", it) }
                 handler.post { MainActivity.bookmarksUpdatedEvent(true) }
             }
         } catch (e: Exception) {
@@ -199,8 +199,7 @@ class SyncPlugin : Plugin() {
                     setKey("sync_device_id", node.deviceId ?: "")
                     if (getKey<String>("restore_device") == "true") {
                         if (ApiUtils.restoreFromDevice(context, node)) {
-                            ApiUtils.localHash(context, getResumeWatching())?.let { setKey("sync_last_hash", it) }
-                            handler.post { MainActivity.bookmarksUpdatedEvent(true) }
+                                        handler.post { MainActivity.bookmarksUpdatedEvent(true) }
                         }
                     }
                 }

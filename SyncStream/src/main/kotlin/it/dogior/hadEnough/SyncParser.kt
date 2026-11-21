@@ -19,7 +19,17 @@ data class BackupFile(
 data class SyncEnvelope(
     @JsonProperty("updatedAt") val updatedAt: Long,
     @JsonProperty("backup") val backup: BackupFile,
-    @JsonProperty("categories") val categories: List<String>? = null
+    @JsonProperty("categories") val categories: List<String>? = null,
+    /** Data di ultima modifica per chiave (Fase 2). Assente nei backup vecchi. */
+    @JsonProperty("meta") val meta: Map<String, KeyMeta>? = null,
+    @JsonProperty("v") val v: Int? = null
+)
+
+/** t = data di modifica, x = true se la chiave e' stata cancellata (tombstone). */
+@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+data class KeyMeta(
+    @JsonProperty("t") val t: Long,
+    @JsonProperty("x") val x: Boolean? = null
 )
 
 data class APIRes(
