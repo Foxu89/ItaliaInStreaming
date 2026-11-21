@@ -98,6 +98,7 @@ object BackupUtils {
         "restore_device",
         "backup_device",
         "sync_last_restore_at",
+        "sync_last_hash",
         "auto_pull_enabled",
         "auto_pull_seconds",
         "sync_cat_",
@@ -151,14 +152,15 @@ object BackupUtils {
     const val CAT_SUBS = "subtitles"
     const val CAT_DOWNLOADS = "downloads"
     const val CAT_EXT = "extensions"
-    val ALL_CATS = listOf(CAT_RESUME, CAT_LIBRARY, CAT_SEARCH, CAT_SUBS, CAT_SETTINGS, CAT_DOWNLOADS, CAT_EXT)
+    const val CAT_LAYOUT = "layout"
+    val ALL_CATS = listOf(CAT_RESUME, CAT_LIBRARY, CAT_SEARCH, CAT_SUBS, CAT_SETTINGS, CAT_EXT, CAT_LAYOUT, CAT_DOWNLOADS)
 
     val EXPERIMENTAL_CATS = setOf(CAT_DOWNLOADS)
 
     fun catEnabled(cat: String, backup: Boolean): Boolean =
         getKey<Boolean>("sync_cat_${if (backup) "b" else "r"}_$cat")
             ?: getKey<Boolean>("sync_cat_$cat")
-            ?: (cat != CAT_DOWNLOADS)
+            ?: (cat != CAT_DOWNLOADS && cat != CAT_LAYOUT) // spente di default
 
     fun setCat(cat: String, backup: Boolean, v: Boolean) =
         setKey("sync_cat_${if (backup) "b" else "r"}_$cat", v)
@@ -170,9 +172,13 @@ object BackupUtils {
         "result_episode", "download_header_cache"
     )
 
+    /** Dipendono dal dispositivo (dimensione schermo / tipo di interfaccia). */
+    private val layoutKeys = listOf("poster_size_key", "app_layout_key", "tv_layout_clock_key")
+
     private val subsMarkers = listOf("subtitle", "subs_", "sub_")
 
     fun catOf(key: String, isSettings: Boolean): String = when {
+        layoutKeys.any { key.contains(it) } -> CAT_LAYOUT
         subsMarkers.any { key.contains(it, ignoreCase = true) } -> CAT_SUBS
         isSettings -> CAT_SETTINGS
         key.contains("download_info") || key.contains("download_episode_cache") -> CAT_DOWNLOADS

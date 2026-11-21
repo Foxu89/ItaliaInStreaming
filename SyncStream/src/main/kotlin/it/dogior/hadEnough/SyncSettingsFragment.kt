@@ -167,6 +167,7 @@ abstract class SyncBaseSettingsFragment : BottomSheetDialogFragment() {
             BackupUtils.CAT_SEARCH to "Cronologia ricerche",
             BackupUtils.CAT_SUBS to "Impostazioni sottotitoli",
             BackupUtils.CAT_SETTINGS to "Impostazioni dell'app",
+            BackupUtils.CAT_LAYOUT to "Layout e dimensione poster",
             BackupUtils.CAT_DOWNLOADS to "Download (sperimentale)",
             BackupUtils.CAT_EXT to "Repository"
         )

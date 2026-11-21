@@ -2,6 +2,7 @@
 
 package it.dogior.hadEnough
 
+import android.content.SharedPreferences
 import android.os.*
 import android.content.Context
 import android.util.Log
@@ -14,6 +15,11 @@ import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.ui.home.HomeViewModel.Companion.getResumeWatching
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
 import com.lagradost.cloudstream3.utils.DataStoreHelper
+import com.lagradost.cloudstream3.utils.DataStore.getSharedPrefs
+import com.lagradost.cloudstream3.utils.DataStore.getDefaultSharedPrefs
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.*
 
 private const val TAG = "SyncStream"
@@ -80,23 +86,68 @@ class SyncPlugin : Plugin() {
         performPullIfEnabled()
     }
 
+    private val backupMutex = Mutex()
+
+    /**
+     * Backup solo se i dati locali sono davvero cambiati dall'ultimo invio.
+     * Prima di caricare controlla se nel cloud c'è qualcosa di più recente (da un altro
+     * dispositivo): in quel caso lo unisce ai dati locali, così non lo sovrascrive.
+     */
     private suspend fun performBackup() {
         if (!initialSyncDone) return
         if (getKey<String>("backup_device") != "true") return
         if (!ApiUtils.isLoggedIn()) return
-        try {
-            val envelope = ApiUtils.buildEnvelope(context, getResumeWatching()) ?: return
-            Log.i(TAG, "📤 invio backup...")
-            val result = ApiUtils.syncThisDevice(envelope.toJson())
-            if (result.first) {
-                setKey("sync_last_restore_at", envelope.updatedAt)
-                Log.i(TAG, "📤 backup inviato ✅ (${envelope.updatedAt})")
-            } else {
-                Log.w(TAG, "📤 backup FALLITO ❌: ${result.second}")
+        backupMutex.withLock {
+            try {
+                var hash = ApiUtils.localHash(context, getResumeWatching()) ?: return
+                if (hash == getKey<String>("sync_last_hash")) return // niente di nuovo
+
+                if (getKey<String>("restore_device") == "true") {
+                    val newer = ApiUtils.remoteNewerNode()
+                    if (newer != null) {
+                        Log.i(TAG, "📥 nel cloud c'è un backup più nuovo: lo unisco prima di caricare")
+                        // senza eliminare cose locali non ancora inviate
+                        if (ApiUtils.restoreFromDevice(context, newer, reconcile = false)) {
+                            handler.post { MainActivity.bookmarksUpdatedEvent(true) }
+                        }
+                        hash = ApiUtils.localHash(context, getResumeWatching()) ?: return
+                    }
+                }
+
+                val envelope = ApiUtils.buildEnvelope(context, getResumeWatching()) ?: return
+                Log.i(TAG, "📤 invio backup...")
+                val result = ApiUtils.syncThisDevice(envelope.toJson())
+                if (result.first) {
+                    setKey("sync_last_restore_at", envelope.updatedAt)
+                    setKey("sync_last_hash", hash)
+                    Log.i(TAG, "📤 backup inviato ✅ (${envelope.updatedAt})")
+                } else {
+                    Log.w(TAG, "📤 backup FALLITO ❌: ${result.second}")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "📤 backup error: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "📤 backup error: ${e.message}")
         }
+    }
+
+    // ---- rileva le modifiche ai dati dell'app (preferiti, progressi, impostazioni...) ----
+    private val backupScheduled = AtomicBoolean(false)
+
+    private val prefListener = object : SharedPreferences.OnSharedPreferenceChangeListener {
+        override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
+            if (key == null || !initialSyncDone) return
+            if (BackupUtils.nonTransferableKeys.any { key.contains(it) }) return
+            scheduleBackup()
+        }
+    }
+
+    /** Raggruppa le modifiche ravvicinate (es. progressi video) in un solo invio dopo ~15 secondi. */
+    private fun scheduleBackup() {
+        if (!backupScheduled.compareAndSet(false, true)) return
+        handler.postDelayed({
+            backupScheduled.set(false)
+            CoroutineScope(Dispatchers.IO).launch { performBackup() }
+        }, 15_000L)
     }
 
     private suspend fun performPullIfEnabled() {
@@ -110,14 +161,14 @@ class SyncPlugin : Plugin() {
         try {
             if (!ApiUtils.isLoggedIn()) return
             Log.i(TAG, "📥 pull periodico...")
-            val devices = ApiUtils.fetchDevices() ?: return
-            val node = devices.firstOrNull() ?: return
-            val lastRestore = getKey<Long>("sync_last_restore_at") ?: 0L
-            if (node.updatedAt <= lastRestore) {
+            val node = ApiUtils.remoteNewerNode()
+            if (node == null) {
                 Log.i(TAG, "📥 nessun cambiamento da scaricare")
                 return
             }
             if (ApiUtils.restoreFromDevice(context, node)) {
+                // i dati locali ora coincidono col cloud: non va ricaricato nulla
+                ApiUtils.localHash(context, getResumeWatching())?.let { setKey("sync_last_hash", it) }
                 handler.post { MainActivity.bookmarksUpdatedEvent(true) }
             }
         } catch (e: Exception) {
@@ -148,6 +199,7 @@ class SyncPlugin : Plugin() {
                     setKey("sync_device_id", node.deviceId ?: "")
                     if (getKey<String>("restore_device") == "true") {
                         if (ApiUtils.restoreFromDevice(context, node)) {
+                            ApiUtils.localHash(context, getResumeWatching())?.let { setKey("sync_last_hash", it) }
                             handler.post { MainActivity.bookmarksUpdatedEvent(true) }
                         }
                     }
@@ -172,6 +224,12 @@ class SyncPlugin : Plugin() {
         MainActivity.mainPluginsLoadedEvent += ::backupDevice
         MainActivity.reloadHomeEvent += ::backupDevice
         MainActivity.reloadAccountEvent += ::backupDevice
+        try {
+            context.getSharedPrefs().registerOnSharedPreferenceChangeListener(prefListener)
+            context.getDefaultSharedPrefs().registerOnSharedPreferenceChangeListener(prefListener)
+        } catch (e: Exception) {
+            Log.w(TAG, "listener non registrato: ${e.message}")
+        }
         performInitialSync()
     }
 

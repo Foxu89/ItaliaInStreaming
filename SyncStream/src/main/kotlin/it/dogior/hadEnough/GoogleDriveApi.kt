@@ -38,7 +38,10 @@ data class GTokenRes(
     @JsonProperty("error_description") val errorDescription: String? = null,
 )
 
-data class GFile(@JsonProperty("id") val id: String? = null)
+data class GFile(
+    @JsonProperty("id") val id: String? = null,
+    @JsonProperty("modifiedTime") val modifiedTime: String? = null
+)
 
 data class GFiles(@JsonProperty("files") val files: List<GFile>? = null)
 
@@ -70,6 +73,7 @@ object GoogleDriveApi {
         setKey("gdrive_access_expires", 0L)
         setKey("gdrive_file_id", "")
         setKey("gdrive_scope", "")
+        setKey("gdrive_last_mtime", "")
     }
 
     private inline fun <reified T> parse(s: String): T? = try {
@@ -232,13 +236,32 @@ object GoogleDriveApi {
                 .header("Authorization", auth(token)).get().build()
         )
 
-    private suspend fun upload(token: String, id: String, content: String): Int =
+    private suspend fun upload(token: String, id: String, content: String): Pair<Int, String> =
         call(
-            Request.Builder().url("$UPLOAD_URL/$id?uploadType=media")
+            Request.Builder().url("$UPLOAD_URL/$id?uploadType=media&fields=modifiedTime")
                 .header("Authorization", auth(token))
                 .patch(content.toRequestBody("application/json; charset=utf-8".toMediaType()))
                 .build()
-        ).first
+        )
+
+    /** Data di ultima modifica del file su Drive (richiesta leggera: 5 unità invece di 200 del download). */
+    suspend fun modifiedTime(): String? {
+        val token = accessToken() ?: return null
+        var id = cachedId()
+        if (id == null) {
+            val found = findFile(token)
+            if (!found.ok) return null
+            id = found.id ?: return null
+            setKey("gdrive_file_id", id)
+        }
+        val (code, text) = call(
+            Request.Builder().url("$FILES_URL/$id?fields=modifiedTime")
+                .header("Authorization", auth(token)).get().build()
+        )
+        if (code == 404) { setKey("gdrive_file_id", ""); return null }
+        if (code != 200) return null
+        return parse<GFile>(text)?.modifiedTime
+    }
 
     suspend fun readBackup(): DriveRead {
         val token = accessToken() ?: return DriveRead(false, null)
@@ -266,8 +289,12 @@ object GoogleDriveApi {
                 id = found.id ?: createFile(token) ?: return false to "Impossibile creare il file su Drive"
                 setKey("gdrive_file_id", id)
             }
-            val code = upload(token, id, content)
-            if (code in 200..299) return true to "Sync success"
+            val (code, text) = upload(token, id, content)
+            if (code in 200..299) {
+                // ricordiamo la versione che abbiamo scritto, così non la riscarichiamo come "novità"
+                parse<GFile>(text)?.modifiedTime?.let { setKey("gdrive_last_mtime", it) }
+                return true to "Sync success"
+            }
             if (code == 404) {
                 setKey("gdrive_file_id", "")
                 return@repeat

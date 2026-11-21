@@ -92,7 +92,7 @@ object ApiUtils {
         }
     }
 
-    fun restoreFromDevice(context: Context?, device: SyncDevice): Boolean {
+    fun restoreFromDevice(context: Context?, device: SyncDevice, reconcile: Boolean = true): Boolean {
         if (context == null) return false
         try {
             val raw = device.syncedData ?: return false
@@ -108,7 +108,7 @@ object ApiUtils {
                 return false
             }
             BackupUtils.restore(context, backup, true, true)
-            if (BackupUtils.catEnabled(BackupUtils.CAT_RESUME, false)) reconcileResumeWatching(context, backup)
+            if (reconcile && BackupUtils.catEnabled(BackupUtils.CAT_RESUME, false)) reconcileResumeWatching(context, backup)
             setKey("sync_last_restore_at", if (updatedAt > 0L) updatedAt else System.currentTimeMillis())
             Log.i(TAG, "📥 restore applicato ✅ (updatedAt=$updatedAt)")
             return true
