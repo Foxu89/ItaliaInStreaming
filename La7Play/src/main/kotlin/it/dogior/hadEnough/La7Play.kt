@@ -60,7 +60,8 @@ class La7Play : MainAPI() {
             .mapNotNull { a ->
                 val img = a.selectFirst("img") ?: return@mapNotNull null
                 val title = img.attr("alt").trim().ifBlank { return@mapNotNull null }
-                val href = fixUrl(a.attr("href"))
+                val raw = a.attr("href")
+                val href = if (raw.startsWith("http")) raw else mainUrl + raw
                 val poster = img.attr("src").ifBlank { null }
                 newMovieSearchResponse(title, href, TvType.Movie) { posterUrl = poster }
             }
