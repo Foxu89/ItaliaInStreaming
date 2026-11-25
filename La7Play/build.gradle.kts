@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "Film gratuiti da La7 Play"
@@ -7,7 +7,7 @@ cloudstream {
     /**
      * 0: Down, 1: Ok, 2: Slow, 3: Beta only
      */
-    status = 3
+    status = 1
 
     tvTypes = listOf("Movie")
 

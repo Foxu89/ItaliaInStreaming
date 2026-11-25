@@ -41,7 +41,18 @@ class La7Play : MainAPI() {
     override var lang = "it"
     override val hasMainPage = true
 
-    override val mainPage = mainPageOf("$mainUrl/film" to "Film")
+    override val mainPage = mainPageOf(
+        TOP10 to "Film scelti per te",
+        "$mainUrl/film" to "Film"
+    )
+
+    companion object {
+        private const val TOP10 = "top10"
+        private const val TOP10_PATH = "/raccolta/top-ten-la7-cinema-373576"
+
+        // identificativo della richiesta GraphQL "persistita" del sito: se il sito viene aggiornato può cambiare
+        private const val GQL_ID = "c041a4312b044346"
+    }
 
     private val tag = "La7Play"
     private val ua =
@@ -68,7 +79,44 @@ class La7Play : MainAPI() {
             .distinctBy { it.url }
     }
 
+    /** Classifica "Film scelti per te": lista caricata dal sito con una richiesta JSON. */
+    private suspend fun getTop10(): List<SearchResponse> {
+        return try {
+            val params = """{"page":1,"path":"$TOP10_PATH"}"""
+            val encoded = android.util.Base64.encodeToString(
+                params.toByteArray(),
+                android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+            )
+            val text = app.get(
+                "$mainUrl/api/gql/$GQL_ID/$encoded",
+                headers = headers + mapOf("Accept" to "application/json"),
+                referer = "$mainUrl$TOP10_PATH"
+            ).text
+            val items = mapper.readTree(text)
+                .path("data").path("route").path("entity").path("paginatedItems").path("items")
+            items.mapNotNull { n ->
+                val title = n.path("title").asText("").trim().ifBlank { return@mapNotNull null }
+                val path = n.path("path").asText("").ifBlank { return@mapNotNull null }
+                val cover = n.path("uploadVideo").path("cf_thumbnail_cover")
+                val poster = cover.path("variations").firstOrNull { it.path("style").asText() == "cover_sm" }
+                    ?.path("url")?.asText()
+                    ?: cover.path("url").asText("").ifBlank { null }
+                val url = if (path.startsWith("http")) path else mainUrl + path
+                newMovieSearchResponse(title, url, TvType.Movie) { posterUrl = poster }
+            }
+        } catch (e: Exception) {
+            Log.w(tag, "classifica non caricata: ${e.message}")
+            emptyList()
+        }
+    }
+
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        if (request.data == TOP10) {
+            return newHomePageResponse(
+                HomePageList(request.name, getTop10(), isHorizontalImages = false),
+                hasNext = false
+            )
+        }
         val doc = app.get(request.data, headers = headers).document
         val items = parseCards(doc)
         return newHomePageResponse(HomePageList(request.name, items, isHorizontalImages = false), hasNext = false)
