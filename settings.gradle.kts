@@ -21,6 +21,7 @@ include(
     "GuardaPlay",
 //    "Huhu",
 //    "IlGenioDelloStreaming",
+    "La7Play",
     "Nuvio",
     "OnlineSerieTV",
     "SectionOrganizer",
