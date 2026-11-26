@@ -253,33 +253,17 @@ class PlexWatch : MainAPI() {
         }
         candidates.add(key)
 
-        for (id in candidates) {
-            val m3u8 = "$api/library/parts/$id-hls.m3u8?includeAllStreams=1" +
-                    "&x-plex-product=${enc("Plex Mediaverse")}&x-plex-token=$t"
-            if (isPlaylist(m3u8)) {
-                Log.i(tag, "playlist trovata con id $id")
-                callback(
-                    newExtractorLink(name, name, m3u8, ExtractorLinkType.M3U8) {
-                        this.referer = "$mainUrl/"
-                        this.quality = Qualities.P720.value
-                        this.headers = mapOf("Origin" to mainUrl)
-                    }
-                )
-                return true
-            }
-        }
-        // titoli protetti: versione DASH con Widevine
+        // 1) titolo protetto: il manifest DASH contiene ContentProtection -> Widevine
         for (id in candidates) {
             val mpd = "$api/library/parts/$id-dash.mpd?includeAllStreams=1" +
                     "&x-plex-product=${enc("Plex Mediaverse")}&x-plex-token=$t&x-plex-drm=widevine"
-            val ok = try {
-                app.get(mpd, headers = mapOf("Origin" to mainUrl, "Referer" to "$mainUrl/"))
-                    .text.contains("<MPD")
+            val text = try {
+                app.get(mpd, headers = mapOf("Origin" to mainUrl, "Referer" to "$mainUrl/")).text
             } catch (e: Exception) {
-                false
+                ""
             }
-            if (ok) {
-                Log.i(tag, "manifest DASH trovato con id $id")
+            if (text.contains("<MPD") && text.contains("ContentProtection")) {
+                Log.i(tag, "manifest DASH protetto trovato con id $id")
                 val license = "$api/library/parts/$id-dash/license?x-plex-token=$t&x-plex-drm=widevine"
                 callback(
                     newDrmExtractorLink(name, name, mpd, ExtractorLinkType.DASH, WIDEVINE_UUID) {
@@ -287,6 +271,23 @@ class PlexWatch : MainAPI() {
                         this.referer = "$mainUrl/"
                         this.quality = Qualities.P720.value
                         this.headers = mapOf("Origin" to mainUrl, "Referer" to "$mainUrl/")
+                    }
+                )
+                return true
+            }
+        }
+
+        // 2) titolo in chiaro: playlist HLS
+        for (id in candidates) {
+            val m3u8 = "$api/library/parts/$id-hls.m3u8?includeAllStreams=1" +
+                    "&x-plex-product=${enc("Plex Mediaverse")}&x-plex-token=$t"
+            if (isPlaylist(m3u8)) {
+                Log.i(tag, "playlist HLS trovata con id $id")
+                callback(
+                    newExtractorLink(name, name, m3u8, ExtractorLinkType.M3U8) {
+                        this.referer = "$mainUrl/"
+                        this.quality = Qualities.P720.value
+                        this.headers = mapOf("Origin" to mainUrl)
                     }
                 )
                 return true
