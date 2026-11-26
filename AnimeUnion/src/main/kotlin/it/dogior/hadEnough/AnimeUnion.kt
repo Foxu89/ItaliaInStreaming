@@ -35,7 +35,10 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
 
-class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
+class AnimeUnion(
+    private val showLangTags: Boolean = false,
+    private val splitDubSub: Boolean = false
+) : MainAPI() {
     override var mainUrl = "https://animeunion.tv"
     override var name = "AnimeUnion"
     override var supportedTypes = setOf(TvType.Anime, TvType.AnimeMovie, TvType.OVA)
@@ -185,11 +188,11 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
             .filter { !it.hasClass("group") && it.selectFirst("img") == null }
             .distinctBy { it.attr("href") }
 
-        val episodes = epLinks.map { a ->
+        fun buildEpisodes(lang: String?) = epLinks.map { a ->
             val href = a.attr("href").substringBefore("?")
             val n = a.selectFirst("span.text-primary")?.text()?.trim()?.toIntOrNull()
                 ?: Regex("(\\d+)").find(href.substringAfterLast("/"))?.groupValues?.get(1)?.toIntOrNull()
-            newEpisode("$mainUrl$href") {
+            newEpisode(if (lang == null) "$mainUrl$href" else "$mainUrl$href?lang=$lang") {
                 this.episode = n
                 this.name = a.selectFirst("div.flex-1 span")?.text()
                     ?.replace(Regex("\\s*\\d+\\s*$"), "")?.trim()
@@ -224,7 +227,14 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
             num(seg, "malId")?.let { addMalId(it) }
             str(seg, "trailerUrl")?.takeIf { it.isNotBlank() }?.let { addTrailer(it) }
 
-            addEpisodes(DubStatus.Subbed, episodes)
+            val hasSub = "SUB_ITA" in langs
+            val hasDub = "DUB_ITA" in langs
+            if (splitDubSub && (hasSub || hasDub)) {
+                if (hasSub) addEpisodes(DubStatus.Subbed, buildEpisodes("SUB_ITA"))
+                if (hasDub) addEpisodes(DubStatus.Dubbed, buildEpisodes("DUB_ITA"))
+            } else {
+                addEpisodes(DubStatus.Subbed, buildEpisodes(null))
+            }
         }
     }
 
@@ -274,6 +284,7 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
         callback: (ExtractorLink) -> Unit,
     ): Boolean {
         val pageUrl = data.substringBefore("?")
+        val wantedLang = data.substringAfter("lang=", "").substringBefore("&")
         val html = fetch(pageUrl, referer = "$mainUrl/").text
 
         var streams = parseStreams(html)
@@ -284,7 +295,10 @@ class AnimeUnion(private val showLangTags: Boolean = false) : MainAPI() {
         }
         Log.d(tag, "stream trovati: ${streams.size}")
 
-        val chosen = streams.sortedBy { if (it.language == "SUB_ITA") 0 else 1 }
+        // con "Separa Sub e Dub" attivo si prendono solo le fonti della lingua scelta
+        // (se per questo episodio non ce ne sono, si mostrano tutte)
+        val byLang = if (wantedLang.isNotBlank()) streams.filter { it.language == wantedLang } else streams
+        val chosen = (byLang.ifEmpty { streams }).sortedBy { if (it.language == "SUB_ITA") 0 else 1 }
         val headers = mapOf("Referer" to "$mainUrl/", "User-Agent" to ua)
 
         var any = false

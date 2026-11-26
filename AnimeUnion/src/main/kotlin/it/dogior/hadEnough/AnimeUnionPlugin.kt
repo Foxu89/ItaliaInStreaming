@@ -10,6 +10,7 @@ class AnimeUnionPlugin : Plugin() {
     companion object {
         const val PREFS = "AnimeUnion"
         const val KEY_LANG_TAGS = "show_lang_tags"
+        const val KEY_SPLIT = "split_dub_sub"
     }
 
     override fun load(context: Context) {
@@ -17,7 +18,8 @@ class AnimeUnionPlugin : Plugin() {
         // attivo di default
         val showTags = sharedPref.getBoolean(KEY_LANG_TAGS, true)
 
-        registerMainAPI(AnimeUnion(showTags))
+        val split = sharedPref.getBoolean(KEY_SPLIT, false)
+        registerMainAPI(AnimeUnion(showTags, split))
 
         openSettings = { ctx ->
             val activity = ctx as AppCompatActivity

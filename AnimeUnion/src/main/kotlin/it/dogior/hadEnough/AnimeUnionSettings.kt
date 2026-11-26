@@ -24,6 +24,7 @@ class AnimeUnionSettings(
 ) : BottomSheetDialogFragment() {
 
     private var showTags: Boolean = sharedPref?.getBoolean(AnimeUnionPlugin.KEY_LANG_TAGS, false) ?: false
+    private var splitDubSub: Boolean = sharedPref?.getBoolean(AnimeUnionPlugin.KEY_SPLIT, false) ?: false
 
     private fun View.makeTvCompatible() {
         setPadding(paddingLeft + 10, paddingTop + 10, paddingRight + 10, paddingBottom + 10)
@@ -84,12 +85,20 @@ class AnimeUnionSettings(
         sw.setOnCheckedChangeListener { _, isChecked -> showTags = isChecked }
         container?.addView(sw)
 
+        view.findViewByName<TextView>("split_label")?.text = getString("split_label")
+        view.findViewByName<TextView>("split_description")?.text = getString("split_description")
+        val splitContainer: FrameLayout? = view.findViewByName("split_switch_container")
+        val splitSw = makeSwitch(splitDubSub)
+        splitSw.setOnCheckedChangeListener { _, isChecked -> splitDubSub = isChecked }
+        splitContainer?.addView(splitSw)
+
         val saveBtn: ImageButton? = view.findViewByName("save_btn")
         saveBtn?.makeTvCompatible()
         saveBtn?.setImageDrawable(getDrawable("save_icon"))
         saveBtn?.setOnClickListener {
             sharedPref?.edit {
                 putBoolean(AnimeUnionPlugin.KEY_LANG_TAGS, showTags)
+                putBoolean(AnimeUnionPlugin.KEY_SPLIT, splitDubSub)
             }
             AlertDialog.Builder(requireContext())
                 .setTitle("Salva e riavvia")

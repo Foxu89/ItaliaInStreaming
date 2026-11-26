@@ -3,4 +3,6 @@
     <string name="header_tw">AnimeUnion</string>
     <string name="tags_label">Mostra tag Sottotitolato / Doppiato</string>
     <string name="tags_description">Aggiunge ai poster il tag Sottotitolato, Doppiato o entrambi.</string>
+    <string name="split_label">Separa Sub e Dub</string>
+    <string name="split_description">Nella scheda dell\'anime compare il selettore Sub / Dub, così scegli subito la lingua invece di cambiare fonte.</string>
 </resources>
