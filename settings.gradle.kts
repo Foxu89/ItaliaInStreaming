@@ -24,6 +24,7 @@ include(
     "La7Play",
     "Nuvio",
     "OnlineSerieTV",
+    "PlexWatch",
     "SectionOrganizer",
     "SleepGuard",
 //    "StreamCenter",
