@@ -23,6 +23,8 @@ import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.WIDEVINE_UUID
+import com.lagradost.cloudstream3.utils.newDrmExtractorLink
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import java.net.URLEncoder
 import java.util.UUID
@@ -139,16 +141,34 @@ class PlexWatch : MainAPI() {
         return newHomePageResponse(request.name, list, hasNext = list.size >= pageSize)
     }
 
-    override suspend fun search(query: String): List<SearchResponse> {
-        val url = "$api/library/search?query=${enc(query)}&searchTypes=movies,tv" +
-                "&includeMeta=1&limit=30&availabilityType=free"
-        val root = getJson(url)
+    private fun parseSearch(root: JsonNode): List<SearchResponse> {
         val direct = items(root)
         // alcuni endpoint raggruppano i risultati in SearchResults[].SearchResult[].Metadata
         val grouped = root.get("MediaContainer")?.get("SearchResults")?.flatMap { g ->
             g.get("SearchResult")?.mapNotNull { it.get("Metadata") }.orEmpty()
         }.orEmpty()
         return (direct + grouped).mapNotNull { toSearch(it) }.distinctBy { it.url }
+    }
+
+    override suspend fun search(query: String): List<SearchResponse> {
+        val q = enc(query)
+        val urls = listOf(
+            "https://discover.provider.plex.tv/library/search?query=$q&limit=30" +
+                    "&searchTypes=movies,tv&searchProviders=discover,plexAVOD&includeMetadata=1",
+            "$api/library/search?query=$q&searchTypes=movies,tv&includeMeta=1&limit=30",
+            "$api/library/sections/movies/all?title=$q&type=99&availabilityType=free" +
+                    "&X-Plex-Container-Start=0&X-Plex-Container-Size=30"
+        )
+        for (u in urls) {
+            try {
+                val res = parseSearch(getJson(u))
+                Log.i(tag, "ricerca '$query' → ${res.size} risultati da ${u.substringBefore("?")}")
+                if (res.isNotEmpty()) return res
+            } catch (e: Exception) {
+                Log.w(tag, "ricerca fallita su ${u.substringBefore("?")}: ${e.message}")
+            }
+        }
+        return emptyList()
     }
 
     override suspend fun load(url: String): LoadResponse? {
@@ -199,8 +219,13 @@ class PlexWatch : MainAPI() {
     }
 
     private suspend fun isPlaylist(url: String): Boolean = try {
-        app.get(url, headers = mapOf("Origin" to mainUrl, "Referer" to "$mainUrl/"))
-            .text.trimStart().startsWith("#EXTM3U")
+        val text = app.get(url, headers = mapOf("Origin" to mainUrl, "Referer" to "$mainUrl/")).text
+        val ok = text.trimStart().startsWith("#EXTM3U")
+        if (ok && (text.contains("skd://") || text.contains("streamingkeydelivery") ||
+                    text.contains("#EXT-X-KEY") || text.contains("#EXT-X-SESSION-KEY"))) {
+            Log.w(tag, "playlist protetta (FairPlay/DRM): ${text.lines().filter { it.contains("KEY") }.take(2)}")
+            false
+        } else ok
     } catch (e: Exception) {
         false
     }
@@ -238,6 +263,30 @@ class PlexWatch : MainAPI() {
                         this.referer = "$mainUrl/"
                         this.quality = Qualities.P720.value
                         this.headers = mapOf("Origin" to mainUrl)
+                    }
+                )
+                return true
+            }
+        }
+        // titoli protetti: versione DASH con Widevine
+        for (id in candidates) {
+            val mpd = "$api/library/parts/$id-dash.mpd?includeAllStreams=1" +
+                    "&x-plex-product=${enc("Plex Mediaverse")}&x-plex-token=$t&x-plex-drm=widevine"
+            val ok = try {
+                app.get(mpd, headers = mapOf("Origin" to mainUrl, "Referer" to "$mainUrl/"))
+                    .text.contains("<MPD")
+            } catch (e: Exception) {
+                false
+            }
+            if (ok) {
+                Log.i(tag, "manifest DASH trovato con id $id")
+                val license = "$api/library/parts/$id-dash/license?x-plex-token=$t&x-plex-drm=widevine"
+                callback(
+                    newDrmExtractorLink(name, name, mpd, ExtractorLinkType.DASH, WIDEVINE_UUID) {
+                        this.licenseUrl = license
+                        this.referer = "$mainUrl/"
+                        this.quality = Qualities.P720.value
+                        this.headers = mapOf("Origin" to mainUrl, "Referer" to "$mainUrl/")
                     }
                 )
                 return true

@@ -1,4 +1,4 @@
-version = 1
+version = 2
 
 cloudstream {
     description = "Film e serie TV gratuiti di Plex (Watch Free) !BETA!"
